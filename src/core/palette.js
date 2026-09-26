@@ -15,7 +15,7 @@ export const PAL = {
   skyHaze: 0xc9e0f7,
   cloud: 0xfbfaf6,
   cloudShade: 0xe2e6f0,
-  fog: 0xd6e3f2,
+  fog: 0xc9dcee,           // morning haze; matches the sky's horizon so distance dissolves
   // ridge layers on the far shore (r6, r7): low-contrast blue-grey
   ridgeNear: 0x7d8aa3,
   ridgeFar: 0xa9b3c6,
@@ -30,10 +30,18 @@ export const PAL = {
   ink: 0x39324f,
   inkSoft: 0x4a4468,
 
-  // --- ground ---
-  land: 0x9fb07a,          // the bare planet: dry winter grass
+  // --- ground (terrain vertex colours by OSM cover class) ---
+  groundDry: 0xb3ad86,     // unclassified land: dry winter grass and earth
   grass: 0x7fa04f,         // embankment and verges (r2)
   grassDeep: 0x5f7a3a,
+  scrub: 0x8a8f5a,         // Shivalik scrub forest, open ground
+  golf: 0x8fb35a,
+  built: 0xb9b1a3,         // city sectors: concrete, dust and street trees
+  paved: 0x9c9ca3,
+  pitch: 0xb48a62,
+  wetland: 0x6f8f6a,
+  lakeBed: 0x8a8a6e,
+  ridgeRock: 0x9a9486,
 
   // --- promenade (r2, r8) ---
   asphalt: 0x8e9096,       // pale grey walk, no kerb paint

@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Sukhna — a sunrise jog around Sukhna Lake</title>
-<meta name="description" content="A winter-morning jog around Sukhna Lake, Chandigarh, on a tiny cel-shaded planet: the dam promenade at real scale from OpenStreetMap, the Shivaliks from elevation data, and a real sunrise." />
+<meta name="description" content="A winter-morning jog along the dam at Sukhna Lake, Chandigarh, at its real shape and scale: the promenade and shore from OpenStreetMap, the Shivalik hills from elevation data, a real sunrise, in a cel-shaded anime style." />
 <meta name="theme-color" content="#6fa3f5" />
 <style>
   *, *::before, *::after { box-sizing: border-box; }
@@ -22,10 +22,19 @@
     padding: 6px 10px; border-radius: 6px;
     background: rgba(14,16,22,.58); color: #d9dce4;
     font: 12px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace;
-    white-space: pre; pointer-events: none;
+    white-space: pre; pointer-events: none; z-index: 10;
   }
 
-  /* Phase 1 dev note; the real hint bar arrives with the controls in Phase 4 */
+  /* ?flat=1 map panel (world/flat.js) */
+  .flatpanel {
+    position: fixed; right: 0; top: 0; bottom: 0; width: 42vw;
+    background: rgba(245,243,236,.96); border-left: 1px solid rgba(0,0,0,.2);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  }
+  .flatpanel canvas { max-width: 100%; }
+  .flatinfo { font: 12px ui-monospace, Consolas, monospace; color: #333; }
+
+  /* dev note; the real hint bar arrives with the controls in Phase 4 */
   .devnote {
     position: fixed; left: 12px; bottom: 10px;
     font-size: 12px; color: rgba(40,44,60,.7); pointer-events: none;
@@ -34,7 +43,7 @@
 </head>
 <body>
   <canvas id="view"></canvas>
-  <div class="devnote">Sukhna · Phase 1 scaffold · drag to look · WASD move · P planet · O ink · G grade · R reset</div>
+  <div class="devnote">Sukhna · Phase 2 flat scaffold · drag to look · WASD move (Shift faster) · P overview · O ink · G grade · R reset · ?flat=1 map · ?stats=1</div>
   <script type="module" src="./src/main.js"></script>
 </body>
 </html>

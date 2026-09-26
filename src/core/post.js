@@ -1,8 +1,9 @@
 /* Ported from sakura-crossing (https://github.com/Kenton-GMI/sakura-crossing),
  * src/core/post.js.  Copyright (c) 2026 Kenton Wang.  MIT License -- full text in
- * THIRD_PARTY_LICENSES.md.  Changes: the ink pass re-reads the camera near/far
- * every render (the planet view changes `camera.far`), and the pass uniforms
- * are exposed for the time-of-day and fog code to drive later. */
+ * THIRD_PARTY_LICENSES.md.  Changes: an optional far pass (plan §4: the
+ * world reaches 40 km, which one depth range cannot hold) drawn first into
+ * the same target, then a depth clear, then the near pass; the ink pass
+ * re-reads the near camera's near/far every render. */
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { PAL } from './palette.js';
@@ -206,10 +207,18 @@ function makeQuad(def) {
 }
 
 export class Pipeline {
-  constructor(renderer, scene, camera, { pixelBudget = 4.6e6 } = {}) {
+  /**
+   * farCamera (optional): a camera with its own near/far and layers.  It is
+   * slaved to `camera` every frame (pose, fov, aspect) and drawn first; the
+   * depth buffer is then cleared and `camera` draws the near pass.  Pixels
+   * only the far pass covered read as sky to the ink pass (cleared depth),
+   * which is what they are to it: ink has faded out by 98 m anyway.
+   */
+  constructor(renderer, scene, camera, { pixelBudget = 4.6e6, farCamera = null } = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
+    this.farCamera = farCamera;
     this.pixelBudget = pixelBudget;
     this.size = new THREE.Vector2(1, 1);
 
@@ -280,8 +289,23 @@ export class Pipeline {
     iu.uNear.value = this.camera.near;
     iu.uFar.value = this.camera.far;
     r.setRenderTarget(this.rtScene);
+    const autoClear = r.autoClear;
+    r.autoClear = false;
     r.clear();
+    if (this.farCamera) {
+      const f = this.farCamera, c = this.camera;
+      f.position.copy(c.position);
+      f.quaternion.copy(c.quaternion);
+      if (f.fov !== c.fov || f.aspect !== c.aspect) { f.fov = c.fov; f.aspect = c.aspect; f.updateProjectionMatrix(); }
+      f.updateMatrixWorld();
+      // shadows are only for the near pass: the far pass must not redraw them
+      r.shadowMap.needsUpdate = false;
+      r.render(this.scene, f);
+      r.clearDepth();
+    }
+    r.shadowMap.needsUpdate = true;
     r.render(this.scene, this.camera);
+    r.autoClear = autoClear;
 
     let src = this.rtScene.texture;
 

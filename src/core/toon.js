@@ -3,7 +3,9 @@
  * THIRD_PARTY_LICENSES.md.  One change: the `flatShading` constructor option
  * is dropped.  three r180's MeshToonMaterial has no such property, so it was
  * already ignored (with a console warning per material); `flat` stays in the
- * signature and the cache key, and the look is unchanged. */
+ * signature and the cache key, and the look is unchanged.  Added for Sukhna: a
+ * `relief` mode and a `terrain` ramp for real terrain under a low sun (see
+ * RELIEF_PATCH). */
 import * as THREE from 'three';
 import { PAL } from './palette.js';
 
@@ -27,6 +29,8 @@ const RAMPS = {
   // even on the shadow side
   soft: [180, 255],
   soft3: [172, 214, 255],
+  // Sukhna: real terrain in relief mode -- flat ground sits in the middle band
+  terrain: [118, 206, 255],
 };
 
 const rampCache = new Map();
@@ -58,18 +62,33 @@ const TOON_PATCH = `
 	vec3 celBand = getGradientIrradiance( geometryNormal, directLight.direction );
 	vec3 irradiance = celBand * mix( uShadowTint, vec3( 1.0 ), celBand ) * directLight.color;`;
 
+/* Relief mode (Sukhna).  A January morning sun is 0-20° up, which puts flat
+ * ground at N·L = sin(elevation) -- right on the default ramp's band edge at
+ * 1/3 -- so a 2% wobble in real DEM terrain flips bands and the ground turns
+ * to camouflage.  In relief mode the band is picked from N·L *minus* up·L:
+ * flat ground always lands mid-ramp whatever the sun's height, and only real
+ * slopes turned toward or away from the sun change band.  The light's
+ * intensity and colour still come from the sun, so a low sun still dims. */
+const RELIEF_PATCH = `
+	vec3 celUp = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
+	float celD = dot( geometryNormal, directLight.direction ) - dot( celUp, directLight.direction );
+	vec3 celBand = vec3( texture2D( gradientMap, vec2( celD * 0.5 + 0.5, 0.0 ) ).r );
+	vec3 irradiance = celBand * mix( uShadowTint, vec3( 1.0 ), celBand ) * directLight.color;`;
+
 let patchAvailable = false;
 let patchedChunk = '';
+let reliefChunk = '';
 {
   const src = THREE.ShaderChunk[TOON_CHUNK];
   if (src && src.includes(TOON_LINE)) {
     patchedChunk = 'uniform vec3 uShadowTint;\n' + src.replace(TOON_LINE, TOON_PATCH);
+    reliefChunk = 'uniform vec3 uShadowTint;\n' + src.replace(TOON_LINE, RELIEF_PATCH);
     patchAvailable = true;
   }
 }
 
 /** Tint the shadow side of a toon material toward a cool hue. */
-function applyShadowTint(mat, tint) {
+function applyShadowTint(mat, tint, relief = false) {
   if (!patchAvailable) return mat;
   const uni = { value: new THREE.Color(tint) };
   mat.userData.shadowTint = uni;
@@ -77,11 +96,11 @@ function applyShadowTint(mat, tint) {
     shader.uniforms.uShadowTint = uni;
     shader.fragmentShader = shader.fragmentShader.replace(
       `#include <${TOON_CHUNK}>`,
-      patchedChunk
+      relief ? reliefChunk : patchedChunk
     );
   };
   const hex = new THREE.Color(tint).getHexString();
-  mat.customProgramCacheKey = () => 'celTint_' + hex;
+  mat.customProgramCacheKey = () => 'celTint_' + hex + (relief ? '_relief' : '');
   return mat;
 }
 
@@ -108,12 +127,13 @@ export function cel(opts = {}) {
     fog = true,
     alphaMap = null,
     vertexColors = false,
+    relief = false,
     cache = true,
   } = opts;
 
   const key = cache && !map && !alphaMap
     ? [color, bands, tint, flat, emissive, emissiveIntensity, transparent,
-       opacity, side, alphaTest, depthWrite, fog, vertexColors].join('|')
+       opacity, side, alphaTest, depthWrite, fog, vertexColors, relief].join('|')
     : null;
   if (key && matCache.has(key)) return matCache.get(key);
 
@@ -132,7 +152,7 @@ export function cel(opts = {}) {
     emissiveIntensity,
   });
   if (depthWrite !== null) mat.depthWrite = depthWrite;
-  applyShadowTint(mat, tint);
+  applyShadowTint(mat, tint, relief);
   if (key) matCache.set(key, mat);
   return mat;
 }

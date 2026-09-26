@@ -1,27 +1,28 @@
 /* ------------------------------------------------------------------ *
- * Build src/data/sukhna.data.json from the raw OSM and terrain.
+ * Build the flat world's data from the raw OSM and terrain.
  *
  *   node scripts/sukhna/build-data.mjs
  *
  * Reads scripts/sukhna/raw/* only (run fetch-osm.mjs and
  * fetch-terrain.mjs first).  Writes:
- *   src/data/sukhna.data.json   the compact planet data (runtime)
- *   src/data/sukhna.flat.json   real-space geometry for ?flat=1 (debug)
- *   scripts/sukhna/report.md    measurements, mapping stats, checks
- *   scripts/sukhna/debug/*.png  pictures of the mapping (git-ignored)
+ *   src/data/sukhna.data.json     vectors in ENU metres (runtime)
+ *   src/data/sukhna.terrain.json  height and cover grids (runtime)
+ *   scripts/sukhna/report.md      measurements and checks
+ *   scripts/sukhna/debug/*.png    a picture of the data (git-ignored)
  *
- * Exits non-zero if the fold check finds a single inverted triangle.
+ * Every coordinate is [east, north] in metres about the origin (the
+ * promenade midpoint); heights are metres above the lake level.  The
+ * runtime maps ENU to three.js as x = east, z = -north, y = up.
  * OSM data © OpenStreetMap contributors, ODbL 1.0.
  * ------------------------------------------------------------------ */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BBOX, TERRAIN, PROMENADE_WAYS, L_JOIN, MAP, LATTICE, RIDGES, DATE } from './config.mjs';
+import { BBOX, TERRAIN, PROMENADE_WAYS, GRIDS, KEEP, RIDGES, SPINE_STEP, DATE } from './config.mjs';
 import {
-  enuProjector, arcLengths, pointAt, nearestOnPolyline, simplify, signedArea,
-  pointInRing, centroid, stitchRings, polyLength, dist, simplifyRing,
+  enuProjector, arcLengths, pointAt, nearestOnPolyline, simplify, simplifyRing, signedArea,
+  pointInRing, centroid, stitchRings, polyLength, dist,
 } from './lib/geo.mjs';
-import { buildStraightener, fitCompression, makeInverse } from './lib/straighten.mjs';
 import { demSampler } from './lib/terrarium.mjs';
 import { Raster } from './lib/pngenc.mjs';
 import { sunPosition, localDate, crossing, hhmm } from '../../src/core/sun.js';
@@ -32,6 +33,9 @@ const t0 = Date.now();
 const log = (...a) => console.log(...a);
 const r1 = (v) => Math.round(v * 10) / 10;
 const r2 = (v) => Math.round(v * 100) / 100;
+const rp = (pts) => pts.map(([a, b]) => [r1(a), r1(b)]);
+const checks = [];
+const check = (name, ok, detail) => { checks.push({ name, ok, detail }); log(`  check ${ok ? 'ok  ' : 'FAIL'} ${name}: ${detail}`); };
 
 /* ------------------------------- load ------------------------------- */
 const rawDir = path.join(here, 'raw');
@@ -42,43 +46,73 @@ const ELS = osm.elements;
 const byId = new Map(ELS.map((e) => [e.type + '/' + e.id, e]));
 log(`OSM: ${osmFile}, ${ELS.length} elements`);
 
-/* ---------------------------- promenade ---------------------------- */
+/* ------------------------ promenade and origin ------------------------ */
+const lakeRel = ELS.find((e) => e.type === 'relation' && e.tags?.water === 'lake' && /Sukhna/.test(e.tags?.name || ''));
 const promGeo = PROMENADE_WAYS.flatMap((id, i) => {
   const w = byId.get('way/' + id);
   if (!w) throw new Error(`promenade way/${id} missing from the OSM data`);
   return i ? w.geometry.slice(1) : w.geometry;
 });
-// provisional projection to find the midpoint, then the real origin there
-const tmp = enuProjector(promGeo[0].lat, promGeo[0].lon);
 let spineLL = promGeo.map((g) => [g.lat, g.lon]);
 {
+  // s runs from the east end (Garden of Silence) to the west end (boat club):
+  // with the lake to the north of the bund, that is the lake on the right
+  const tmp = enuProjector(spineLL[0][0], spineLL[0][1]);
   const sp = spineLL.map(([la, lo]) => tmp.toENU(la, lo));
-  const lakeRel = ELS.find((e) => e.type === 'relation' && e.tags?.water === 'lake' && /Sukhna/.test(e.tags?.name || ''));
   const lc = centroid(lakeRel.members.find((m) => m.role === 'outer').geometry.map((g) => tmp.toENU(g.lat, g.lon)));
-  // orientation: the lake must be on the right of the direction of travel
   const S = arcLengths(sp), L = S[S.length - 1];
   const a = pointAt(sp, S, L / 2), b = pointAt(sp, S, L / 2 + 1);
   const right = [b[1] - a[1], -(b[0] - a[0])];
   if ((lc[0] - a[0]) * right[0] + (lc[1] - a[1]) * right[1] < 0) spineLL.reverse();
 }
 const originLL = (() => {
+  const tmp = enuProjector(spineLL[0][0], spineLL[0][1]);
   const sp = spineLL.map(([la, lo]) => tmp.toENU(la, lo));
   const S = arcLengths(sp);
   return tmp.toLatLon(...pointAt(sp, S, S[S.length - 1] / 2));
 })();
 const proj = enuProjector(originLL[0], originLL[1]);
 const P = (g) => proj.toENU(g.lat, g.lon);
-const spine = spineLL.map(([la, lo]) => proj.toENU(la, lo));
-const SPS = arcLengths(spine);
-const L_PROM = SPS[SPS.length - 1];
-const C = L_PROM + L_JOIN;
-const R = C / (2 * Math.PI);
-log(`promenade: ${spine.length} nodes, L = ${L_PROM.toFixed(2)} m -> C = ${C.toFixed(2)} m, R = ${R.toFixed(2)} m`);
+const spineRaw = spineLL.map(([la, lo]) => proj.toENU(la, lo));
+const L_OSM = polyLength(spineRaw);
 
-/* ------------------------------ geometry ------------------------------ */
+/* The smoothed centreline: a centripetal Catmull-Rom spline through the OSM
+ * nodes (it passes through every node, so the walk never leaves the mapped
+ * line), resampled every SPINE_STEP metres of arc length. */
+function catmullRom(pts, perSeg = 24) {
+  const out = [];
+  const ext = [[2 * pts[0][0] - pts[1][0], 2 * pts[0][1] - pts[1][1]], ...pts, [2 * pts.at(-1)[0] - pts.at(-2)[0], 2 * pts.at(-1)[1] - pts.at(-2)[1]]];
+  const tj = (ti, a, b) => ti + Math.sqrt(dist(a, b)) + 1e-9;
+  for (let i = 1; i < ext.length - 2; i++) {
+    const p0 = ext[i - 1], p1 = ext[i], p2 = ext[i + 1], p3 = ext[i + 2];
+    const t0 = 0, t1 = tj(t0, p0, p1), t2 = tj(t1, p1, p2), t3 = tj(t2, p2, p3);
+    for (let k = 0; k < perSeg; k++) {
+      const t = t1 + ((t2 - t1) * k) / perSeg;
+      const lerp = (a, b, ta, tb) => [(a[0] * (tb - t) + b[0] * (t - ta)) / (tb - ta), (a[1] * (tb - t) + b[1] * (t - ta)) / (tb - ta)];
+      const A1 = lerp(p0, p1, t0, t1), A2 = lerp(p1, p2, t1, t2), A3 = lerp(p2, p3, t2, t3);
+      const B1 = lerp(A1, A2, t0, t2), B2 = lerp(A2, A3, t1, t3);
+      out.push(lerp(B1, B2, t1, t2));
+    }
+  }
+  out.push(pts[pts.length - 1].slice());
+  return out;
+}
+const dense = catmullRom(spineRaw);
+const denseS = arcLengths(dense);
+const L = denseS[denseS.length - 1];
+const spine = [];
+for (let s = 0; s < L; s += SPINE_STEP) spine.push(pointAt(dense, denseS, s));
+spine.push(dense[dense.length - 1]);
+const SPS = arcLengths(spine);
+let maxDev = 0;
+for (const p of spine) maxDev = Math.max(maxDev, nearestOnPolyline(p, spineRaw).d);
+log(`promenade: OSM ${spineRaw.length} nodes, ${L_OSM.toFixed(2)} m; smoothed ${L.toFixed(2)} m (${spine.length} pts, max lateral offset ${maxDev.toFixed(2)} m)`);
+check('smoothed walk length within 1 m of OSM', Math.abs(L - L_OSM) < 1, `${(L - L_OSM).toFixed(2)} m`);
+const nearS = (p) => nearestOnPolyline(p, spine, SPS);
+
+/* ------------------------------ areas ------------------------------ */
 const wayPts = (w) => (w.geometry || []).filter(Boolean).map(P);
 const isClosed = (pts) => pts.length > 3 && dist(pts[0], pts[pts.length - 1]) < 0.01;
-/** Rings of an area element (closed way or multipolygon relation). */
 function areaRings(e) {
   if (e.type === 'way') { const p = wayPts(e); return isClosed(p) ? { outer: [p.slice(0, -1)], inner: [] } : null; }
   if (e.type === 'relation' && e.members) {
@@ -88,118 +122,73 @@ function areaRings(e) {
   }
   return null;
 }
-
-const lakeRel = ELS.find((e) => e.type === 'relation' && e.tags?.water === 'lake' && /Sukhna/.test(e.tags?.name || ''));
 const lakeRings = areaRings(lakeRel);
 const lakeOuter = lakeRings.outer.sort((a, b) => Math.abs(signedArea(b)) - Math.abs(signedArea(a)))[0];
 const lakeInner = lakeRings.inner;
 const lakeArea = Math.abs(signedArea(lakeOuter)) - lakeInner.reduce((a, r) => a + Math.abs(signedArea(r)), 0);
 const lakePerim = polyLength([...lakeOuter, lakeOuter[0]]);
-
-/* ------------------------------ the map ------------------------------ */
-const allX = [...lakeOuter, ...spine].map((p) => p[0]), allY = [...lakeOuter, ...spine].map((p) => p[1]);
-const fineBox = [Math.min(...allX) - MAP.fineMargin, Math.min(...allY) - MAP.fineMargin, Math.max(...allX) + MAP.fineMargin, Math.max(...allY) + MAP.fineMargin];
-log('straightening map:');
-const st = buildStraightener({ spine, Rb: MAP.Rb, levels: MAP.levels, fineBox, log });
-
-// far-shore distance: shoreline points more than 150 m from the walk
-const shoreU = lakeOuter.map((p) => st.uOf(p)).filter((q) => q && q.u > 150).map((q) => q.u).sort((a, b) => a - b);
-const uMed = shoreU[Math.floor(shoreU.length / 2)];
-const comp = fitCompression(uMed, MAP.farShoreZ);
-log(`compression: far-shore median u = ${uMed.toFixed(0)} m -> z = ${MAP.farShoreZ}; A = ${comp.A.toFixed(2)}`);
-const inverse = makeInverse(st, comp, 0.95);
-
-/** Real point -> planet { x, z, side } (or null outside the disc). */
-function toPlanet(p, forceSide = 0) {
-  let sg = forceSide || st.sideOf(p);
-  if (!sg) return null;
-  const h = st.harmonicSide(p, sg);
-  if (!h) return null;
-  const X = Math.max(0, Math.min(L_PROM, h.X));
-  const u = Math.max(0, h.P) / st.calib[sg](X);
-  return { x: X, z: sg * comp.f(u), side: sg, u: sg * u };
-}
-
-/* ---------------------------- fold check ---------------------------- */
-/* Checked over everything the map is used for: Psi < P_MAX.  Past that
- * (within ~5% of the 8 km arc) the inverse extrapolates radially instead. */
-const P_MAX = 0.95;
-const fold = { tris: 0, bad: 0, pMax: P_MAX };
-for (const sg of [1, -1]) for (let li = 0; li < st.levels.length; li++) {
-  const F = st.fields[sg][li], g = F.g;
-  for (let j = 0; j < g.ny - 1; j++) for (let i = 0; i < g.nx - 1; i++) {
-    const k = j * g.nx + i, ks = [k, k + 1, k + g.nx + 1, k + g.nx];
-    if (!ks.every((q) => F.side[q] === sg && !F.fixed[q] && F.P[q] < P_MAX)) continue;
-    for (const [a, b, c] of [[ks[0], ks[1], ks[2]], [ks[0], ks[2], ks[3]]]) {
-      const det = (F.X[b] - F.X[a]) * (F.P[c] - F.P[a]) - (F.X[c] - F.X[a]) * (F.P[b] - F.P[a]);
-      fold.tris++;
-      // a correctly oriented (unmirrored) cell has det * side < 0 (see straighten.mjs)
-      if (!(det * sg < 0)) fold.bad++;
-    }
+const inLake = (p) => pointInRing(p, lakeOuter) && !lakeInner.some((r) => pointInRing(p, r));
+{
+  // simple polygon: no two non-adjacent edges cross
+  const ring = lakeOuter, n = ring.length;
+  let crossings = 0;
+  const segX = (a, b, c, d) => {
+    const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+    return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
+  };
+  for (let i = 0; i < n; i++) for (let j = i + 2; j < n; j++) {
+    if (i === 0 && j === n - 1) continue;
+    if (segX(ring[i], ring[(i + 1) % n], ring[j], ring[(j + 1) % n])) crossings++;
   }
+  check('lake outline is a simple closed polygon', crossings === 0, `${n} vertices, ${crossings} self-crossings, ${lakeInner.length} islands`);
 }
-log(`fold check: ${fold.tris} triangles, ${fold.bad} inverted`);
-if (fold.bad) { console.error('FOLD CHECK FAILED'); process.exitCode = 2; }
+{
+  let wet = 0;
+  for (let s = 0; s <= L; s += 2) if (inLake(pointAt(spine, SPS, s))) wet++;
+  check('the walk centreline never enters the lake polygon', wet === 0, `${wet} of ${Math.floor(L / 2) + 1} samples inside`);
+}
 
-/* ----------------------------- sampling helpers ----------------------------- */
-function densify(pts, step, closed = false) {
-  const out = [];
-  const n = closed ? pts.length : pts.length - 1;
-  for (let i = 0; i < n; i++) {
-    const a = pts[i], b = pts[(i + 1) % pts.length];
-    const k = Math.max(1, Math.ceil(dist(a, b) / step));
-    for (let j = 0; j < k; j++) out.push([a[0] + ((b[0] - a[0]) * j) / k, a[1] + ((b[1] - a[1]) * j) / k]);
-  }
-  if (!closed) out.push(pts[pts.length - 1]);
-  return out;
-}
-/* Features further out than this are dropped.  From the promenade (eye ~7 m
- * over the city ground) the horizon is ~75 m and a 10 m building sinks below
- * it at ~165 m, so nothing past |z| = 175 is ever seen except from orbit. */
-const Z_KEEP = 175;
-/** Map a ring (polygon) onto the planet: one side only, densified, simplified. */
-function mapRing(ring, tol = 0.4, step = 6, zKeep = Z_KEEP) {
-  const d = densify(ring, step, true);
-  const sides = d.map((p) => st.sideOf(p));
-  const nearSpine = d.some((p) => nearestOnPolyline(p, spine, SPS).d < 30);
-  const mixed = new Set(sides).size > 1;
-  if (sides.includes(0)) return null;
-  let sg = sides[0];
-  if (mixed) {
-    if (!nearSpine) return null;
-    sg = st.sideOf(centroid(ring));
-  }
-  const m = d.map((p) => toPlanet(p, sg));
-  if (m.some((q) => !q)) return null;
-  const pts = m.map((q) => [q.x, q.z]);
-  if (pts.every((q) => Math.abs(q[1]) > zKeep)) return null;
-  const s = simplifyRing(pts, tol);
-  return s.length >= 3 ? s : null;
-}
-/** Map a polyline, splitting it wherever it crosses the cut. */
-function mapLine(line, tol = 0.5, step = 6) {
-  const d = densify(line, step, false);
-  const parts = [];
-  let cur = [], curSide = 0;
-  for (const p of d) {
-    const sg = st.sideOf(p);
-    if (!sg) { if (cur.length > 1) parts.push(cur); cur = []; curSide = 0; continue; }
-    if (curSide && sg !== curSide) { if (cur.length > 1) parts.push(cur); cur = []; }
-    curSide = sg;
-    const q = toPlanet(p, sg);
-    if (q) cur.push([q.x, q.z]);
-  }
-  if (cur.length > 1) parts.push(cur);
-  return parts.map((pp) => simplify(pp.filter((q) => Math.abs(q[1]) <= Z_KEEP + 10), tol)).filter((pp) => pp.length > 1);
-}
-const rp = (pts) => pts.map(([x, z]) => [r1(x), r1(z)]);
+/* --------------------------- the grids --------------------------- */
+let bx0 = Infinity, by0 = Infinity, bx1 = -Infinity, by1 = -Infinity;
+for (const p of [...lakeOuter, ...spine]) { bx0 = Math.min(bx0, p[0]); by0 = Math.min(by0, p[1]); bx1 = Math.max(bx1, p[0]); by1 = Math.max(by1, p[1]); }
+const NG = GRIDS.near;
+const snap = (v, s, up) => (up ? Math.ceil(v / s) : Math.floor(v / s)) * s;
+const nearRect = [snap(bx0 - NG.margin, 100, false), snap(by0 - NG.margin, 100, false), snap(bx1 + NG.margin, 100, true), snap(by1 + NG.margin, 100, true)];
+const HG = GRIDS.hills;
 
-/* ------------------------------- the lake ------------------------------- */
-const lakeOuterMapped = mapRing(lakeOuter, 0.35, 4, Infinity);
-const lakeInnerMapped = lakeInner.map((r) => mapRing(r, 0.35, 3, Infinity)).filter(Boolean);
-log(`lake: outer ${lakeOuter.length} -> ${lakeOuterMapped.length} mapped pts, ${lakeInnerMapped.length} islands`);
+const demSets = Object.fromEntries(TERRAIN.sets.map((s) => [s.name, demSampler(path.join(rawDir, 'terrarium'), s.zoom)]));
+const demAt = (p, prefer = ['near', 'hills', 'ridges']) => {
+  const [la, lo] = proj.toLatLon(p[0], p[1]);
+  for (const k of prefer) { const h = demSets[k](la, lo); if (Number.isFinite(h)) return h; }
+  return NaN;
+};
 
-/* --------------------------- classify areas --------------------------- */
+// lake level: median DEM over the water
+const lakeSamples = [];
+for (let y = by0; y <= by1; y += 25) for (let x = bx0; x <= bx1; x += 25) if (inLake([x, y])) lakeSamples.push(demAt([x, y]));
+lakeSamples.sort((a, b) => a - b);
+const LAKE_LEVEL = lakeSamples[Math.floor(lakeSamples.length / 2)];
+log(`lake level: ${LAKE_LEVEL.toFixed(1)} m (DEM median of ${lakeSamples.length} samples)`);
+
+function sampleGrid(rect, step, prefer) {
+  const nx = Math.round((rect[2] - rect[0]) / step) + 1, ny = Math.round((rect[3] - rect[1]) / step) + 1;
+  const h = new Int16Array(nx * ny);
+  let lo = Infinity, hi = -Infinity, missing = 0;
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    let v = demAt([rect[0] + i * step, rect[1] + j * step], prefer);
+    if (!Number.isFinite(v)) { missing++; v = LAKE_LEVEL; }
+    const d = v - LAKE_LEVEL;
+    lo = Math.min(lo, d); hi = Math.max(hi, d);
+    h[j * nx + i] = Math.max(-32000, Math.min(32000, Math.round(d * 10)));
+  }
+  return { rect, step, nx, ny, h, lo, hi, missing };
+}
+const near = sampleGrid(nearRect, NG.step, ['near', 'hills', 'ridges']);
+const hills = sampleGrid(HG.rect, HG.step, ['hills', 'ridges']);
+log(`near grid ${near.nx}x${near.ny} @ ${near.step} m over [${nearRect.join(', ')}]: ${near.lo.toFixed(1)} .. ${near.hi.toFixed(1)} m, ${near.missing} missing`);
+log(`hill grid ${hills.nx}x${hills.ny} @ ${hills.step} m: ${hills.lo.toFixed(1)} .. ${hills.hi.toFixed(1)} m, ${hills.missing} missing`);
+
+/* ------------------------------ cover ------------------------------ */
 const COVER = ['land', 'lake', 'water', 'forest', 'scrub', 'park', 'golf', 'built', 'parking', 'pitch', 'wetland', 'commercial', 'grass'];
 const coverClass = (t) => {
   if (!t) return null;
@@ -207,16 +196,15 @@ const coverClass = (t) => {
   if (t.natural === 'wood' || t.landuse === 'forest') return 'forest';
   if (t.natural === 'scrub' || t.natural === 'heath' || t.natural === 'grassland') return 'scrub';
   if (t.natural === 'wetland') return 'wetland';
-  if (t.leisure === 'golf_course' || t.golf === 'fairway' || t.golf === 'green' || t.golf === 'rough' || t.golf === 'tee') return 'golf';
-  if (t.leisure === 'park' || t.leisure === 'garden' || t.leisure === 'nature_reserve' || t.landuse === 'recreation_ground' || t.leisure === 'common') return 'park';
-  if (t.landuse === 'grass' || t.landuse === 'meadow' || t.landuse === 'village_green') return 'grass';
+  if (t.leisure === 'golf_course' || ['fairway', 'green', 'rough', 'tee'].includes(t.golf)) return 'golf';
+  if (['park', 'garden', 'nature_reserve', 'common'].includes(t.leisure) || t.landuse === 'recreation_ground') return 'park';
+  if (['grass', 'meadow', 'village_green'].includes(t.landuse)) return 'grass';
   if (t.amenity === 'parking') return 'parking';
-  if (t.leisure === 'pitch' || t.leisure === 'track' || t.leisure === 'playground') return 'pitch';
-  if (t.landuse === 'residential' || t.landuse === 'institutional' || t.landuse === 'education') return 'built';
-  if (t.landuse === 'commercial' || t.landuse === 'retail' || t.landuse === 'industrial') return 'commercial';
+  if (['pitch', 'track', 'playground'].includes(t.leisure)) return 'pitch';
+  if (['residential', 'institutional', 'education'].includes(t.landuse)) return 'built';
+  if (['commercial', 'retail', 'industrial'].includes(t.landuse)) return 'commercial';
   return null;
 };
-// paint order: broad classes first, specific ones over them
 const ORDER = ['built', 'commercial', 'grass', 'park', 'scrub', 'forest', 'golf', 'wetland', 'pitch', 'parking', 'water'];
 const areas = [];
 for (const e of ELS) {
@@ -228,13 +216,13 @@ for (const e of ELS) {
   for (const outer of rings.outer) {
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const p of outer) { x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
-    areas.push({ cls, outer, inner: rings.inner, box: [x0, y0, x1, y1], id: e.type + '/' + e.id, tags: e.tags });
+    if (x1 < nearRect[0] || x0 > nearRect[2] || y1 < nearRect[1] || y0 > nearRect[3]) continue;
+    areas.push({ cls, outer, inner: rings.inner, box: [x0, y0, x1, y1], ref: e.type + '/' + e.id, name: e.tags.name });
   }
 }
 areas.sort((a, b) => ORDER.indexOf(a.cls) - ORDER.indexOf(b.cls));
-log(`cover polygons: ${areas.length}`);
 function coverAt(p) {
-  if (pointInRing(p, lakeOuter) && !lakeInner.some((r) => pointInRing(p, r))) return 'lake';
+  if (inLake(p)) return 'lake';
   let c = 'land';
   for (const a of areas) {
     const b = a.box;
@@ -243,130 +231,53 @@ function coverAt(p) {
   }
   return c;
 }
-
-/* ------------------------------ lattices ------------------------------ */
-const demNear = demSampler(path.join(rawDir, 'terrarium'), TERRAIN.nearZoom);
-const demFar = demSampler(path.join(rawDir, 'terrarium'), TERRAIN.zoom);
-const demAt = (p) => {
-  const [la, lo] = proj.toLatLon(p[0], p[1]);
-  const h = demNear(la, lo);
-  return Number.isFinite(h) ? h : demFar(la, lo);
-};
-// lake level: median DEM over the water
-const lakeSamples = [];
-for (let k = 0; k < 400; k++) {
-  const q = [fineBox[0] + ((k * 7919) % 400) / 400 * (fineBox[2] - fineBox[0]), fineBox[1] + ((k * 104729) % 397) / 397 * (fineBox[3] - fineBox[1])];
-  if (coverAt(q) === 'lake') lakeSamples.push(demAt(q));
-}
-lakeSamples.sort((a, b) => a - b);
-const LAKE_LEVEL = lakeSamples[Math.floor(lakeSamples.length / 2)];
-log(`lake level (DEM median of ${lakeSamples.length} samples): ${LAKE_LEVEL.toFixed(1)} m`);
-
-function latticeCols(dx) { return Math.round(C / dx); }
-// cover lattice (RLE, row-major by z then x)
-const cv = LATTICE.cover;
-const cnx = latticeCols(cv.dx), cnz = Math.round((cv.z1 - cv.z0) / cv.dz) + 1;
-const cover = new Uint8Array(cnx * cnz);
-let beyondCount = 0, invFail = 0, invErr = 0, invBad = 0;
-for (let j = 0; j < cnz; j++) {
-  const z = cv.z0 + j * cv.dz;
-  for (let i = 0; i < cnx; i++) {
-    const x = (i * C) / cnx;
-    let cls = 'land';
-    if (x <= L_PROM) {
-      const r = inverse(x, z);
-      if (!r) invFail++;
-      else { if (r.beyond) beyondCount++; if (r.err > 1) invBad++; else invErr = Math.max(invErr, r.err); cls = coverAt(r.p); }
-    }
-    cover[j * cnx + i] = COVER.indexOf(cls);
-  }
-}
-// the join (x > L): blend by copying the nearer end
-for (let j = 0; j < cnz; j++) for (let i = 0; i < cnx; i++) {
-  const x = (i * C) / cnx;
-  if (x > L_PROM) {
-    const src = x - L_PROM < L_JOIN / 2 ? Math.floor((L_PROM * cnx) / C) : 0;
-    cover[j * cnx + i] = cover[j * cnx + src];
-  }
+const CG = GRIDS.cover;
+const cnx = Math.round((nearRect[2] - nearRect[0]) / CG.step), cny = Math.round((nearRect[3] - nearRect[1]) / CG.step);
+const cover = new Uint8Array(cnx * cny);
+const coverCount = {};
+for (let j = 0; j < cny; j++) for (let i = 0; i < cnx; i++) {
+  const c = coverAt([nearRect[0] + (i + 0.5) * CG.step, nearRect[1] + (j + 0.5) * CG.step]);
+  cover[j * cnx + i] = COVER.indexOf(c);
+  coverCount[c] = (coverCount[c] || 0) + 1;
 }
 const rle = [];
 for (let k = 0; k < cover.length;) { let n = 1; while (k + n < cover.length && cover[k + n] === cover[k] && n < 255) n++; rle.push(n, cover[k]); k += n; }
-log(`cover lattice ${cnx} x ${cnz}: ${rle.length / 2} runs, inverse failures ${invFail}, beyond-disc ${beyondCount}, ${invBad} nodes with Newton residual > 1 m, worst otherwise ${invErr.toFixed(3)} m`);
-
-// DEM lattice (lake side), decimetres relative to the lake level, Int16
-const dm = LATTICE.dem;
-const dnx = latticeCols(dm.dx), dnz = Math.round((dm.z1 - dm.z0) / dm.dz) + 1;
-const dem = new Int16Array(dnx * dnz).fill(-32768);
-let demBeyond = 0;
-for (let j = 0; j < dnz; j++) {
-  const z = dm.z0 + j * dm.dz;
-  for (let i = 0; i < dnx; i++) {
-    const x = (i * C) / dnx;
-    if (x > L_PROM) continue;
-    const r = inverse(x, z);
-    if (!r) continue;
-    if (r.beyond) { demBeyond++; continue; }
-    const h = demAt(r.p);
-    if (Number.isFinite(h)) dem[j * dnx + i] = Math.max(-32000, Math.min(32000, Math.round((h - LAKE_LEVEL) * 10)));
-  }
-}
-// fill gaps (beyond the disc, the join) from the nearest valid value in the column, then the row
-for (let i = 0; i < dnx; i++) {
-  let last = -32768;
-  for (let j = 0; j < dnz; j++) { const k = j * dnx + i; if (dem[k] !== -32768) last = dem[k]; else if (last !== -32768) dem[k] = last; }
-}
-for (let j = 0; j < dnz; j++) {
-  for (let i = 0; i < dnx; i++) {
-    const k = j * dnx + i;
-    if (dem[k] !== -32768) continue;
-    // nearest valid along the row, wrapping round the loop
-    for (let d = 1; d < dnx; d++) {
-      const a = j * dnx + ((i + d) % dnx), b = j * dnx + ((i - d + dnx) % dnx);
-      if (dem[a] !== -32768) { dem[k] = dem[a]; break; }
-      if (dem[b] !== -32768) { dem[k] = dem[b]; break; }
-    }
-  }
-}
-log(`DEM lattice ${dnx} x ${dnz}: ${demBeyond} nodes beyond the disc (filled)`);
+log(`cover grid ${cnx}x${cny} @ ${CG.step} m: ${rle.length / 2} runs; ${Object.entries(coverCount).map(([k, v]) => `${k} ${((v * CG.step * CG.step) / 1e6).toFixed(2)} km²`).join(', ')}`);
 
 /* ----------------------------- ridgelines ----------------------------- */
+/* Only what lies beyond the hill grid: along each azimuth the ray starts
+ * where it leaves the grid's rectangle, so nearer hills stay real terrain. */
+function exitDist(p, dir, rect) {
+  let t = Infinity;
+  if (dir[0] > 0) t = Math.min(t, (rect[2] - p[0]) / dir[0]); else if (dir[0] < 0) t = Math.min(t, (rect[0] - p[0]) / dir[0]);
+  if (dir[1] > 0) t = Math.min(t, (rect[3] - p[1]) / dir[1]); else if (dir[1] < 0) t = Math.min(t, (rect[1] - p[1]) / dir[1]);
+  return Math.max(0, t);
+}
 const ridgeViews = RIDGES.at.map((f) => {
-  const s = f * L_PROM;
-  const p = pointAt(spine, SPS, s);
-  const h0 = LAKE_LEVEL + RIDGES.eye;
-  const layers = RIDGES.layers.map(() => new Array(360).fill(-90));
-  const dists = RIDGES.layers.map(() => new Array(360).fill(0));
+  const s = f * L, p = pointAt(spine, SPS, s), h0 = RIDGES.eye;
+  const ang = new Array(360), far = new Array(360);
   for (let az = 0; az < 360; az++) {
     const dir = [Math.sin((az * Math.PI) / 180), Math.cos((az * Math.PI) / 180)];
-    for (let d = 200; d <= 40000; d += d < 3000 ? 30 : d < 12000 ? 80 : 200) {
-      const q = [p[0] + dir[0] * d, p[1] + dir[1] * d];
-      const h = demAt(q);
+    let best = -90, bestD = 0;
+    for (let d = exitDist(p, dir, HG.rect); d <= RIDGES.maxDist; d += 150) {
+      const h = demAt([p[0] + dir[0] * d, p[1] + dir[1] * d], ['ridges']);
       if (!Number.isFinite(h)) continue;
-      const drop = (d * d * (1 - 0.13)) / (2 * 6371000);
-      const ang = (Math.atan2(h - drop - h0, d) * 180) / Math.PI;
-      RIDGES.layers.forEach((Ly, li) => {
-        if (d >= Ly.d0 && d < Ly.d1 && ang > layers[li][az]) { layers[li][az] = ang; dists[li][az] = d; }
-      });
+      const drop = (d * d * (1 - 0.13)) / (2 * 6371000); // earth curvature less refraction
+      const a = (Math.atan2(h - LAKE_LEVEL - drop - h0, d) * 180) / Math.PI;
+      if (a > best) { best = a; bestD = d; }
     }
+    ang[az] = r2(best); far[az] = Math.round(bestD / 100) / 10;
   }
-  return { s: r1(s), layers: layers.map((a) => a.map(r1)), meanDist: dists.map((a) => Math.round(a.reduce((p, q) => p + q, 0) / a.length)) };
+  return { s: r1(s), at: rp([p])[0], angle: ang, km: far };
 });
-log(`ridgelines: ${ridgeViews.length} viewpoints x ${RIDGES.layers.length} layers x 360 az`);
-
-/* --------------------------- spine heading --------------------------- */
-// bearing (deg, clockwise from north) of the direction of travel, every 10 m, smoothed over +-25 m
-const heading = [];
-for (let s = 0; s <= L_PROM + 0.01; s += 10) {
-  const a = pointAt(spine, SPS, Math.max(0, s - 25)), b = pointAt(spine, SPS, Math.min(L_PROM, s + 25));
-  heading.push(r1(((Math.atan2(b[0] - a[0], b[1] - a[1]) * 180) / Math.PI + 360) % 360));
+{
+  const v = ridgeViews[1];
+  const top = v.angle.map((a, i) => [a, i]).sort((a, b) => b[0] - a[0])[0];
+  log(`far ridges: highest ${top[0]}° at azimuth ${top[1]}° (${v.km[top[1]]} km) from mid-walk`);
 }
 
 /* ------------------------------ features ------------------------------ */
-const nearS = (p) => nearestOnPolyline(p, spine, SPS);
-/* Buildings are re-seated rigidly at runtime (plan §4), so what matters is
- * where the centroid lands and the real footprint: an oriented box (the
- * minimum-area rectangle, to 1°) with its long axis turned into the planet
- * frame.  Buildings near the walk (|z| < 90) also keep their mapped outline. */
+const distWalk = (p) => nearS(p).d;
 function orientedBox(ring) {
   let best = null;
   for (let deg = 0; deg < 90; deg += 1) {
@@ -380,99 +291,92 @@ function orientedBox(ring) {
   return best;
 }
 const buildings = [];
-let bSkipped = 0;
 for (const e of ELS) {
   if (!e.tags?.building || (e.type !== 'way' && e.type !== 'relation')) continue;
   const rings = areaRings(e);
   if (!rings) continue;
   for (const outer of rings.outer) {
-    const area = Math.abs(signedArea(outer));
-    if (area < 25) { bSkipped++; continue; }
+    if (Math.abs(signedArea(outer)) < 25) continue;
     const ob = orientedBox(outer);
-    const c = toPlanet(ob.c);
-    if (!c) { bSkipped++; continue; }
-    // the long axis in the planet frame: map a 2 m step along it
-    const ax = [Math.cos(ob.a), Math.sin(ob.a)];
-    const c2 = toPlanet([ob.c[0] + ax[0] * 2, ob.c[1] + ax[1] * 2], c.side);
-    const ang = c2 ? Math.atan2(c2.z - c.z, c2.x - c.x) : 0;
+    const d = distWalk(ob.c);
+    if (d > KEEP.building) continue;
     const lv = parseFloat(e.tags['building:levels']);
-    if (Math.abs(c.z) > Z_KEEP) { bSkipped++; continue; }
-    const rec = { c: [r1(c.x), r1(c.z)], l: r1(ob.l), w: r1(ob.w), a: r2(ang), k: e.tags.building };
+    // a: angle of the long axis, radians anticlockwise from east (ENU)
+    const rec = { c: rp([ob.c])[0], l: r1(ob.l), w: r1(ob.w), a: r2(ob.a % Math.PI), k: e.tags.building };
     if (Number.isFinite(lv)) rec.lv = lv;
-    if (Math.abs(c.z) < 90) { const m = mapRing(outer, 0.3, 4); if (m) rec.p = rp(m); }
+    if (d < KEEP.buildingOutline) rec.p = rp(simplifyRing(outer, 0.3));
     buildings.push(rec);
   }
 }
-log(`buildings: ${buildings.length} (${buildings.filter((q) => q.p).length} with mapped outlines near the walk; ${bSkipped} skipped: under 25 m², outside the map or past |z| = ${Z_KEEP})`);
-
 const ROADS = new Set(['primary', 'secondary', 'tertiary', 'unclassified', 'residential', 'service', 'living_street', 'secondary_link', 'tertiary_link', 'track']);
 const PATHS = new Set(['footway', 'path', 'pedestrian', 'cycleway', 'steps']);
 const roads = [], paths = [];
 for (const e of ELS) {
-  if (e.type !== 'way' || !e.tags?.highway || !e.geometry) continue;
-  if (PROMENADE_WAYS.includes(e.id)) continue;
+  if (e.type !== 'way' || !e.tags?.highway || !e.geometry || PROMENADE_WAYS.includes(e.id)) continue;
   const k = e.tags.highway;
   const target = ROADS.has(k) ? roads : PATHS.has(k) ? paths : null;
   if (!target) continue;
-  for (const part of mapLine(wayPts(e), 0.5, 6)) {
-    target.push({ k, p: rp(part), ...(e.tags.lanes ? { lanes: +e.tags.lanes } : {}), ...(e.tags.bridge ? { bridge: 1 } : {}) });
-  }
+  const pts = wayPts(e);
+  if (Math.min(...pts.map(distWalk)) > KEEP.road) continue;
+  target.push({ k, p: rp(simplify(pts, 0.5)), ...(e.tags.lanes ? { lanes: +e.tags.lanes } : {}), ...(e.tags.bridge ? { bridge: 1 } : {}), ...(e.tags.surface ? { surf: e.tags.surface } : {}), ...(e.tags.name && !e.tags.brand ? { name: e.tags.name } : {}) });
 }
-const waterways = [];
-for (const e of ELS) {
-  if (e.type !== 'way' || !e.tags?.waterway || !e.geometry || e.tags.waterway === 'dam') continue;
-  for (const part of mapLine(wayPts(e), 1, 8)) waterways.push({ k: e.tags.waterway, p: rp(part), ...(e.tags.tunnel ? { tunnel: 1 } : {}) });
-}
-const areaFeat = (pred, name) => {
+const waterways = ELS.filter((e) => e.type === 'way' && e.tags?.waterway && e.tags.waterway !== 'dam' && e.geometry)
+  .map((e) => ({ k: e.tags.waterway, p: rp(simplify(wayPts(e), 1)), ...(e.tags.tunnel ? { tunnel: 1 } : {}) }));
+const polyFeat = (pred, tol = 0.5) => {
   const out = [];
   for (const e of ELS) {
     if (!pred(e)) continue;
     const rings = areaRings(e);
     if (!rings) continue;
-    for (const outer of rings.outer) {
-      const m = mapRing(outer, 0.5, 5);
-      if (m) out.push({ p: rp(m), id: e.type + '/' + e.id, ...(e.tags.sport ? { sport: e.tags.sport } : {}), ...(e.tags.name ? { name: e.tags.name } : {}) });
-    }
+    for (const outer of rings.outer) out.push({ p: rp(simplifyRing(outer, tol)), ref: e.type + '/' + e.id, ...(e.tags.sport ? { sport: e.tags.sport } : {}), ...(e.tags.name ? { name: e.tags.name } : {}) });
   }
-  log(`${name}: ${out.length}`);
   return out;
 };
-const parking = areaFeat((e) => e.tags?.amenity === 'parking', 'parking areas');
-const pitches = areaFeat((e) => e.tags?.leisure === 'pitch', 'pitches');
-const piers = areaFeat((e) => e.tags?.man_made === 'pier', 'piers');
-const golf = areaFeat((e) => e.tags?.leisure === 'golf_course', 'golf courses');
-const gardens = areaFeat((e) => (e.tags?.leisure === 'park' || e.tags?.leisure === 'garden') && e.tags?.name, 'named parks/gardens');
-const trees = ELS.filter((e) => e.type === 'node' && e.tags?.natural === 'tree').map((e) => toPlanet(P(e))).filter(Boolean).map((q) => [r1(q.x), r1(q.z)]);
+const parking = polyFeat((e) => e.tags?.amenity === 'parking');
+const pitches = polyFeat((e) => e.tags?.leisure === 'pitch');
+const piers = polyFeat((e) => e.tags?.man_made === 'pier', 0.2);
+const golf = polyFeat((e) => e.tags?.leisure === 'golf_course', 1);
+const gardens = polyFeat((e) => ['park', 'garden'].includes(e.tags?.leisure) && e.tags?.name, 1);
+const ponds = polyFeat((e) => e !== lakeRel && (e.tags?.natural === 'water' || e.tags?.water), 0.5);
+const landuse = areas.filter((a) => ['forest', 'scrub', 'park', 'golf', 'grass', 'wetland', 'built', 'commercial'].includes(a.cls)).map((a) => {
+  const d = Math.min(distWalk(centroid(a.outer)), ...a.outer.filter((_, i) => i % 5 === 0).map(distWalk));
+  const tol = d < 200 ? 0.5 : d < 1500 ? 2 : 5;
+  return { c: a.cls, p: rp(simplifyRing(a.outer, tol)), ...(a.inner.length ? { holes: a.inner.map((r) => rp(simplifyRing(r, tol))) } : {}), ...(a.name ? { name: a.name } : {}) };
+});
+const trees = ELS.filter((e) => e.type === 'node' && e.tags?.natural === 'tree').map((e) => rp([P(e)])[0]);
+log(`features: ${buildings.length} buildings (${buildings.filter((b) => b.p).length} with outlines), ${roads.length} roads, ${paths.length} paths, ${landuse.length} landuse, ${parking.length} parking, ${pitches.length} pitches, ${piers.length} piers, ${ponds.length} ponds`);
 
 /* ------------------------------ landmarks ------------------------------ */
 /* Real, from OSM.  Business names are dropped (the brief: no real brands);
  * public place names are kept. */
 const landmarks = [];
-function addLandmark(id, name, kind, p, source, ref, extra = {}) {
-  const q = toPlanet(p);
-  const ns = nearS(p);
-  landmarks.push({ id, name, kind, s: r1(ns.s), dProm: r1(ns.d), x: q ? r1(q.x) : null, z: q ? r1(q.z) : null, real: [r1(p[0]), r1(p[1])], source, ref, ...extra });
-}
 const el = (ref) => byId.get(ref);
 const elCentroid = (e) => (e.type === 'node' ? P(e) : centroid(e.type === 'way' ? wayPts(e) : areaRings(e).outer[0]));
-const named = [
-  ['garden_of_silence', 'way/360443301', 'garden'],
-  ['buddha_statue', 'node/3649893943', 'statue'],
-  ['regulator', 'way/1284688290', 'regulator'],
-  ['regulator_bridge', 'way/360443306', 'bridge'],
-  ['nature_centre', 'node/11918222870', 'information'],
-  ['viewpoint_west', 'node/5839948187', 'viewpoint'],
-  ['viewpoint_bend', 'node/1846558866', 'viewpoint'],
-  ['boating', 'node/3653659880', 'boat_rental'],
-  ['golf_club', 'way/129585863', 'golf'],
+function sideOf(p, s) {
+  const a = pointAt(spine, SPS, Math.max(0, s - 2)), b = pointAt(spine, SPS, Math.min(L, s + 2));
+  const cr = (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0]);
+  return cr < 0 ? 'lake' : 'city'; // the lake is to the right of the direction of travel
+}
+function addLandmark(id, name, kind, p, source, ref, extra = {}) {
+  const n = nearS(p);
+  landmarks.push({ id, name, kind, at: rp([p])[0], s: r1(n.s), d: r1(n.d), side: sideOf(p, n.s), source, ref, ...extra });
+}
+const NAMED = [
+  ['garden_of_silence', 'way/360443301', 'garden', 'Garden of Silence'],
+  ['buddha_statue', 'node/3649893943', 'statue', 'Buddha statue'],
+  ['regulator', 'way/1284688290', 'regulator', 'Regulator (dam spillway)'],
+  ['regulator_bridge', 'way/360443306', 'bridge', 'Footbridge over the regulator'],
+  ['nature_centre', 'node/11918222870', 'information', 'Nature Interpretation Centre'],
+  ['viewpoint_west', 'node/5839948187', 'viewpoint', 'Sukhna Lake viewpoint'],
+  ['viewpoint_bend', 'node/1846558866', 'viewpoint', 'Viewpoint'],
+  ['boating', 'node/3653659880', 'boat_rental', 'Boating'],
+  ['golf_club', 'way/129585863', 'golf', 'Chandigarh Golf Club'],
 ];
-for (const [id, ref, kind] of named) {
+for (const [id, ref, kind, name] of NAMED) {
   const e = el(ref);
   if (!e) { log(`  landmark ${id}: ${ref} missing`); continue; }
-  const nm = { buddha_statue: 'Buddha statue', regulator: 'Regulator (dam spillway)', regulator_bridge: 'Footbridge over the regulator', nature_centre: 'Nature Interpretation Centre', viewpoint_west: 'Sukhna Lake viewpoint', viewpoint_bend: 'Viewpoint', boating: 'Boating', golf_club: 'Chandigarh Golf Club', garden_of_silence: 'Garden of Silence' }[id];
-  addLandmark(id, nm, kind, elCentroid(e), 'osm', ref, e.tags?.['name:hi'] ? { hi: e.tags['name:hi'] } : {});
+  addLandmark(id, name, kind, elCentroid(e), 'osm', ref, e.tags?.['name:hi'] ? { hi: e.tags['name:hi'] } : {});
 }
-// amenities along the walk (within 250 m): toilets, water, shelters, fitness, food court, info, parking
 const AMEN = { toilets: 'toilets', drinking_water: 'drinking_water', shelter: 'shelter', food_court: 'food_court', bicycle_parking: 'bicycle_parking', bench: 'bench', waste_basket: 'bin' };
 let ai = 0;
 for (const e of ELS) {
@@ -480,82 +384,50 @@ for (const e of ELS) {
   const kind = AMEN[t.amenity] || (t.leisure === 'fitness_station' ? 'fitness' : t.tourism === 'information' ? 'information' : null);
   if (!kind) continue;
   const ref = e.type + '/' + e.id;
-  if (named.some((n) => n[1] === ref)) continue;
+  if (NAMED.some((n) => n[1] === ref)) continue;
   const p = elCentroid(e);
-  if (nearS(p).d > 250) continue;
+  if (distWalk(p) > 250) continue;
   addLandmark(`${kind}_${++ai}`, t.name && !t.brand ? t.name : null, kind, p, 'osm', ref);
 }
-// the entrance plaza: not tagged in OSM; the centroid of the west-end amenities
 {
-  const west = landmarks.filter((l) => l.s > L_PROM - 250 && ['food_court', 'information', 'toilets', 'drinking_water', 'bicycle_parking', 'viewpoint', 'boat_rental'].includes(l.kind));
-  const c = centroid(west.map((l) => l.real));
-  addLandmark('entrance_plaza', 'Entrance plaza', 'plaza', c, 'osm-derived', west.map((l) => l.ref).join(' '));
-}
-// the lake club: the tennis courts cluster north of the west end
-{
+  // the entrance plaza is not tagged in OSM: the centroid of the west-end amenities
+  const west = landmarks.filter((l) => l.s > L - 250 && ['food_court', 'information', 'toilets', 'drinking_water', 'bicycle_parking', 'viewpoint', 'boat_rental'].includes(l.kind));
+  addLandmark('entrance_plaza', 'Entrance plaza', 'plaza', centroid(west.map((l) => l.at)), 'osm-derived', west.map((l) => l.ref).join(' '));
   const courts = ELS.filter((e) => e.tags?.leisure === 'pitch' && e.tags?.sport === 'tennis').map(elCentroid);
   if (courts.length) addLandmark('lake_club_courts', 'Lake club courts', 'club', centroid(courts), 'osm-derived', 'leisure=pitch sport=tennis');
 }
-// steps: highway=steps whose top is within 45 m of the walk
 const steps = [];
 for (const e of ELS) {
   if (e.type !== 'way' || e.tags?.highway !== 'steps' || !e.geometry) continue;
   const pts = wayPts(e);
   const ends = [pts[0], pts[pts.length - 1]].map((p) => ({ p, n: nearS(p) })).sort((a, b) => a.n.d - b.n.d);
   if (ends[0].n.d > 45) continue;
-  const top = toPlanet(ends[0].p), bottom = toPlanet(ends[1].p);
-  steps.push({ s: r1(ends[0].n.s), top: top && [r1(top.x), r1(top.z)], bottom: bottom && [r1(bottom.x), r1(bottom.z)], side: top && top.side > 0 ? 'lake' : 'city', len: r1(polyLength(pts)), name: e.tags.name || null, ref: 'way/' + e.id });
+  steps.push({ s: r1(ends[0].n.s), top: rp([ends[0].p])[0], bottom: rp([ends[1].p])[0], len: r1(polyLength(pts)), name: e.tags.name || null, ref: 'way/' + e.id, side: sideOf(ends[1].p, ends[1].n.s) });
 }
 steps.sort((a, b) => a.s - b.s);
-log(`landmarks: ${landmarks.length}, steps: ${steps.length}`);
+landmarks.sort((a, b) => a.s - b.s);
 
 /* ------------------------------ measures ------------------------------ */
-// the bund: from the east end to the west bend, where the downstream footways meet the walk
-const bendRef = 'way/544678270';
-const bendWay = el(bendRef);
-// the footway runs the length of the bund; its west end (larger s) is the bend
+const bendWay = el('way/544678270');
 const bendS = bendWay ? Math.max(...[wayPts(bendWay)[0], wayPts(bendWay).at(-1)].map((p) => nearS(p).s)) : null;
-const bundLen = bendS;
 let lx0 = Infinity, lx1 = -Infinity, ly0 = Infinity, ly1 = -Infinity;
 for (const p of lakeOuter) { lx0 = Math.min(lx0, p[0]); lx1 = Math.max(lx1, p[0]); ly0 = Math.min(ly0, p[1]); ly1 = Math.max(ly1, p[1]); }
 let maxSpan = 0;
 for (let i = 0; i < lakeOuter.length; i += 2) for (let j = i + 1; j < lakeOuter.length; j += 2) maxSpan = Math.max(maxSpan, dist(lakeOuter[i], lakeOuter[j]));
-// mapped lake area and its share inside 5% / 10% x-compression (cos(z/R))
-const shoelaceClip = (ring, zmax) => {
-  // area of ring ∩ {z <= zmax}, by scanline sampling (1 m rows)
-  let a = 0;
-  let zlo = Infinity, zhi = -Infinity;
-  for (const p of ring) { zlo = Math.min(zlo, p[1]); zhi = Math.max(zhi, p[1]); }
-  for (let z = Math.floor(zlo) + 0.5; z < Math.min(zhi, zmax); z += 1) {
-    const xs = [];
-    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) { const A = ring[i], B = ring[j]; if ((A[1] > z) !== (B[1] > z)) xs.push(A[0] + ((z - A[1]) * (B[0] - A[0])) / (B[1] - A[1])); }
-    xs.sort((p, q) => p - q);
-    for (let k = 0; k + 1 < xs.length; k += 2) a += (xs[k + 1] - xs[k]) * Math.cos(z / R);
+// across the water from the walk: shoreline distance along the lake-side normal
+const across = [];
+for (let s = 100; s < L - 100; s += 100) {
+  const a = pointAt(spine, SPS, s - 5), b = pointAt(spine, SPS, s + 5), p = pointAt(spine, SPS, s);
+  const t = [(b[0] - a[0]) / dist(a, b), (b[1] - a[1]) / dist(a, b)], n = [t[1], -t[0]];
+  let wet = false, dFar = null;
+  for (let d = 2; d < 3000; d += 2) {
+    const q = [p[0] + n[0] * d, p[1] + n[1] * d];
+    const w = inLake(q);
+    if (w) wet = true; else if (wet) { dFar = d; break; }
   }
-  return a;
-};
-const mapArea = (zmax) => shoelaceClip(lakeOuterMapped, zmax) - lakeInnerMapped.reduce((s, r) => s + shoelaceClip(r, zmax), 0);
-const mappedLakeArea = mapArea(1e9);
-const z5 = R * Math.acos(0.95), z10 = R * Math.acos(0.9);
-const lakeIn5 = mapArea(z5) / mappedLakeArea, lakeIn10 = mapArea(z10) / mappedLakeArea;
-// scale factors along the walk's near field: planet metres per real metre
-function scaleAt(s, d) {
-  const a = pointAt(spine, SPS, Math.max(0, s - 10)), b = pointAt(spine, SPS, Math.min(L_PROM, s + 10));
-  const t = [(b[0] - a[0]) / dist(a, b), (b[1] - a[1]) / dist(a, b)];
-  const n = [t[1] * Math.sign(d), -t[0] * Math.sign(d)];
-  const p = pointAt(spine, SPS, s), q = [p[0] + n[0] * Math.abs(d), p[1] + n[1] * Math.abs(d)];
-  const q2 = [q[0] + t[0] * 2, q[1] + t[1] * 2], q3 = [q[0] + n[0] * 2, q[1] + n[1] * 2];
-  const A = toPlanet(q), B = toPlanet(q2), Cc = toPlanet(q3);
-  if (!A || !B || !Cc) return null;
-  return { sx: Math.hypot(B.x - A.x, B.z - A.z) / 2, sz: Math.hypot(Cc.x - A.x, Cc.z - A.z) / 2, zAt: A.z };
+  if (dFar) across.push(dFar);
 }
-const scaleRows = [];
-for (const d of [-60, -30, 15, 30, 60]) {
-  const v = [];
-  for (let s = 100; s < L_PROM - 100; s += 50) { const r = scaleAt(s, d); if (r) v.push(r); }
-  const q = (arr, k) => arr.slice().sort((a, b) => a - b)[Math.floor(k * (arr.length - 1))];
-  scaleRows.push({ d, sx: [q(v.map((r) => r.sx), 0.05), q(v.map((r) => r.sx), 0.5), q(v.map((r) => r.sx), 0.95)], sz: [q(v.map((r) => r.sz), 0.05), q(v.map((r) => r.sz), 0.5), q(v.map((r) => r.sz), 0.95)] });
-}
+across.sort((a, b) => a - b);
 
 /* -------------------------------- sun -------------------------------- */
 const { y, m, d } = DATE;
@@ -564,165 +436,137 @@ const sr = crossing(y, m, d, -0.833, true, lat, lon);
 const cdawn = crossing(y, m, d, -6, true, lat, lon);
 const ss = crossing(y, m, d, -0.833, false, lat, lon);
 const srPos = sunPosition(localDate(y, m, d, sr), lat, lon);
-const presets = {
-  predawn: Math.round((sr - 25 / 60) * 60) / 60,
-  sunrise: Math.round(sr * 60) / 60,
-  golden: Math.round((sr + 26 / 60) * 60) / 60,
-  bright: 9.25,
-};
+const rm = (h) => Math.round(h * 60) / 60;
+const presets = { predawn: rm(cdawn), sunrise: rm(sr), golden: rm(sr + 26 / 60), bright: 9.25 };
 const sun = {
   lat: +lat.toFixed(6), lon: +lon.toFixed(6), tz: 5.5, date: [y, m, d],
   civilDawn: +cdawn.toFixed(4), sunrise: +sr.toFixed(4), sunriseAz: r1(srPos.azimuth), sunset: +ss.toFixed(4),
-  presets,
-  clock: Object.fromEntries(Object.entries(presets).map(([k, h]) => [k, hhmm(h)])),
+  presets, clock: Object.fromEntries(Object.entries(presets).map(([k, h]) => [k, hhmm(h)])),
+  elevation: Object.fromEntries(Object.entries(presets).map(([k, h]) => [k, r1(sunPosition(localDate(y, m, d, h), lat, lon).elevation)])),
 };
 log(`sun ${y}-${m}-${d}: civil dawn ${hhmm(cdawn)}, sunrise ${hhmm(sr)} at ${srPos.azimuth.toFixed(1)}°, sunset ${hhmm(ss)}; presets ${JSON.stringify(sun.clock)}`);
 
 /* ------------------------------- write ------------------------------- */
 const b64 = (typed) => Buffer.from(typed.buffer, typed.byteOffset, typed.byteLength).toString('base64');
+const attribution = '© OpenStreetMap contributors (ODbL 1.0); terrain: Mapzen / AWS Terrain Tiles (SRTM and others)';
 const data = {
-  version: 1,
+  version: 2,
   generated: new Date().toISOString(),
-  attribution: '© OpenStreetMap contributors (ODbL 1.0); terrain: Mapzen / AWS Terrain Tiles (SRTM and others)',
+  attribution,
+  frame: 'ENU metres [east, north] about the origin; heights above the lake level; three.js x = east, z = -north',
   source: { osm: osmFile, osmFetched: osm.__source?.fetched, bbox: BBOX, promenadeWays: PROMENADE_WAYS },
   origin: { lat: +originLL[0].toFixed(7), lon: +originLL[1].toFixed(7) },
-  planet: { L: r2(L_PROM), join: L_JOIN, C: r2(C), R: +R.toFixed(3) },
-  map: { A: +comp.A.toFixed(3), farShoreZ: MAP.farShoreZ, farShoreU: Math.round(uMed), Rb: MAP.Rb, note: 'x = arc length east->west; z = +-f(u), f identity to 60 m then 60 + A ln(1 + (u-60)/A); lake at +z' },
-  lakeLevel: r1(LAKE_LEVEL),
+  lakeLevelASL: r1(LAKE_LEVEL),
+  promenade: { length: r2(L), osmLength: r2(L_OSM), step: SPINE_STEP, pts: rp(spine), osm: rp(spineRaw), westBendS: bendS && r1(bendS) },
+  lake: { outer: rp(lakeOuter), inner: lakeInner.map(rp), area: Math.round(lakeArea), perimeter: Math.round(lakePerim) },
   sun,
-  spine: { step: 10, heading },
-  lake: { outer: rp(lakeOuterMapped), inner: lakeInnerMapped.map(rp) },
-  cover: { classes: COVER, x0: 0, dx: C / cnx, nx: cnx, z0: cv.z0, dz: cv.dz, nz: cnz, rle: Buffer.from(Uint8Array.from(rle)).toString('base64') },
-  dem: { x0: 0, dx: C / dnx, nx: dnx, z0: dm.z0, dz: dm.dz, nz: dnz, unit: 0.1, ref: 'lake level', data: b64(dem) },
-  ridges: { layers: RIDGES.layers, eye: RIDGES.eye, views: ridgeViews },
+  ridges: { note: 'far layer only: rays start where they leave the hill grid', views: ridgeViews },
   landmarks,
   steps,
-  features: { buildings, roads, paths, waterways, parking, pitches, piers, golf, gardens, trees },
+  features: { buildings, roads, paths, waterways, landuse, parking, pitches, piers, golf, gardens, ponds, trees },
   measures: {
-    promenadeLength: r2(L_PROM), bundLength: bundLen && r1(bundLen), westBendS: bendS && r1(bendS),
-    lakeArea: Math.round(lakeArea), lakePerimeter: Math.round(lakePerim), lakeExtentEN: [Math.round(lx1 - lx0), Math.round(ly1 - ly0)], lakeMaxSpan: Math.round(maxSpan),
-    lakeIslands: lakeInner.length, mappedLakeArea: Math.round(mappedLakeArea), lakeIn5: +lakeIn5.toFixed(3), lakeIn10: +lakeIn10.toFixed(3),
-    fold,
+    promenadeLength: r2(L), osmLength: r2(L_OSM), bundLength: bendS && r1(bendS), westShoreStretch: bendS && r1(L - bendS),
+    lakeArea: Math.round(lakeArea), lakePerimeter: Math.round(lakePerim), lakeExtentEN: [Math.round(lx1 - lx0), Math.round(ly1 - ly0)],
+    lakeMaxSpan: Math.round(maxSpan), lakeIslands: lakeInner.length,
+    acrossWater: { min: across[0], median: across[Math.floor(across.length / 2)], max: across[across.length - 1] },
   },
+  checks,
+};
+const terrain = {
+  version: 2,
+  attribution,
+  unit: 0.1,
+  ref: 'lake level',
+  near: { rect: near.rect, step: near.step, nx: near.nx, ny: near.ny, data: b64(near.h) },
+  hills: { rect: hills.rect, step: hills.step, nx: hills.nx, ny: hills.ny, data: b64(hills.h) },
+  cover: { classes: COVER, rect: nearRect, step: CG.step, nx: cnx, ny: cny, rle: Buffer.from(Uint8Array.from(rle)).toString('base64') },
 };
 const outDir = path.join(root, 'src', 'data');
 fs.mkdirSync(outDir, { recursive: true });
-const dataJson = JSON.stringify(data);
+const dataJson = JSON.stringify(data), terrainJson = JSON.stringify(terrain);
 fs.writeFileSync(path.join(outDir, 'sukhna.data.json'), dataJson);
+fs.writeFileSync(path.join(outDir, 'sukhna.terrain.json'), terrainJson);
 
-/* ------------------------- ?flat=1 debug data ------------------------- */
-const rr = (pts) => pts.map(([a, b]) => [r1(a), r1(b)]);
-const isoX = [], isoU = [];
-for (let X = 0; X <= L_PROM + 0.1; X += 250) {
-  for (const sg of [1, -1]) {
-    const line = [];
-    for (let z = 0; z <= Z_KEEP; z += 4) { const r = inverse(Math.min(X, L_PROM), sg * z); if (r && !r.beyond) line.push(r.p); }
-    if (line.length > 1) isoX.push({ x: r1(X), side: sg, real: rr(simplify(line, 1)) });
-  }
-}
-for (const z of [-250, -150, -60, -20, 20, 60, 120, 170, 220, 300]) {
-  const line = [];
-  for (let X = 0; X <= L_PROM; X += 10) { const r = inverse(X, z); if (r && !r.beyond) line.push(r.p); }
-  if (line.length > 1) isoU.push({ z, real: rr(simplify(line, 1)) });
-}
-const flat = {
-  spine: rr(spine),
-  lake: { outer: rr(lakeOuter), inner: lakeInner.map(rr) },
-  areas: areas.filter((a) => a.box[2] - a.box[0] < 20000).map((a) => ({ c: a.cls, p: rr(simplifyRing(a.outer, 2)) })),
-  buildings: buildings.map((b) => { const e = el(b.id); const r = e && areaRings(e); return r && r.outer[0] ? rr(simplifyRing(r.outer[0], 1)) : null; }).filter(Boolean),
-  roads: ELS.filter((e) => e.type === 'way' && e.tags?.highway && e.geometry).map((e) => ({ k: e.tags.highway, p: rr(simplify(wayPts(e), 1.5)) })),
-  isoX, isoU,
-  cut: { AE: rr([st.AE])[0], AW: rr([st.AW])[0], E: rr([st.E])[0], W: rr([st.W])[0] },
-};
-fs.writeFileSync(path.join(outDir, 'sukhna.flat.json'), JSON.stringify(flat));
-
-/* ------------------------------ debug PNGs ------------------------------ */
-const dbg = path.join(here, 'debug');
-fs.mkdirSync(dbg, { recursive: true });
-const COL = { land: [238, 236, 226], lake: [120, 160, 200], water: [140, 180, 215], forest: [70, 120, 70], scrub: [150, 170, 110], park: [150, 200, 130], golf: [180, 215, 140], built: [215, 205, 195], parking: [190, 190, 200], pitch: [200, 170, 140], wetland: [120, 170, 160], commercial: [220, 190, 190], grass: [170, 210, 150] };
+/* ------------------------------ debug PNG ------------------------------ */
 {
-  const img = new Raster(cnx, cnz);
-  for (let j = 0; j < cnz; j++) for (let i = 0; i < cnx; i++) img.set(i, cnz - 1 - j, COL[COVER[cover[j * cnx + i]]]);
-  const T = ([x, z]) => [(x / C) * cnx, cnz - 1 - (z - cv.z0) / cv.dz];
-  img.poly(lakeOuterMapped.map(T), [20, 40, 90], true);
-  for (const b of buildings) { if (b.p) img.poly(b.p.map(T), [120, 60, 60], true); else img.dot(...T(b.c), 0, [120, 60, 60]); }
-  for (const r of roads) img.poly(r.p.map(T), [90, 90, 90]);
-  img.line(0, T([0, 0])[1], cnx, T([0, 0])[1], [230, 120, 0]);
-  for (const l of landmarks) if (l.x != null) img.dot(...T([l.x, l.z]), 2, [200, 0, 120]);
-  fs.writeFileSync(path.join(dbg, 'planet-cover.png'), img.png());
+  const dbg = path.join(here, 'debug');
+  fs.mkdirSync(dbg, { recursive: true });
+  const COL = { land: [238, 236, 226], lake: [120, 160, 200], water: [140, 180, 215], forest: [70, 120, 70], scrub: [150, 170, 110], park: [150, 200, 130], golf: [180, 215, 140], built: [215, 205, 195], parking: [190, 190, 200], pitch: [200, 170, 140], wetland: [120, 170, 160], commercial: [220, 190, 190], grass: [170, 210, 150] };
+  const sc = 0.3, W = Math.round((nearRect[2] - nearRect[0]) * sc), H = Math.round((nearRect[3] - nearRect[1]) * sc);
+  const img = new Raster(W, H);
+  const T = ([e, n]) => [(e - nearRect[0]) * sc, H - (n - nearRect[1]) * sc];
+  const hh = (a, b) => near.h[b * near.nx + a] / 10;
+  for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
+    const i = Math.floor(px / sc / CG.step), j = Math.floor((H - py) / sc / CG.step);
+    if (i >= cnx || j >= cny || j < 0) continue;
+    const c = COL[COVER[cover[j * cnx + i]]];
+    const gi = Math.min(near.nx - 2, Math.floor(px / sc / near.step)), gj = Math.min(near.ny - 2, Math.max(0, Math.floor((H - py) / sc / near.step)));
+    const sh = Math.max(0.6, Math.min(1.3, 1 + ((hh(gi + 1, gj) - hh(gi, gj)) - (hh(gi, gj + 1) - hh(gi, gj))) * 0.06));
+    img.set(px, py, c.map((v) => Math.min(255, v * sh)));
+  }
+  for (const r of roads) img.poly(r.p.map(T), [120, 120, 120]);
+  for (const b of buildings) if (b.p) img.poly(b.p.map(T), [140, 50, 50], true);
+  img.poly(spine.map(T), [230, 110, 0]);
+  for (const l of landmarks) img.dot(...T(l.at), 2, [200, 0, 140]);
+  for (const s of steps) img.dot(...T(s.top), 2, [0, 0, 0]);
+  fs.writeFileSync(path.join(dbg, 'world.png'), img.png());
 }
 
 /* ------------------------------- report ------------------------------- */
-const fmtS = (l) => `| ${l.name || l.kind} | ${l.kind} | ${l.s.toFixed(0)} | ${l.dProm.toFixed(0)} | ${l.x == null ? '—' : `${l.x.toFixed(0)}, ${l.z.toFixed(0)}`} | ${l.source} \`${l.ref}\` |`;
-const key = landmarks.filter((l) => ['garden', 'statue', 'regulator', 'bridge', 'viewpoint', 'boat_rental', 'plaza', 'club', 'golf', 'information'].includes(l.kind)).sort((a, b) => a.s - b.s);
-let gaps = '';
-for (let i = 1; i < key.length; i++) gaps += `${key[i - 1].name || key[i - 1].kind} → ${key[i].name || key[i].kind}: ${(key[i].s - key[i - 1].s).toFixed(0)} m; `;
+const key = landmarks.filter((l) => ['garden', 'statue', 'regulator', 'bridge', 'viewpoint', 'boat_rental', 'plaza', 'club', 'golf', 'information'].includes(l.kind));
 const report = `# Sukhna data report
 
 Generated by \`node scripts/sukhna/build-data.mjs\` on ${data.generated}.
 OSM: \`${osmFile}\` (fetched ${osm.__source?.fetched || '?'} from ${osm.__source?.url || '?'}), © OpenStreetMap contributors, ODbL 1.0.
-Terrain: Mapzen / AWS Terrain Tiles (Terrarium), z${TERRAIN.nearZoom} near the lake and z${TERRAIN.zoom} for the ridges.
+Terrain: Mapzen / AWS Terrain Tiles (Terrarium): ${TERRAIN.sets.map((s) => `z${s.zoom} ${s.name}`).join(', ')}.
 
-## Planet
+The world is flat and real: ENU metres about the promenade midpoint (${originLL[0].toFixed(6)} N, ${originLL[1].toFixed(6)} E); three.js x = east, z = −north, y = up, y = 0 at the lake level (${LAKE_LEVEL.toFixed(1)} m ASL, the DEM median over the water).
 
-| | |
-|---|---|
-| Promenade (OSM \`way/${PROMENADE_WAYS.join(', ')}\`) | **${L_PROM.toFixed(2)} m** |
-| Join (stylised) | ${L_JOIN} m, at x = ${L_PROM.toFixed(1)} … ${C.toFixed(1)} (between the boat-club end and the Garden of Silence end) |
-| Circumference C | ${C.toFixed(2)} m |
-| **Radius R** | **${R.toFixed(2)} m** |
-| Direction | x = arc length from the east end (Garden of Silence, regulator bridge) westward to the boat club; the lake is at +z |
-| Origin (ENU) | promenade midpoint, ${originLL[0].toFixed(6)} N, ${originLL[1].toFixed(6)} E |
-| Lake level (DEM median) | ${LAKE_LEVEL.toFixed(1)} m |
+## Checks
+
+${checks.map((c) => `- ${c.ok ? '✅' : '❌'} ${c.name}: ${c.detail}`).join('\n')}
 
 ## Real measurements
 
 | | |
 |---|---|
-| Bund (east end → west bend, where the downstream footways \`${bendRef}\` meet the walk) | ${bundLen ? bundLen.toFixed(0) + ' m' : '?'} |
-| West-shore stretch (bend → boat-club end) | ${bundLen ? (L_PROM - bundLen).toFixed(0) + ' m' : '?'} |
+| Promenade (OSM \`way/${PROMENADE_WAYS.join(', ')}\`), end to end | **${L_OSM.toFixed(2)} m** (smoothed centreline ${L.toFixed(2)} m, never more than ${maxDev.toFixed(2)} m off the OSM line) |
+| Bund (east end → west bend, where the downstream footways \`way/544678270\` meet the walk) | ${bendS ? bendS.toFixed(0) + ' m' : '?'} |
+| West-shore stretch (bend → boat-club end) | ${bendS ? (L - bendS).toFixed(0) + ' m' : '?'} |
 | Lake area (outer ring minus ${lakeInner.length} islands) | ${(lakeArea / 1e6).toFixed(3)} km² |
 | Lake perimeter | ${(lakePerim / 1000).toFixed(2)} km |
 | Lake extent (E × N) / longest span | ${Math.round(lx1 - lx0)} × ${Math.round(ly1 - ly0)} m / ${Math.round(maxSpan)} m |
-| Far-shore median harmonic distance | ${uMed.toFixed(0)} m → z = ${MAP.farShoreZ} |
+| Across the water from the walk (along its normal, every 100 m) | ${across[0]} – ${across[across.length - 1]} m, median ${across[Math.floor(across.length / 2)]} m |
 
-**Landmarks along the walk** (s = arc length from the east end; d = distance from the walk; x, z = planet):
+**Landmarks** (s from the east end; d from the walk; side of the walk):
 
-| Landmark | Kind | s (m) | d (m) | x, z | Source |
-|---|---|---|---|---|---|
-${key.map(fmtS).join('\n')}
+| Landmark | Kind | s (m) | d (m) | side | E, N (m) | Source |
+|---|---|---|---|---|---|---|
+${key.map((l) => `| ${l.name || l.kind} | ${l.kind} | ${l.s.toFixed(0)} | ${l.d.toFixed(0)} | ${l.side} | ${l.at[0].toFixed(0)}, ${l.at[1].toFixed(0)} | ${l.source} \`${l.ref.length > 40 ? l.ref.slice(0, 40) + '…' : l.ref}\` |`).join('\n')}
 
-Consecutive distances: ${gaps}
+**Steps off the walk** (OSM \`highway=steps\` within 45 m): ${steps.map((s) => `s = ${s.s.toFixed(0)} (${s.side}${s.name ? ', ' + s.name : ''}, ${s.len.toFixed(0)} m)`).join('; ')}. OSM maps no steps down to the water.
 
-**Steps off the walk** (OSM \`highway=steps\` within 45 m): ${steps.map((s) => `s = ${s.s.toFixed(0)} (${s.side}${s.name ? ', ' + s.name : ''}, ${s.len.toFixed(0)} m long)`).join('; ')}.
-All of them go down the **downstream (city) face** to the parking lots; OSM maps no steps to the water.
+## Grids
 
-## The mapping
+| Grid | Extent (E, N m) | Step | Size | Range above the lake |
+|---|---|---|---|---|
+| near (z13) | ${near.rect.join(', ')} | ${near.step} m | ${near.nx} × ${near.ny} | ${near.lo.toFixed(1)} … ${near.hi.toFixed(1)} m |
+| hills (z12) | ${hills.rect.join(', ')} | ${hills.step} m | ${hills.nx} × ${hills.ny} | ${hills.lo.toFixed(1)} … ${hills.hi.toFixed(1)} m |
+| cover | as near | ${CG.step} m | ${cnx} × ${cny} (${rle.length / 2} runs) | ${Object.entries(coverCount).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${((v * CG.step * CG.step) / 1e6).toFixed(2)} km²`).join(', ')} |
 
-Harmonic straightening (see \`lib/straighten.mjs\`), disc radius ${MAP.Rb} m, grids ${MAP.levels.join(' → ')} m.
-z = ±f(u), f(u) = u to 60 m, then 60 + A ln(1 + (u − 60)/A), **A = ${comp.A.toFixed(2)}**.
-
-- **Fold check: ${fold.tris} triangles (every grid cell with Ψ < ${P_MAX}, i.e. everything the map is used for), ${fold.bad} inverted.** ${fold.bad ? '**FAILED**' : 'Passed.'}
-- Inverse map over the cover lattice (${cnx * cnz} nodes): ${invFail} failures; ${invBad} nodes with a Newton residual over 1 m (the extrapolated corner beyond the east end, |z| > 300 on the city side); worst residual elsewhere ${invErr.toFixed(3)} m.
-- Mapped lake area ${(mappedLakeArea / 1e6).toFixed(3)} km² (planet), against ${(lakeArea / 1e6).toFixed(3)} km² real.
-- Lake area inside 5% x-compression (z ≤ ${z5.toFixed(0)} m): **${(lakeIn5 * 100).toFixed(0)}%**; inside 10% (z ≤ ${z10.toFixed(0)} m): **${(lakeIn10 * 100).toFixed(0)}%**.
-
-Near-field scale factors (planet metres per real metre, 5th / 50th / 95th percentile along the walk):
-
-| d (real, + lake) | along x | across z |
-|---|---|---|
-${scaleRows.map((r) => `| ${r.d} m | ${r.sx.map((v) => v.toFixed(3)).join(' / ')} | ${r.sz.map((v) => v.toFixed(3)).join(' / ')} |`).join('\n')}
+Far ridge rings from s = ${ridgeViews.map((v) => v.s.toFixed(0)).join(', ')} (beyond the hill grid, to ${RIDGES.maxDist / 1000} km).
 
 ## Sun (${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}, IST)
 
 Civil dawn ${hhmm(cdawn)} · sunrise **${hhmm(sr)}** at azimuth **${srPos.azimuth.toFixed(1)}°** · sunset ${hhmm(ss)}.
-T presets: pre-dawn ${sun.clock.predawn}, sunrise ${sun.clock.sunrise}, golden hour ${sun.clock.golden}, bright ${sun.clock.bright}.
+T presets: ${Object.keys(presets).map((k) => `${k} ${sun.clock[k]} (${sun.elevation[k]}°)`).join(', ')}.
 
 ## Output
 
-- \`src/data/sukhna.data.json\`: ${(dataJson.length / 1024).toFixed(0)} KB (${buildings.length} buildings, ${roads.length} road and ${paths.length} path pieces, ${landmarks.length} landmarks, cover ${cnx}×${cnz} in ${rle.length / 2} runs, DEM ${dnx}×${dnz}).
-- \`src/data/sukhna.flat.json\`: ${(JSON.stringify(flat).length / 1024).toFixed(0)} KB (debug, loaded only by \`?flat=1\`).
+- \`src/data/sukhna.data.json\`: ${(dataJson.length / 1024).toFixed(0)} KB (${buildings.length} buildings, ${roads.length} roads, ${paths.length} paths, ${landuse.length} landuse polygons, ${landmarks.length} landmarks, ${steps.length} steps).
+- \`src/data/sukhna.terrain.json\`: ${(terrainJson.length / 1024).toFixed(0)} KB.
 - Built in ${((Date.now() - t0) / 1000).toFixed(1)} s.
 `;
 fs.writeFileSync(path.join(here, 'report.md'), report);
-log(`wrote sukhna.data.json (${(dataJson.length / 1024).toFixed(0)} KB), sukhna.flat.json, report.md in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+log(`wrote sukhna.data.json (${(dataJson.length / 1024).toFixed(0)} KB), sukhna.terrain.json (${(terrainJson.length / 1024).toFixed(0)} KB), report.md in ${((Date.now() - t0) / 1000).toFixed(1)} s`);
+if (checks.some((c) => !c.ok)) { console.error('some checks failed'); process.exitCode = 2; }

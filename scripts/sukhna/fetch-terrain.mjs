@@ -1,4 +1,4 @@
-/* Download the Terrarium elevation tiles for the Shivaliks (plan §3).
+/* Download the Terrarium elevation tiles (plan §3).
  *   node scripts/sukhna/fetch-terrain.mjs   # skips tiles already on disk
  * Tiles: Mapzen / AWS Terrain Tiles, s3 elevation-tiles-prod (see
  * THIRD_PARTY_LICENSES.md for the attribution). */
@@ -10,7 +10,7 @@ import { tilesFor } from './lib/terrarium.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const dir = path.join(here, 'raw', 'terrarium');
-const jobs = [...tilesFor(TERRAIN.bbox, TERRAIN.zoom), ...tilesFor(TERRAIN.nearBbox, TERRAIN.nearZoom)];
+const jobs = TERRAIN.sets.flatMap((s) => tilesFor(s.bbox, s.zoom));
 let got = 0, skipped = 0;
 for (const [z, x, y] of jobs) {
   const f = path.join(dir, String(z), String(x), `${y}.png`);

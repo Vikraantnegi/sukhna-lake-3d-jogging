@@ -11,8 +11,8 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | 0 Plan | done | `claude/charming-hawking-lsp0mx` (PR #1, merged) | `f2ffc9a` |
 | 1 Scaffold + engine port | done | `phase-1-scaffold` (PR #2, merged) | `4c528c4` |
 | 2 (planet version) | **superseded**, kept in history | `build` | `27ca69a` |
-| 2 Flat real-data pipeline + flat scaffold | **in progress** (plan approved) | `build` | — |
-| 3 World layout, LOD and self-checks | — | `build` | — |
+| 2 Flat real-data pipeline + flat scaffold | **done** | `build` | "Phase 2: flat real-data pipeline and world scaffold" |
+| 3 World layout, LOD and self-checks | **next** | `build` | — |
 | 4 Jogger, camera, HUD, controls, touch | — | `build` | — |
 | 5 NPCs, interactions, rowing, birds | — | `build` | — |
 | 6 Time of day, haze, mist, weather, signage | — | `build` | — |
@@ -27,6 +27,11 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Re-plan: P becomes "P overview".** An aerial orbit of the whole lake. The hint bar now reads `WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide` (the user allowed either label; "planet" no longer describes anything).
 - **Re-plan: pre-dawn preset is 06:55**, which is civil dawn and 24 min before the computed sunrise (07:19). The brief's "HUD ≈ 06:55" and "about 25 minutes before sunrise" both hold.
 - **Re-plan: sun values come from `src/core/sun.js`**, not the plan's estimates: 15 Jan 2027, civil dawn 06:55, sunrise **07:19 at azimuth 114.1°**, 07:45 at elevation 4.0°, 09:15 at 19.9°, sunset 17:45. (The plan had said 07:21 and 115°.)
+- **Phase 2 (flat): relief shading for terrain.** A January morning sun is 0–20° up, which puts flat ground right on the cel ramp's band edge (N·L = sin elevation ≈ 1/3), so SRTM's few metres of speckle turned the ground into camouflage. `cel({ relief: true, bands: 'terrain' })` picks the band from N·L − up·L instead: flat ground is always mid-ramp and only real slopes band. Used for all terrain; other large near-flat surfaces can use it too.
+- **Phase 2 (flat): the DEM is smoothed at load** (3 binomial passes on the 20 m near grid, 1 on the 120 m hill grid), because SRTM carries speckle over the flat city.
+- **Phase 2 (flat): the walk follows the ground.** Its height along s is max(+2.5 m, smoothed ground within 6 m + 0.3 m), smoothed over ±40 m (`walkY(s)` in `world/index.js`). On the bund it is the planned +2.5 m crest; at the west end it climbs onto the city's higher ground (the DEM there is several metres above the lake). Phase 3's dam builds on this profile.
+- **Phase 2 (flat): pass split.** Near pass 0.5 m – 1.2 km, far pass 300 m – 45 km (overlap 0.3–1.2 km). Terrain, water and pins are on both layers; the sky, clouds and hill grid only in the far pass. In the P overview the near pass stretches to 5 m – 6 km, since nothing is close. The tree mid/far switch in §4 (1.5 km) is therefore implemented as "mid-LOD trees on both layers out to 1.5 km".
+- **Phase 2 (flat): spawn** is on the walk at s = 2 300 (the west end), looking along the sunrise azimuth (114°), so the opening view runs along the dam and across the lake toward where the sun will rise.
 - **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
@@ -49,10 +54,17 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 **Notes for a fresh session:**
 - Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
 - `.ref/` is not in git. If it is missing, clone it with the command in the status line.
-- **State of the runtime (still Phase 1's):** Vite 6.4 + three 0.180.0 (the only deps). Ported with MIT headers: `core/toon.js`, `post.js`, `outline.js`, `util.js`, `sky.js`, `textures.js`, `palette.js`, `world/planet.js`; new `core/perf.js`, `core/sun.js`, `world/index.js`, `main.js` (dev viewer). The planet bake, `R = 320` and the debug equator are still in the runtime; **Phase 2 (flat) removes them**.
-- Deviations from the reference, documented in file headers: `toon.js` drops the `flatShading` option (r180 ignores it); `post.js` re-syncs near/far every frame; the sky dome was rotated into the planet's surface frame (in the flat world it only follows the camera again).
-- **Dev hooks:** `window.__scene`; `window.__shot(name, W, H, opts)` writes `.shots/<name>.jpg` and returns draw calls; `window.__bench(n)` gives GPU-synced ms per frame, draw calls and the GPU name; `?stats=1` shows a live readout. Keys: drag to look, WASD, P, O ink, G grade, R reset.
-- **Measured at the end of Phase 1** (RTX 4080 SUPER, ANGLE/D3D11, window 1721×1320, internal 2448×1878): ground view 16 calls, 0.34 ms; planet view 8 calls, 0.24 ms.
+- **Data:** `node scripts/sukhna/build-data.mjs` rebuilds `src/data/sukhna.data.json` (211 KB, vectors in ENU) and `src/data/sukhna.terrain.json` (247 KB, Int16 grids) from `scripts/sukhna/raw/` in ~1 s; see `scripts/sukhna/README.md` and `report.md`. All pipeline checks pass (walk length within 0.79 m of OSM, lake polygon simple, walk never in the lake).
+- **State after Phase 2 (flat):**
+  - Runtime modules: `world/frame.js` (ENU ↔ three: x = east, y = up, z = −north; the spine frame `spineAt(s)` with tangent and lake-side normal; `nearestS`; `inLake`; `LAKE_CENTRE`), `world/terrain.js` (near + hill grids decoded and smoothed, `groundAt`, `coverAt`, chunked meshes with two LODs and skirts), `world/chunks.js` (`LodSet` distance culling with hysteresis; `LAYER`, `setLayers`), `world/lake.js` (the real lake polygon as a flat plane), `world/index.js` (assembly, the scaffold walk ribbon on `walkY(s)`, landmark and stair pins, `heightAt`), `world/flat.js` (`?flat=1` map panel), `core/post.js` (two-pass render), `core/sky.js` (30 km dome, clouds 3–7 km out).
+  - **Scaffold pieces Phase 3 replaces:** the walk ribbon and the pins in `world/index.js`; the lake bed (terrain simply sunk to −2.5 m inside the lake polygon, blocky at 20 m); the terrain colours (flat cover colours, and a visible colour seam between the near grid and the hill grid).
+  - The sun is real (`core/sun.js`) but fixed at the bright preset (09:15) in `main.js`; Phase 6 makes it move.
+- **Dev hooks:**
+  - `window.__scene` exposes the scene objects and `data`.
+  - `window.__shot(name, W, H, opts)` writes `.shots/<name>.jpg` and returns draw calls. opts: `{ s, d, az, pitch, h }` on the walk (s from the east end, d toward the lake, az compass degrees, pitch degrees, h eye height), `{ e, n, az, pitch, h }` anywhere, or `{ overview: bearingDeg }`.
+  - `window.__bench(n)` gives GPU-synced ms per frame, draw calls and the GPU name.
+  - `?stats=1` live readout; `?flat=1` map panel. Keys: drag to look, WASD (Shift faster), P overview, O ink, G grade, R reset.
+- **Measured at the end of Phase 2 (flat)** (RTX 4080 SUPER, ANGLE/D3D11, window 1900×1320, internal 2573×1787), `__bench(200)`: spawn 52 calls, 96k tris, 0.47 ms; mid-walk looking across the lake 69 calls, 109k tris, 0.28 ms; P overview 83 calls, 141k tris, 0.38 ms.
 
 ## Working rules
 

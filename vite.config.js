@@ -64,5 +64,16 @@ export default defineConfig({
     assetsInlineLimit: 0,
     // three.js is one big chunk on purpose, so the size warning is just noise
     chunkSizeWarningLimit: 1200,
+    rollupOptions: {
+      output: {
+        // three and the generated Sukhna data change far less often than the
+        // app code, so each gets its own cacheable chunk
+        manualChunks(id) {
+          if (id.includes('node_modules/three')) return 'three';
+          if (id.includes('/src/data/')) return 'data';
+          return undefined;
+        },
+      },
+    },
   },
 });
