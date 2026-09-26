@@ -38,7 +38,20 @@ export const DAM = { half: 4, parIn: 4.0, parOut: 5.2, parH: 0.45, verge: 6.5, c
 const STEP = 2;
 const SECTOR = 100;
 /** Where the stylised steps down to the water go (s, m).  Not in OSM: flagged generic. */
-export const WATER_STEPS = [820, 1480, 2130];
+// A flight about every 300 m (the user, after the jetty stair: "add these stairs multiple
+// times on the jogging path").  On the 2.5 m crest of the bund they follow the embankment
+// down into the water; where the walk is on the higher ground of the west end (5.8-6.3 m
+// over the water on a 1:1-1:1.5 bank) they are pier stairs like the jetty's, ending in a
+// stone landing just over the water.  The jetty's stair (s 2395) completes the set.
+export const WATER_STEPS = [240, 530, 820, 1150, 1480, 1790, 2090];
+/**
+ * Filled by buildDam: every flight through the parapet (s), and the flight down to
+ * the boat-club jetty -- a pier stair, since the walk there is 7.6 m over the water
+ * on a 1:1.2 embankment -- whose foot is where the floating jetty starts (d0).
+ */
+export const GAPS = [];
+export const JETTY = { s: null, d0: null };
+const DECK_TOP = 0.745; // the jetty's paver top (landmarks.js: deckY 0.7)
 const WATER_STEP_HALF = 1.6;
 /** Every bench on the walk, { s, d }: the crowd sits people on them, the jogger can sit too. */
 export const BENCHES = [];
@@ -346,6 +359,22 @@ function lampGlowMaterial() {
   mat.userData.lampGlow = u.uLampGlow;
   return mat;
 }
+/**
+ * Where to sit on a flight of water steps: the lowest tread that is dry
+ * (top ≥ 12 cm over the lake) and that you may stand on (clear of the
+ * collider's 0.5 m keep-off-the-water margin), and the tread below it for the
+ * feet.  Shared by the E interaction and seatCheck, so they always agree.
+ */
+export function stepSeat(st) {
+  const f = spineAt(st.s);
+  // a pier stair (the jetty's, or one ending in a landing over the water): sit on the tread
+  // above the deck or landing, feet on it
+  if (st.pier) return st.treads.length > 1 ? { seat: st.treads[st.treads.length - 2], foot: st.treads[st.treads.length - 1], f } : null;
+  const ok = st.treads.filter((q) => q.y > 0.12 && shoreDist(f.e + f.ne * q.d, f.n + f.nn * q.d, 5) >= 0.55);
+  const seat = ok[ok.length - 1];
+  if (!seat) return null;
+  return { seat, foot: st.treads[st.treads.indexOf(seat) + 1] || seat, f };
+}
 /** The bench seat's top, over the ground it stands on (the seat slab: 0.45 m centre, 6 cm thick). */
 export const BENCH_SEAT = 0.48;
 /** Red-brown wooden bench on a dark frame (photo r1), facing -z. */
@@ -536,6 +565,34 @@ function cobbleBox(w, h, d, matrix, top = [2, 0.5]) {
  * landing through the parapet at walk level down into the water.
  * Returns the cobble and tread geometries, and each stair's treads (for sitting).
  */
+/**
+ * The treads of a flight, [{ d0, d1, top }] along the normal from the parapet.
+ * Water steps follow the embankment: tread k's top sits 3 cm over the slope at
+ * its upper edge (so the grass never shows through), down into the water.  A
+ * pier flight (the jetty) keeps comfortable steps instead -- 0.32 m treads,
+ * risers ~0.16 m, a 1.2 m landing every sixteenth tread -- and so stands clear
+ * of a steep embankment and runs on over the water to the deck.
+ */
+function flightProfile(st) {
+  const y0 = st.from.y, d0 = st.from.d, out = [];
+  if (st.pier) {
+    const drop = y0 - st.to.y, count = Math.max(1, Math.round(drop / 0.16)), rise = drop / count;
+    let d = d0;
+    for (let q = 1; q <= count; q++) {
+      // a 1.2 m landing every sixteenth tread; a flight to the water ends in a 2.2 m landing
+      const run = q === count && st.toWater ? 2.2 : q % 16 === 0 && q < count ? 1.2 : 0.32;
+      out.push({ d0: d, d1: d + run, top: y0 - q * rise });
+      d += run;
+    }
+    return out;
+  }
+  const dS = st.to.d - 0.6;
+  const rise = y0 / Math.max(1, Math.round(y0 / 0.17)), run = rise * (dS - d0) / y0;
+  const count = Math.ceil((y0 - st.to.y) / rise) + 1;
+  for (let q = 0; q < count; q++) out.push({ d0: d0 + q * run, d1: d0 + (q + 1) * run, top: y0 - q * rise + 0.03 });
+  return out;
+}
+
 function waterStairGeometry(stairs) {
   const stone = [], slabs = [];
   for (const st of stairs) {
@@ -546,9 +603,7 @@ function waterStairGeometry(stairs) {
     // tread k spans [d0 + k·run, d0 + (k+1)·run] with its top on the slope at its upper
     // edge, so every tread and riser stands clear of the grass (the old flight sat half a
     // step *under* the slope, which is why it read as flat slabs), down into the water
-    const y0 = st.from.y, y1 = st.to.y, d0 = st.from.d, dS = st.to.d - 0.6;
-    const rise = y0 / Math.max(1, Math.round(y0 / 0.17)), run = rise * (dS - d0) / y0;
-    const count = Math.ceil((y0 - y1) / rise) + 1;
+    const y0 = st.from.y;
     const base = -0.9, wall = 0.35, half = st.width / 2;
     st.treads = [];
     // the landing, at walk level through the parapet gap
@@ -556,9 +611,8 @@ function waterStairGeometry(stairs) {
     // (2 cm proud of the walk and the parapet's footing under it: no coplanar faces)
     slabs.push(cobbleBox(st.width, 0.1, rl, at(dl, y0 - 0.03), [2, 1]));
     for (const side of [-1, 1]) stone.push(cobbleBox(wall, y0 + DAM.parH - base, rl, M4(f.e + f.ne * dl + f.te * (half + wall / 2) * side, (y0 + DAM.parH + base) / 2, -(f.n + f.nn * dl + f.tn * (half + wall / 2) * side), yaw)));
-    for (let q = 0; q < count; q++) {
-      // 3 cm over the slope at the tread's upper edge, so the grass never shows through
-      const top = y0 - q * rise + 0.03, dm = d0 + (q + 0.5) * run;
+    for (const tr of flightProfile(st)) {
+      const top = tr.top, run = tr.d1 - tr.d0, dm = (tr.d0 + tr.d1) / 2;
       // the block under the tread
       stone.push(cobbleBox(st.width, top - 0.07 - base, run, at(dm, (top - 0.07 + base) / 2)));
       // the tread: a pale slab with a 6 cm lip toward the water, alternate slabs a shade apart
@@ -599,11 +653,35 @@ export function buildDam(scene, { ground }) {
     const k = idx(st.s), yW = walkY(st.s), toe = PROF.dToe[k];
     return { s: st.s, from: { d: -DAM.verge + 0.2, y: yW }, to: { d: -toe, y: yW - (toe - DAM.verge) * DAM.face }, width: 3, ref: st.ref };
   });
-  const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s))).map((s) => ({
-    s, from: { d: DAM.parOut, y: walkY(s) }, to: { d: shoreOffset(s) + 0.6, y: -0.25 }, width: WATER_STEP_HALF * 2,
-    // a paved landing through the parapet, at walk level, between the cheek walls
-    landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 },
-  }));
+  // on the crest (≤ 3.2 m over the water, and a bank gentler than the stair) a flight follows
+  // the embankment down into the water; above it, a pier stair out to a landing 0.3 m over the water
+  const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s))).map((s) => {
+    const y0 = walkY(s), dS = shoreOffset(s), steep = y0 / Math.max(0.5, dS - DAM.parOut) > 0.5;
+    const st = {
+      s, from: { d: DAM.parOut, y: y0 }, width: WATER_STEP_HALF * 2,
+      // a paved landing through the parapet, at walk level, between the cheek walls
+      landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 },
+    };
+    if (y0 <= 3.2 && !steep) st.to = { d: dS + 0.6, y: -0.25 };
+    else {
+      Object.assign(st, { pier: true, toWater: true, to: { d: NaN, y: 0.3 } });
+      const prof = flightProfile(st);
+      st.to.d = prof[prof.length - 1].d1;
+    }
+    return st;
+  });
+  // the pier stair down to the boat-club jetty (its s is OSM's boating node)
+  const boating = data.landmarks.find((l) => l.id === 'boating');
+  if (boating && Number.isFinite(shoreOffset(boating.s))) {
+    const st = { s: boating.s, from: { d: DAM.parOut, y: walkY(boating.s) }, to: { d: NaN, y: DECK_TOP }, width: WATER_STEP_HALF * 2, pier: true,
+      landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 } };
+    const prof = flightProfile(st);
+    st.to.d = prof[prof.length - 1].d1;
+    JETTY.s = boating.s; JETTY.d0 = prof[prof.length - 1].d0; // the deck starts under the last tread
+    waterStairs.push(st);
+  }
+  GAPS.length = 0;
+  GAPS.push(...waterStairs.map((w) => w.s));
   // the parapet stops exactly at the stair's cheek walls (half width + wall)
   const nearGap = (s) => waterStairs.some((w) => Math.abs(w.s - s) < WATER_STEP_HALF + 0.3);
   const nearStair = (s) => cityStairs.some((w) => Math.abs(w.s - s) < 3);

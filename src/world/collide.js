@@ -1,6 +1,6 @@
-import { data, L, spineAt, nearestS, shoreDist } from './frame.js';
+import { data, L, spineAt, nearestS, shoreDist, inLake } from './frame.js';
 import { groundAt } from './terrain.js';
-import { DAM, WATER_STEPS } from './dam.js';
+import { DAM, GAPS } from './dam.js';
 
 /* ------------------------------------------------------------------ *
  * Where you can stand and what stops you (plan §6, Phase 4).
@@ -28,6 +28,27 @@ export function createCollider(world) {
     const a = bridge.p[0], b = bridge.p[bridge.p.length - 1], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
     decks.push({ kind: 'bridge', e: (a[0] + b[0]) / 2, n: (a[1] + b[1]) / 2, ue: (b[0] - a[0]) / len, un: (b[1] - a[1]) / len, half: len / 2 + 1, w: 1.5, y: world.landmarks?.regulatorDeckY ?? 3.3 });
   }
+  // a pier stair (the jetty's) stands over water: its footprint is a deck whose height is the tread's
+  for (const st of world.dam?.waterStairs || []) {
+    if (!st.pier) continue;
+    const f = spineAt(st.s), dm = (st.from.d + st.to.d) / 2;
+    decks.push({ kind: 'stairs', e: f.e + f.ne * dm, n: f.n + f.nn * dm, ue: f.ne, un: f.nn, half: (st.to.d - st.from.d) / 2, w: st.width / 2 - 0.1, y: 0 });
+  }
+  // a flight is built along the straight normal from its spine point (dam.js), so its treads
+  // are looked up in that frame -- not by nearestS, which follows the curved spine and, on a
+  // long pier over a bend, disagrees with the geometry by metres
+  const frames = (world.dam?.waterStairs || []).map((st) => ({ st, f: spineAt(st.s) }));
+  const treadAt = (e, n) => {
+    for (const { st, f } of frames) {
+      if (!st.treads) continue;
+      const de = e - f.e, dn = n - f.n;
+      const u = de * f.ne + dn * f.nn, v = -de * f.nn + dn * f.ne;
+      if (Math.abs(v) > st.width / 2 || u < st.treads[0].d0 - 0.01) continue;
+      const tr = st.treads.find((q) => u >= q.d0 && u < q.d1 + 0.06);
+      if (tr) return tr;
+    }
+    return null;
+  };
   const deckAt = (e, n) => {
     for (const d of decks) {
       const de = e - d.e, dn = n - d.n;
@@ -66,7 +87,7 @@ export function createCollider(world) {
     const ns = nearestS(e, n);
     if (ns.side > 0 && ns.s > 0.5 && ns.s < L - 0.5) {
       const d = ns.d;
-      if (d > DAM.parIn - 0.2 && d < DAM.parOut + 0.1 && !WATER_STEPS.some((w) => Math.abs(w - ns.s) < 1.4)) return false;
+      if (d > DAM.parIn - 0.2 && d < DAM.parOut + 0.1 && !GAPS.some((w) => Math.abs(w - ns.s) < 1.4)) return false;
     }
     return !inBuilding(e, n);
   }
@@ -77,21 +98,22 @@ export function createCollider(world) {
     /** The height you stand at. */
     surfaceAt(e, n) {
       const d = deckAt(e, n);
-      if (d) return d.y;
+      if (d && d.kind !== 'stairs') return d.y;
       const g = Math.max(groundAt(e, n), 0);
       // the steps down to the water: stand on the treads, not the slope under them
-      const stairs = world.dam?.waterStairs || [];
-      const ns = stairs.length ? nearestS(e, n) : null;
-      for (const st of stairs) {
-        if (!st.treads || Math.abs(ns.s - st.s) > st.width / 2 || ns.side < 0) continue;
-        const tr = st.treads.find((q) => ns.d >= q.d0 && ns.d < q.d1);
-        if (tr) return Math.max(g, tr.y);
-      }
+      const tr = treadAt(e, n);
+      if (tr) return d ? tr.y : Math.max(g, tr.y);
       return g;
     },
     /** Move from (e, n) by (de, dn), sliding along whatever blocks the step. */
     move(e, n, de, dn) {
+      // never onto open water (a deck is not open water), whatever else says yes
+      const wet = (x, y) => inLake(x, y) && !deckAt(x, y);
+      if (wet(e + de, n + dn) && !wet(e, n)) return [e, n, true];
       if (free(e + de, n + dn)) return [e + de, n + dn, false];
+      // standing somewhere not free (the water's edge of a flight, after a teleport):
+      // any step away from the water is allowed, so nobody is ever trapped
+      if (!free(e, n) && shoreDist(e + de, n + dn, 5) > shoreDist(e, n, 5) && !inBuilding(e + de, n + dn)) return [e + de, n + dn, false];
       if (free(e + de, n)) return [e + de, n, true];
       if (free(e, n + dn)) return [e, n + dn, true];
       return [e, n, true];

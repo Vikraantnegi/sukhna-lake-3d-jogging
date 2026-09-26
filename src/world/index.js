@@ -3,7 +3,7 @@ import { nearestS, inLake, shoreDist } from './frame.js';
 import { NEAR, groundGrid, groundAt, setOverlay, setPatches, sampleNear, buildTerrain } from './terrain.js';
 import { detectPatches, buildPatchGrids } from './patches.js';
 import { gradeGrid, buildShoreBand } from './shore.js';
-import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM, BENCHES } from './dam.js';
+import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM, BENCHES, stepSeat } from './dam.js';
 import { buildLake } from './lake.js';
 import { runChecks, shoreCheck, waterMarginCheck, laneCheck, seatCheck } from './checks.js';
 import * as BODY from '../people/body.js';
@@ -97,8 +97,7 @@ export function buildWorld(scene, { npcs = Q.npcs, birdCount = Q.birds, simpleWa
   const seatCases = () => {
     const cases = [];
     for (const st of dam.waterStairs) {
-      const dry = st.treads.filter((q) => q.y > 0.12), seat = dry[dry.length - 1];
-      const foot = st.treads[st.treads.indexOf(seat) + 1] || seat;
+      const { seat, foot } = stepSeat(st);
       BODY.OUTFITS.forEach((o, i) => { const body = BODY.makeBody(o.row); cases.push({ name: `steps s${st.s} outfit ${i}`, body, seatTop: seat.y, footTop: foot.y, front: BODY.stepSeat(body, seat, foot).front }); });
     }
     for (const p of crowd.people.filter((q) => q.seat)) {

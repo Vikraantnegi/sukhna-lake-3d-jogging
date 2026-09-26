@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cel } from '../core/toon.js';
 import { mulberry32 } from '../core/util.js';
 import { L, spineAt, inLake, shoreDist } from './frame.js';
-import { walkY, shoreOffset, DAM } from './dam.js';
+import { walkY, shoreOffset, DAM, GAPS } from './dam.js';
 import { LAYER, setLayers } from './chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -59,7 +59,10 @@ export function buildBirds(scene, { count = 175 } = {}) {
 
   // perched on the parapet
   for (let i = 0; i < share(0.17); i++) {
-    const s = 20 + rng() * (L - 40), f = spineAt(s);
+    // anywhere on the parapet but over the openings for the stairs (dam.js GAPS)
+    let s = 20 + rng() * (L - 40);
+    for (const g of GAPS) if (Math.abs(s - g) < 2.6) s = g + 2.6 * Math.sign(s - g || 1);
+    const f = spineAt(s);
     add(rng() < 0.6 ? 'crow' : 'pigeon', { mode: 'perch', s, home: s, e: f.e + f.ne * 4.6, n: f.n + f.nn * 4.6, y: walkY(s) + DAM.parH, yaw: Math.atan2(-f.te, f.tn) + (rng() - 0.5) });
   }
   // waders at the waterline
@@ -150,6 +153,7 @@ export function buildBirds(scene, { count = 175 } = {}) {
             b.yaw = Math.atan2(-(f.te * Math.sign(b.dest - b.s)), f.tn * Math.sign(b.dest - b.s));
             flying = true;
             if (u >= 1) { b.s = b.dest; b.state = 'rest'; }
+            for (const g of GAPS) if (Math.abs(b.dest - g) < 2.6) b.dest = g + 2.6 * Math.sign(b.dest - g || 1);
           }
         } else if (b.mode === 'swim') {
           if (Math.random() < dt * 0.3) { b.vx = (Math.random() - 0.5) * 0.5; b.vn = (Math.random() - 0.5) * 0.5; }

@@ -5,7 +5,7 @@ import { PAL } from '../core/palette.js';
 import { rngKit } from '../core/util.js';
 import { data, L, spineAt, nearestS, inLake, shoreDist } from './frame.js';
 import { groundAt } from './terrain.js';
-import { walkY, shoreOffset, DAM } from './dam.js';
+import { walkY, shoreOffset, DAM, JETTY } from './dam.js';
 import { LodSet, LAYER, setLayers } from './chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -277,7 +277,8 @@ function buildBoatClub(p, instMat) {
   if (!Number.isFinite(dS)) return null;
   const yaw = yawToward(f.ne, f.nn);
   // the jetty: from the embankment 28 m out over the water, 6 m wide, pavers with a pink border (r7)
-  const d0 = dS - 2.5, d1 = dS + 28, deckY = 0.7;
+  // it starts at the foot of the pier stair down from the walk (dam.js), when there is one
+  const d0 = JETTY.s === s && Number.isFinite(JETTY.d0) ? JETTY.d0 : dS - 2.5, d1 = dS + 28, deckY = 0.7;
   const dm = (d0 + d1) / 2, len = d1 - d0;
   const ce = f.e + f.ne * dm, cn = f.n + f.nn * dm;
   p.box(6.4, 0.45, len, 0xd8627a, ce, deckY - 0.2, -cn, yaw);

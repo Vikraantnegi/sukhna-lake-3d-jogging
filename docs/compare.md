@@ -108,11 +108,11 @@ Numeric checks, all passing in dev and in the production build with `?checks`:
 | Check | Result |
 |---|---|
 | shoreCheck | 4 426 samples along the real shoreline: 0 fail (land 3 m out lowest +0.22 m; water 3 m in highest −0.05 m) |
-| damCheck | walk ≥ 2.50 m over the water along its whole length; parapet gaps only at the 3 water steps |
+| damCheck | walk ≥ 2.50 m over the water along its whole length; parapet gaps only at the 8 flights (7 to the water, 1 to the jetty) |
 | hillSafety | worst terrain above the walk 0.00 m |
 | npcWaterCheck | 20 simulated minutes, 48 200 samples, 0 within 1 m of the water (closest ≈ 6.1 m) |
 | laneCheck | 4 lanes, 3 169 samples, closest 49.6 m to any shore or island |
-| seatCheck | 22 seats (water steps × outfits, NPC bench sitters, the jogger on a bench), 0 body parts more than 1 cm into a seat or step |
+| seatCheck | 37 seats (every flight × outfits, NPC bench sitters, the jogger on a bench), 0 body parts more than 1 cm into a seat or step |
 | Pipeline | walk length 2 495.66 m vs OSM's 2 494.87 m (0.79 m); lake polygon simple and closed |
 
 Performance per tier (RTX 4080 SUPER, ANGLE / D3D11, 1900×1320 window; `__bench(150)`, GPU-synced):
