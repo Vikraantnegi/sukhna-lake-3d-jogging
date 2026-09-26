@@ -11,3 +11,7 @@ dist/
 
 # pipeline debug renders
 scripts/sukhna/debug/
+
+# the user's own music for the water steps (Phase 7): never committed, never built
+public/audio/*
+!public/audio/README.md

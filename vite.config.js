@@ -42,12 +42,36 @@ function frameGrabber(outDir) {
   };
 }
 
+/**
+ * Optional user music (Phase 7): tracks the user drops into public/audio/
+ * play while sitting.  The folder is git-ignored; the dev server lists it at
+ * /audio/list.json, and the build deletes dist/audio so no track is ever
+ * shipped.
+ */
+function localTracks(dir) {
+  const AUDIO = /.(mp3|ogg|m4a|wav|flac|opus)$/i;
+  return {
+    name: 'local-tracks',
+    configureServer(server) {
+      server.middlewares.use('/audio/list.json', (req, res) => {
+        let files = [];
+        try { files = fs.readdirSync(dir).filter((f) => AUDIO.test(f)).sort(); } catch { /* no folder */ }
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify(files));
+      });
+    },
+    closeBundle() {
+      fs.rmSync(path.resolve(process.cwd(), 'dist', 'audio'), { recursive: true, force: true });
+    },
+  };
+}
+
 const SHOT_DIR = path.resolve(process.cwd(), '.shots');
 
 export default defineConfig({
   /* Relative asset URLs, so a build runs from any subdirectory. */
   base: './',
-  plugins: [frameGrabber(SHOT_DIR)],
+  plugins: [frameGrabber(SHOT_DIR), localTracks(path.resolve(process.cwd(), 'public', 'audio'))],
   server: {
     port: 5178,
     strictPort: true,

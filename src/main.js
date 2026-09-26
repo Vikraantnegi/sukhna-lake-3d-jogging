@@ -19,6 +19,7 @@ import { createCollider } from './world/collide.js';
 import { createInteractions } from './people/interact.js';
 import { createTod, applyLook } from './core/tod.js';
 import { createWeather } from './core/weather.js';
+import { createSound } from './core/sound.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -110,8 +111,7 @@ const actions = {
   T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); },
   K: () => { const w = weather.cycle(); hud.setWeather(w); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
   P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
-  // the on/off preference only, until core/sound.js arrives in Phase 7
-  M: () => { soundOn = !soundOn; try { localStorage.setItem('sukhna-sound', soundOn ? '1' : '0'); } catch { /* optional */ } hud.setSound(soundOn); hud.flash(soundOn ? 'sound on (audio arrives in Phase 7)' : 'sound off'); },
+  M: () => { const on = sound.toggle(); hud.flash(on ? 'sound on' : 'sound off'); },
   H: () => hud.toggleHidden(),
 };
 let coordsOn = false;
@@ -134,7 +134,9 @@ for (const ev of ['keydown', 'keyup', 'pointerdown']) window.addEventListener(ev
 
 /* ----------------------------- mouse and touch ----------------------------- */
 const locked = () => document.pointerLockElement === canvas;
-canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { canvas.requestPointerLock?.(); hud.setPaused(false); } });
+// pointer lock may be refused (embedded browsers): the game runs without it, so swallow the rejection
+const lockPointer = () => { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* refused */ } };
+canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { lockPointer(); hud.setPaused(false); } });
 document.addEventListener('pointerlockchange', () => { if (!TOUCH) hud.setPaused(!locked()); });
 document.addEventListener('mousemove', (e) => { if (locked()) rig.look(e.movementX * 0.0022, e.movementY * 0.0022); });
 // Drag to look whenever the pointer is not locked (before Start, in the
@@ -146,7 +148,11 @@ canvas.addEventListener('pointercancel', () => { dragging = false; });
 canvas.addEventListener('pointermove', (e) => { if (dragging && !locked() && !TOUCH) rig.look(e.movementX * 0.0035, e.movementY * 0.0035); });
 window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
 hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setItem('sukhna-outfit', String(i)); } catch { /* optional */ } };
-hud.onStart = () => { if (!TOUCH) canvas.requestPointerLock?.(); world.onStart?.(); };
+hud.onStart = () => {
+  if (sound.enabled) sound.start();
+  if (!TOUCH) lockPointer();
+  world.onStart?.();
+};
 if (TOUCH) {
   createTouch({ keys: jogger.keys, onLook: (dx, dy) => rig.look(dx, dy), onZoom: (d) => rig.zoom(d), onButton: (k) => actions[k]?.() });
 }
@@ -169,9 +175,8 @@ const LOOK_TARGETS = { sky, sun, fill, bounce, hemi, scene, renderer, pipeline, 
 const SUNRISE = data.sun.sunrise, SUNSET = data.sun.sunset;
 let looping = false;
 hud.setWeather(weather.state.kind);
-let soundOn = true;
-try { soundOn = localStorage.getItem('sukhna-sound') !== '0'; } catch { /* optional */ }
-hud.setSound(soundOn);
+const sound = createSound({ world, jogger, tod, weather, interact, onChange: () => hud.setSound(sound.enabled, sound.music) });
+hud.setSound(sound.enabled, false);
 let density = -1, bundled = null;
 /** How many people are out (plan §6): 0.3 pre-dawn, peak from sunrise −10 to +70 min, thinning after; fog x0.45. */
 function crowdDensity(min, fog, evening) {
@@ -228,6 +233,7 @@ function frame() {
   updateTime(dt, playing);
   rig.update(dt, jogger, { bench: interact.benchView() });
   if (playing) interact.update(); else hud.setPrompt('');
+  sound.update(dt, camera, playing);
   placeLights();
   hud.setRun(jogger);
   if (coordsOn) {
@@ -245,7 +251,7 @@ if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
 }
 
-window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, updateTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, sound, updateTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({

@@ -77,8 +77,10 @@ export function createCameraRig(camera, { groundAt }) {
       let dy = bench.yaw - rig.yaw;
       dy = Math.atan2(Math.sin(dy), Math.cos(dy));
       rig.yaw += dy * (1 - Math.exp(-1.2 * dt));
-      rig.pitch += (-0.05 - rig.pitch) * (1 - Math.exp(-1.2 * dt));
-      rig.boomTarget = Math.max(rig.boomTarget, 3.2);
+      rig.pitch += ((bench.pitch ?? -0.05) - rig.pitch) * (1 - Math.exp(-1.2 * dt));
+      // the bench keeps the boom at least 3.2 m; the steps ask for a close 2.2 m
+      if (bench.boom !== undefined) rig.boomTarget += (bench.boom - rig.boomTarget) * (1 - Math.exp(-1.5 * dt));
+      else rig.boomTarget = Math.max(rig.boomTarget, 3.2);
     }
 
     j.visible = !rig.isFirstPerson();

@@ -494,15 +494,6 @@ function stairGeometry(steps) {
       parts.push({ geo: new THREE.BoxGeometry(st.width, 0.18, run + 0.02), color: q % 2 ? PAL.concrete : PAL.concreteDark,
         matrix: M4(f.e + f.ne * d, y - 0.09, -(f.n + f.nn * d), yaw) });
     }
-    if (st.landing) {
-      const dl = (st.landing.d0 + st.landing.d1) / 2, run = st.landing.d1 - st.landing.d0;
-      parts.push({ geo: new THREE.BoxGeometry(st.width + 0.6, 0.12, run), color: PAL.concrete, matrix: M4(f.e + f.ne * dl, st.from.y - 0.05, -(f.n + f.nn * dl), yaw) });
-      // the cheek walls start at the parapet's inner face, as high as the parapet
-      for (const side of [-1, 1]) {
-        const off = (st.width / 2 + 0.15) * side;
-        parts.push({ geo: new THREE.BoxGeometry(0.3, DAM.parH, run), color: PAL.concreteDark, matrix: M4(f.e + f.ne * dl + f.te * off, st.from.y + DAM.parH / 2, -(f.n + f.nn * dl + f.tn * off), yaw) });
-      }
-    }
     // low side walls
     const len = Math.hypot(st.to.d - st.from.d, st.to.y - st.from.y), pitch = Math.atan2(st.from.y - st.to.y, Math.abs(st.to.d - st.from.d));
     const dm = (st.from.d + st.to.d) / 2, ym = (st.from.y + st.to.y) / 2;
@@ -517,6 +508,67 @@ function stairGeometry(steps) {
     }
   }
   return parts.length ? mergedParts(parts) : null;
+}
+
+/**
+ * A box with world-scaled UVs for the cobble texture, matching the parapet's
+ * mapping (one repeat per 2 m along, per 0.45 m up a face, per 0.5 m across
+ * a top).  Faces of BoxGeometry come in the order +x, -x, +y, -y, +z, -z.
+ */
+function cobbleBox(w, h, d, matrix) {
+  const g = new THREE.BoxGeometry(w, h, d);
+  const uv = g.attributes.uv;
+  const scale = [[d / 2, h / 0.45], [d / 2, h / 0.45], [w / 2, d / 0.5], [w / 2, d / 0.5], [w / 2, h / 0.45], [w / 2, h / 0.45]];
+  for (let i = 0; i < uv.count; i++) { const [su, sv] = scale[Math.floor(i / 4)]; uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv); }
+  const ng = g.toNonIndexed();
+  ng.applyMatrix4(matrix);
+  return ng;
+}
+
+/**
+ * The steps down to the water (stylised: OSM maps none), rebuilt as a place
+ * to stop and sit: solid river-cobble blocks like the parapet, each capped by
+ * a pale dressed-stone tread with a small lip, between cheek walls that step
+ * down with them (cobble, parapet height above each tread), from a paved
+ * landing through the parapet at walk level down into the water.
+ * Returns the cobble and tread geometries, and each stair's treads (for sitting).
+ */
+function waterStairGeometry(stairs) {
+  const stone = [], slabs = [];
+  for (const st of stairs) {
+    const f = spineAt(st.s);
+    const yaw = Math.atan2(-f.ne, f.nn);
+    const at = (d, y) => M4(f.e + f.ne * d, y, -(f.n + f.nn * d), yaw);
+    // the embankment falls linearly from the walk (d0, y0) to the waterline (dS, 0);
+    // tread k spans [d0 + k·run, d0 + (k+1)·run] with its top on the slope at its upper
+    // edge, so every tread and riser stands clear of the grass (the old flight sat half a
+    // step *under* the slope, which is why it read as flat slabs), down into the water
+    const y0 = st.from.y, y1 = st.to.y, d0 = st.from.d, dS = st.to.d - 0.6;
+    const rise = y0 / Math.max(1, Math.round(y0 / 0.17)), run = rise * (dS - d0) / y0;
+    const count = Math.ceil((y0 - y1) / rise) + 1;
+    const base = -0.9, wall = 0.35, half = st.width / 2;
+    st.treads = [];
+    // the landing, at walk level through the parapet gap
+    const dl = (st.landing.d0 + st.landing.d1) / 2, rl = st.landing.d1 - st.landing.d0;
+    slabs.push({ geo: new THREE.BoxGeometry(st.width, 0.1, rl), color: PAL.cobbleLight, matrix: at(dl, y0 - 0.05) });
+    for (const side of [-1, 1]) stone.push(cobbleBox(wall, y0 + DAM.parH - base, rl, M4(f.e + f.ne * dl + f.te * (half + wall / 2) * side, (y0 + DAM.parH + base) / 2, -(f.n + f.nn * dl + f.tn * (half + wall / 2) * side), yaw)));
+    for (let q = 0; q < count; q++) {
+      const top = y0 - q * rise, dm = d0 + (q + 0.5) * run;
+      // the block under the tread
+      stone.push(cobbleBox(st.width, top - 0.07 - base, run, at(dm, (top - 0.07 + base) / 2)));
+      // the tread: a pale slab with a 6 cm lip toward the water, alternate slabs a shade apart
+      slabs.push({ geo: new THREE.BoxGeometry(st.width + 0.06, 0.08, run + 0.06), color: q % 2 ? PAL.cobbleLight : 0xc4bfb1, matrix: at(dm + 0.03, top - 0.04) });
+      // stepped cheek walls, parapet height above the tread
+      for (const side of [-1, 1]) {
+        const off = (half + wall / 2) * side;
+        stone.push(cobbleBox(wall, top + DAM.parH - base, run, M4(f.e + f.ne * dm + f.te * off, (top + DAM.parH + base) / 2, -(f.n + f.nn * dm + f.tn * off), yaw)));
+      }
+      st.treads.push({ d: dm, y: top, d0: dm - run / 2, d1: dm + run / 2 });
+    }
+  }
+  const stoneGeo = stone.length ? mergeGeometries(stone, false) : null;
+  if (stoneGeo) { stoneGeo.computeVertexNormals(); stoneGeo.computeBoundingSphere(); }
+  return { stone: stoneGeo, slabs: slabs.length ? mergedParts(slabs) : null };
 }
 
 /* ------------------------------- build ------------------------------- */
@@ -610,13 +662,22 @@ export function buildDam(scene, { ground }) {
     stats.sectors++;
   }
 
-  const stairParts = stairGeometry([...cityStairs, ...waterStairs]);
+  const stairParts = stairGeometry(cityStairs);
   if (stairParts) {
     const stairs = new THREE.Mesh(stairParts, vcProps);
     stairs.name = 'stairs';
     stairs.castShadow = stairs.receiveShadow = true;
     setLayers(stairs, LAYER.NEAR);
     group.add(stairs);
+  }
+  const ws = waterStairGeometry(waterStairs);
+  for (const [geo, mat, name] of [[ws.stone, parapetMat, 'waterSteps.stone'], [ws.slabs, vcProps, 'waterSteps.treads']]) {
+    if (!geo) continue;
+    const m = new THREE.Mesh(geo, mat);
+    m.name = name;
+    m.castShadow = m.receiveShadow = true;
+    setLayers(m, LAYER.NEAR);
+    group.add(m);
   }
 
   scene.add(group);

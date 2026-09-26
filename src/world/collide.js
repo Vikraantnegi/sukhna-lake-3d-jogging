@@ -77,7 +77,17 @@ export function createCollider(world) {
     /** The height you stand at. */
     surfaceAt(e, n) {
       const d = deckAt(e, n);
-      return d ? d.y : Math.max(groundAt(e, n), 0);
+      if (d) return d.y;
+      const g = Math.max(groundAt(e, n), 0);
+      // the steps down to the water: stand on the treads, not the slope under them
+      const stairs = world.dam?.waterStairs || [];
+      const ns = stairs.length ? nearestS(e, n) : null;
+      for (const st of stairs) {
+        if (!st.treads || Math.abs(ns.s - st.s) > st.width / 2 || ns.side < 0) continue;
+        const tr = st.treads.find((q) => ns.d >= q.d0 && ns.d < q.d1);
+        if (tr) return Math.max(g, tr.y);
+      }
+      return g;
     },
     /** Move from (e, n) by (de, dn), sliding along whatever blocks the step. */
     move(e, n, de, dn) {

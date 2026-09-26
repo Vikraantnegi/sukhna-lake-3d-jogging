@@ -112,7 +112,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
     },
     setClock(clock, preset) { put(cref.clock, clock); put(cref.preset, preset); },
     setWeather(kind) { put(cref.weather, kind === 'rain' ? 'Rain' : kind === 'fog' ? 'Fog' : 'Clear'); },
-    setSound(on) { put(cref.sound, on ? 'Sound on' : 'Sound off'); cond.classList.toggle('muted', !on); },
+    setSound(on, music = false) { put(cref.sound, !on ? 'Sound off' : music ? 'Music' : 'Sound on'); cond.classList.toggle('muted', !on); },
     /**
      * Fade to black, show the next-morning card, call `atBlack` (reset the clock
      * there), then fade back in and call `done`.

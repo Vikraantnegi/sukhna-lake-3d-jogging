@@ -69,7 +69,20 @@ https://github.com/tilezen/joerd/blob/master/docs/attribution.md
 
 Raw tiles are kept in `scripts/sukhna/raw/terrarium/` (z11, z12, z13).
 
-## Sound
+## Sound and music
 
-None yet. Phase 7 generates every sound in code. Any CC0 recording added
-later is listed here with its source URL and licence.
+**No recordings ship with this project.** Every sound is synthesised at run
+time with WebAudio in `src/core/sound.js` (this project's own code, MIT):
+the water, wind, leaves and rain beds are filtered noise; the birds are FM
+chirps; the oars, footsteps, breathing, horn, laughter and chatter are noise
+bursts, oscillators and formant filters; the lo-fi music that plays while
+you sit is composed live from a few chord loops, a pentatonic melody and a
+drum pattern.
+
+**Your own tracks:** audio files you put in `public/audio/` play instead of
+the generated music. That folder is git-ignored (only its README is tracked)
+and the build deletes `dist/audio`, so no track is ever committed or
+shipped. Use only music you have the rights to play.
+
+Nothing from sakura-crossing's `public/audio/` is used. Any CC0 recording
+added later will be listed here with its source URL and licence.
