@@ -1,8 +1,10 @@
 /* Ported from sakura-crossing (https://github.com/Kenton-GMI/sakura-crossing),
  * src/core/post.js.  Copyright (c) 2026 Kenton Wang.  MIT License -- full text in
- * THIRD_PARTY_LICENSES.md.  Changes: the ink pass re-reads the camera near/far
- * every render (the planet view changes `camera.far`), and the pass uniforms
- * are exposed for the time-of-day and fog code to drive later. */
+ * THIRD_PARTY_LICENSES.md.  Changes: the ink pass differentiates inverse depth
+ * (planes stay clean at grazing angles); an optional far pass (plan §4: the
+ * world reaches 40 km, which one depth range cannot hold) drawn first into
+ * the same target, then a depth clear, then the near pass; the ink pass
+ * re-reads the near camera's near/far every render. */
 import * as THREE from 'three';
 import { FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
 import { PAL } from './palette.js';
@@ -81,9 +83,13 @@ const INK_SHADER = {
       float du = linearDepth( vUv + vec2( 0.0, t.y ) );
       float dd = linearDepth( vUv - vec2( 0.0, t.y ) );
 
-      // second difference of linear depth, normalised by distance
-      float sx = ( dl + dr - 2.0 * dc ) / dc;
-      float sy = ( du + dd - 2.0 * dc ) / dc;
+      // second difference of *inverse* depth, normalised: 1/z is exactly affine across
+      // any plane on screen, so a plane never inks however grazing the view (the
+      // lake from a seat on the water steps, 1.3 m up, used to take a dark band).
+      // Its sign is the opposite of linear depth's: negate so convex stays positive.
+      float wc = 1.0 / dc;
+      float sx = -( 1.0 / dl + 1.0 / dr - 2.0 * wc ) / wc;
+      float sy = -( 1.0 / du + 1.0 / dd - 2.0 * wc ) / wc;
 
       float convex  = max( 0.0,  sx ) + max( 0.0,  sy );
       float concave = max( 0.0, -sx ) + max( 0.0, -sy );
@@ -206,10 +212,18 @@ function makeQuad(def) {
 }
 
 export class Pipeline {
-  constructor(renderer, scene, camera, { pixelBudget = 4.6e6 } = {}) {
+  /**
+   * farCamera (optional): a camera with its own near/far and layers.  It is
+   * slaved to `camera` every frame (pose, fov, aspect) and drawn first; the
+   * depth buffer is then cleared and `camera` draws the near pass.  Pixels
+   * only the far pass covered read as sky to the ink pass (cleared depth),
+   * which is what they are to it: ink has faded out by 98 m anyway.
+   */
+  constructor(renderer, scene, camera, { pixelBudget = 4.6e6, farCamera = null } = {}) {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
+    this.farCamera = farCamera;
     this.pixelBudget = pixelBudget;
     this.size = new THREE.Vector2(1, 1);
 
@@ -249,7 +263,8 @@ export class Pipeline {
     const dpr = window.devicePixelRatio || 1;
     let scale = this.forceScale || (dpr < 1.5 ? 1.5 : Math.min(dpr, 2));
     if (w * h * scale * scale > this.pixelBudget) {
-      scale = Math.max(1, Math.sqrt(this.pixelBudget / (w * h)));
+      // over budget: supersample less, or (the low tier) render under native and upscale
+      scale = Math.max(0.5, Math.sqrt(this.pixelBudget / (w * h)));
     }
     this.scale = scale;
     const rw = Math.max(2, Math.floor(w * scale));
@@ -280,8 +295,23 @@ export class Pipeline {
     iu.uNear.value = this.camera.near;
     iu.uFar.value = this.camera.far;
     r.setRenderTarget(this.rtScene);
+    const autoClear = r.autoClear;
+    r.autoClear = false;
     r.clear();
+    if (this.farCamera && !this.skipFar) {
+      const f = this.farCamera, c = this.camera;
+      f.position.copy(c.position);
+      f.quaternion.copy(c.quaternion);
+      if (f.fov !== c.fov || f.aspect !== c.aspect) { f.fov = c.fov; f.aspect = c.aspect; f.updateProjectionMatrix(); }
+      f.updateMatrixWorld();
+      // shadows are only for the near pass: the far pass must not redraw them
+      r.shadowMap.needsUpdate = false;
+      r.render(this.scene, f);
+      r.clearDepth();
+    }
+    r.shadowMap.needsUpdate = true;
     r.render(this.scene, this.camera);
+    r.autoClear = autoClear;
 
     let src = this.rtScene.texture;
 

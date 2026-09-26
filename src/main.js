@@ -1,217 +1,217 @@
 /* Structure follows sakura-crossing's src/main.js (renderer setup, the
- * two-light anime rig re-seated in the local surface frame, the P planet view
- * and the dev `__shot` capture).  Copyright (c) 2026 Kenton Wang, MIT License
- * -- see THIRD_PARTY_LICENSES.md. */
+ * two-light anime rig, the dev `__shot` capture).  Copyright (c) 2026
+ * Kenton Wang, MIT License -- see THIRD_PARTY_LICENSES.md. */
 import * as THREE from 'three';
 import { PAL } from './core/palette.js';
 import { Pipeline } from './core/post.js';
 import { buildSky } from './core/sky.js';
 import { setOutlineResolution } from './core/outline.js';
 import { createPerf } from './core/perf.js';
-import { clamp } from './core/util.js';
-import { R, CENTER, CIRCUMFERENCE, basisAt, positionAt, surfaceQuat, wrapX, flatAt } from './world/planet.js';
+import { Jogger } from './core/jogger.js';
+import { createCameraRig } from './core/camera.js';
+import { createHud } from './core/hud.js';
+import { createTouch, isTouch } from './core/touch.js';
+import { data, L, spineAt, azimuthDir, yawForAzimuth, azimuthForYaw, nearestS, LAKE_CENTRE } from './world/frame.js';
+import { groundAt } from './world/terrain.js';
+import { LAYER } from './world/chunks.js';
 import { buildWorld } from './world/index.js';
+import { createCollider } from './world/collide.js';
+import { createInteractions } from './people/interact.js';
+import { createTod, applyLook } from './core/tod.js';
+import { createWeather } from './core/weather.js';
+import { createSound } from './core/sound.js';
+import { Q, TIERS, lower } from './core/quality.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
  *
- * Phase 1: the reference's renderer, light rig and 3D-to-2D pipeline
- * around an empty planet.  The camera here is a plain dev viewer (drag to
- * look, WASD to move along the surface); the jogger and its third-person
- * camera replace it in Phase 4.
+ * The world is flat, real and 1:1 (plan §4): ENU metres about the
+ * promenade midpoint, x = east, z = -north, y = metres above the lake.
+ * Two render passes share one frame (core/post.js): a far camera
+ * (300 m - 45 km) draws the terrain, water and sky, then a near camera
+ * (0.5 m - 1.2 km) draws everything close over a cleared depth buffer.
  *
- * Lighting is the classic two-light anime setup: one warm quantised key
- * for the sun, one cool bounce fill from the opposite side, and a
- * hemisphere with a violet ground colour so nothing in shadow ever goes
- * black.  The sun is a fixed direction in the local surface frame for now;
- * Phase 6 drives it from the real sun position for Sukhna.
+ * Time of day (core/tod.js) runs the real sun on 15 Jan 2027 at 4x from
+ * 06:55; its look (sky, lights, haze, grade, water, mist) is pushed to the
+ * scene whenever it changes.  Weather (core/weather.js) folds in on top.
  * ------------------------------------------------------------------ */
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('view');
+const TOUCH = isTouch();
 
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: false,
-  powerPreference: 'high-performance',
-  stencil: false,
-});
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.autoUpdate = false; // the pipeline asks for the near pass only
 renderer.setClearColor(new THREE.Color(PAL.fog), 1);
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(PAL.fog, 60, 320);
+scene.fog = new THREE.FogExp2(PAL.fog, 1.3e-4);
 
-const camera = new THREE.PerspectiveCamera(46, 1, 0.25, 600);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1200);
 camera.rotation.order = 'YXZ';
+camera.layers.set(LAYER.NEAR);
+const farCamera = new THREE.PerspectiveCamera(55, 1, 300, 45000);
+farCamera.layers.set(LAYER.FAR);
 
 /* --------------------------------- light --------------------------------- */
-const SHADOW_HALF = 34;
+const SHADOW_HALF = 40;
 const sun = new THREE.DirectionalLight(PAL.sun, 2.25);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 1, far: 200 });
+sun.shadow.mapSize.set(Q.shadow, Q.shadow);
+Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 1, far: 400 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.035;
-scene.add(sun, sun.target);
-
-// Cool bounce from the opposite quarter: an anime background has *coloured*
-// shadows, not dark ones, so this carries most of the shadow side.
 const fill = new THREE.DirectionalLight(PAL.fill, 1.08);
-scene.add(fill, fill.target);
-
-// a second, weaker bounce from below-front stops undersides going flat black
 const bounce = new THREE.DirectionalLight(0xd8cbe8, 0.34);
-scene.add(bounce, bounce.target);
-
 const hemi = new THREE.HemisphereLight(PAL.hemiSky, PAL.hemiGround, 1.12);
-scene.add(hemi);
+for (const l of [sun, fill, bounce, hemi]) { l.layers.enableAll(); scene.add(l); }
+scene.add(sun.target, fill.target, bounce.target);
 
-/** Light directions in the local surface frame (x east along the promenade,
- * y up, z north toward the lake).  Placeholder sun until Phase 6. */
-const SUN_LOCAL = new THREE.Vector3(-52, 62, 56);
-const FILL_LOCAL = new THREE.Vector3(48, 26, -44);
-const BOUNCE_LOCAL = new THREE.Vector3(10, -18, 40);
-const _off = new THREE.Vector3();
-
-/** Move a light so its direction stays fixed relative to the local surface. */
-function seatLight(light, local, basis, origin) {
-  _off.set(0, 0, 0)
-    .addScaledVector(basis.east, local.x)
-    .addScaledVector(basis.up, local.y)
-    .addScaledVector(basis.north, local.z);
-  light.target.position.copy(origin);
-  light.position.copy(origin).add(_off);
-}
+// the clock: opens at civil dawn (plan §0); ?t=predawn|sunrise|golden|bright overrides
+// the four morning presets plus the real sunset (17:45 on 15 Jan)
+const PRESET_HOURS = { ...data.sun.presets, sunset: data.sun.sunset };
+const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'predawn' });
+const weather = createWeather(scene, { drops: Q.rain });
+if (['rain', 'fog'].includes(params.get('w'))) weather.set(params.get('w'), true);
 
 /* --------------------------------- world --------------------------------- */
-const sky = buildSky(scene, 500);
+const sky = buildSky(scene);
 const world = buildWorld(scene);
-const pipeline = new Pipeline(renderer, scene, camera);
+const collider = createCollider(world);
+const pipeline = new Pipeline(renderer, scene, camera, { farCamera, pixelBudget: Q.pixelBudget });
+console.info(`[quality] ${Q.tier} (${Q.why}): ${(Q.pixelBudget / 1e6).toFixed(1)} MP, shadows ${Q.shadow}, water ${Q.water}, ${Q.npcs} people, ${Q.birds} birds`);
 const perf = createPerf(renderer, { show: params.has('stats') });
 
-/* ------------------------------ dev viewer ------------------------------ */
-/* Flat authoring coordinates, like the reference's player: yaw 0 looks toward
- * -z (the city), -π/2 looks east along the promenade, π looks at the lake. */
-const EYE = 1.7;
-const SPAWN = { x: 0, z: -1.5, yaw: -Math.PI / 2 + 0.35, pitch: -0.08 };
-const view = { ...SPAWN };
-const keys = new Set();
-const _surfQ = new THREE.Quaternion();
-const _localQ = new THREE.Quaternion();
-const _euler = new THREE.Euler(0, 0, 0, 'YXZ');
+/* ------------------------------ the jogger ------------------------------ */
+// spawn on the walk at the west end, by the plaza, facing east along the dam
+const SPAWN = (() => {
+  const s = Math.min(L - 60, 2330), f = spineAt(s);
+  const heading = Math.atan2(f.te, -f.tn); // facing -t: toward the east end
+  return { e: f.e + f.ne * -1.6, n: f.n + f.nn * -1.6, heading };
+})();
+let outfit = 0;
+try { outfit = Math.max(0, Math.min(2, +(localStorage.getItem('sukhna-outfit') ?? 0))); } catch { /* optional */ }
+const jogger = new Jogger({ scene, collider, spawn: SPAWN, outfit });
+const rig = createCameraRig(camera, { groundAt });
+rig.yaw = SPAWN.heading;
+const hud = createHud({ outfit, touch: TOUCH });
 
-function applyCamera() {
-  surfaceQuat(view.x, view.z, _surfQ);
-  _localQ.setFromEuler(_euler.set(view.pitch, view.yaw, 0, 'YXZ'));
-  positionAt(view.x, world.heightAt(view.x, view.z) + EYE, view.z, camera.position);
-  camera.quaternion.copy(_surfQ).multiply(_localQ);
-}
+jogger.avoid = world.crowd.avoid;
+const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world });
 
-let dragging = false;
-canvas.addEventListener('pointerdown', (e) => { dragging = true; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointerup', (e) => { dragging = false; canvas.releasePointerCapture(e.pointerId); });
-canvas.addEventListener('pointermove', (e) => {
-  if (!dragging || planetView) return;
-  view.yaw -= e.movementX * 0.0035;
-  view.pitch = clamp(view.pitch - e.movementY * 0.0035, -1.15, 1.05);
-});
+/* -------------------------------- actions -------------------------------- */
+/* One table for keys and touch buttons.  T, K and M are wired by the time
+ * of day (Phase 6), weather (Phase 6) and sound (Phase 7). */
+const actions = {
+  E: () => interact.activate(),
+  V: () => { const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off'); },
+  T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); },
+  K: () => { const w = weather.cycle(); hud.setWeather(w); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
+  P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
+  M: () => { const on = sound.toggle(); hud.flash(on ? 'sound on' : 'sound off'); },
+  H: () => hud.toggleHidden(),
+};
+let coordsOn = false;
 window.addEventListener('keydown', (e) => {
+  if (e.code.startsWith('Key') || e.code.startsWith('Arrow') || e.code.startsWith('Shift')) jogger.keys.add(e.code);
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  keys.add(e.code);
-  if (e.code === 'KeyP') setPlanetView(!planetView);
-  if (e.code === 'KeyR') Object.assign(view, SPAWN);
-  // two quiet toggles, handy for seeing what the ink and grade passes do
+  const k = e.code.replace('Key', '');
+  if (actions[k] && hud.started) actions[k]();
+  if (e.code === 'KeyC') coordsOn = !coordsOn;
+  if (e.code === 'KeyR') { jogger.e = SPAWN.e; jogger.n = SPAWN.n; jogger.heading = SPAWN.heading; jogger.auto = false; rig.yaw = SPAWN.heading; }
   if (e.code === 'KeyO') pipeline.enabled.ink = !pipeline.enabled.ink;
   if (e.code === 'KeyG') pipeline.enabled.grade = !pipeline.enabled.grade;
 });
-window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('keyup', (e) => jogger.keys.delete(e.code));
+window.addEventListener('blur', () => jogger.keys.clear());
+document.addEventListener('visibilitychange', () => jogger.keys.clear());
+// a Shift released while the pointer lock or another window had the keyboard never sends keyup
+for (const ev of ['keydown', 'keyup', 'pointerdown']) window.addEventListener(ev, (e) => { if (!TOUCH && !e.shiftKey && !(ev === 'keydown' && e.key === 'Shift')) { jogger.keys.delete('ShiftLeft'); jogger.keys.delete('ShiftRight'); } }, true);
 
-function moveView(dt) {
-  const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
-  const s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-  if (!f && !s) return;
-  const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 12 : 4;
-  // forward in the flat plane is (-sin yaw, -cos yaw); x is divided by
-  // cos(z/R) so a metre walked is a metre on the sphere at any latitude
-  const fx = -Math.sin(view.yaw), fz = -Math.cos(view.yaw);
-  const dx = (fx * f + -fz * s) * speed * dt;
-  const dz = (fz * f + fx * s) * speed * dt;
-  view.z = clamp(view.z + dz, -0.24 * CIRCUMFERENCE, 0.24 * CIRCUMFERENCE);
-  view.x = wrapX(view.x + dx / Math.cos(view.z / R));
+/* ----------------------------- mouse and touch ----------------------------- */
+const locked = () => document.pointerLockElement === canvas;
+// pointer lock may be refused (embedded browsers): the game runs without it, so swallow the rejection
+const lockPointer = () => { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* refused */ } };
+canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { lockPointer(); hud.setPaused(false); } });
+document.addEventListener('pointerlockchange', () => { if (!TOUCH) hud.setPaused(!locked()); });
+document.addEventListener('mousemove', (e) => { if (locked()) rig.look(e.movementX * 0.0022, e.movementY * 0.0022); });
+// Drag to look whenever the pointer is not locked (before Start, in the
+// overview's absence, or in an embedded browser that refuses pointer lock).
+let dragging = false;
+canvas.addEventListener('pointerdown', (e) => { if (!TOUCH && e.button === 0) { dragging = true; canvas.setPointerCapture?.(e.pointerId); } });
+canvas.addEventListener('pointerup', (e) => { dragging = false; canvas.releasePointerCapture?.(e.pointerId); });
+canvas.addEventListener('pointercancel', () => { dragging = false; });
+canvas.addEventListener('pointermove', (e) => { if (dragging && !locked() && !TOUCH) rig.look(e.movementX * 0.0035, e.movementY * 0.0035); });
+window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
+hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setItem('sukhna-outfit', String(i)); } catch { /* optional */ } };
+hud.onStart = () => {
+  if (sound.enabled) sound.start();
+  if (!TOUCH) lockPointer();
+  world.onStart?.();
+};
+if (TOUCH) {
+  createTouch({ keys: jogger.keys, onLook: (dx, dy) => rig.look(dx, dy), onZoom: (d) => rig.zoom(d), onButton: (k) => actions[k]?.() });
 }
 
-/* ------------------------------ planet view ------------------------------ */
-let planetView = false;
-let orbit = 0.6;
-const orbitDir = new THREE.Vector3();
-const savedFog = scene.fog;
-const GROUND_FAR = 600;
-const DOME_R = 500;
-
-function setPlanetView(on) {
-  planetView = on;
-  scene.fog = on ? null : savedFog;
-  camera.far = on ? R * 10 : GROUND_FAR;
-  camera.updateProjectionMatrix();
-  const s = sun.shadow.camera;
-  const half = on ? R * 1.15 : SHADOW_HALF;
-  Object.assign(s, { left: -half, right: half, top: half, bottom: -half, far: on ? R * 6 : 200 });
-  s.updateProjectionMatrix();
-  sky.clouds.visible = !on;
-}
-
-function placeOrbitCamera(tilt = 0.8, dist = 3.3) {
-  orbitDir.set(Math.sin(orbit) * tilt, 1.0, Math.cos(orbit) * tilt).normalize();
-  camera.position.copy(CENTER).addScaledVector(orbitDir, R * dist);
-  camera.up.set(0, 1, 0);
-  camera.lookAt(CENTER);
-  // a fixed sun so the whole globe is lit coherently from outside
-  sun.target.position.copy(CENTER);
-  sun.position.copy(CENTER).add(_off.set(-1.05, 0.95, 0.75).multiplyScalar(R * 2.2));
-  const axes = { east: new THREE.Vector3(1, 0, 0), up: new THREE.Vector3(0, 1, 0), north: new THREE.Vector3(0, 0, 1) };
-  seatLight(fill, FILL_LOCAL, axes, CENTER);
-  hemi.position.set(0, 1, 0);
-  bounce.visible = false;
-  // the dome becomes a backdrop around the whole planet
-  sky.dome.position.copy(CENTER);
-  sky.dome.quaternion.identity();
-  sky.dome.scale.setScalar((R * 4.6) / DOME_R);
-}
-
-const _shadowTarget = new THREE.Vector3();
-const _flat = { x: 0, z: 0, y: 0 };
-
-function placeGroundRig() {
-  applyCamera();
-  bounce.visible = true;
-  // Lighting is pinned to the local surface frame rather than to world
-  // space, so the promenade is lit the same way wherever you are on it.
-  const b = basisAt(view.x, view.z);
-  positionAt(view.x, 0, view.z, _shadowTarget);
-  seatLight(sun, SUN_LOCAL, b, _shadowTarget);
-  seatLight(fill, FILL_LOCAL, b, _shadowTarget);
-  seatLight(bounce, BOUNCE_LOCAL, b, _shadowTarget);
-  hemi.position.copy(b.up);
-  // The dome trails the camera *and* turns with the surface frame: the
-  // loop goes all the way round, so world +Y is sideways a quarter-lap on.
-  flatAt(camera.position, _flat);
+/* -------------------------------- lights -------------------------------- */
+const _target = new THREE.Vector3();
+function placeLights() {
+  if (rig.mode === 'overview') _target.set(LAKE_CENTRE[0], 0, -LAKE_CENTRE[1]);
+  else _target.set(jogger.e, jogger.y, -jogger.n);
+  const put = (light, dir, dist) => { light.target.position.copy(_target); light.position.copy(_target).addScaledVector(dir, dist); };
+  put(sun, tod.state.lightDir, 200);
+  put(fill, tod.state.fillDir, 100);
+  put(bounce, tod.state.bounceDir, 100);
   sky.dome.position.copy(camera.position);
-  sky.dome.scale.setScalar(1);
-  surfaceQuat(_flat.x, _flat.z, sky.dome.quaternion);
   sky.clouds.position.copy(camera.position);
-  sky.clouds.quaternion.copy(sky.dome.quaternion);
 }
+
+/* ------------------------------ time of day ------------------------------ */
+const LOOK_TARGETS = { sky, sun, fill, bounce, hemi, scene, renderer, pipeline, lake: world.lake, mist: world.mist, ridges: world.ridges, lamps: world.dam.setLamps };
+const SUNRISE = data.sun.sunrise, SUNSET = data.sun.sunset;
+let looping = false;
+hud.setWeather(weather.state.kind);
+const sound = createSound({ world, jogger, tod, weather, interact, onChange: () => hud.setSound(sound.enabled, sound.music) });
+hud.setSound(sound.enabled, false);
+let density = -1, bundled = null;
+/** How many people are out (plan §6): 0.3 pre-dawn, peak from sunrise −10 to +70 min, thinning after; fog x0.45. */
+function crowdDensity(min, fog, evening) {
+  // the evening walk is busy too (from ~16:00 to dusk)
+  if (evening) return 0.9 * (1 - 0.55 * fog);
+  const k = min < -30 ? 0.3 : min < -10 ? THREE.MathUtils.lerp(0.3, 1, (min + 30) / 20) : min < 70 ? 1 : min < 160 ? THREE.MathUtils.lerp(1, 0.55, (min - 70) / 90) : 0.55;
+  return k * (1 - 0.55 * fog);
+}
+function updateTime(dt, running) {
+  tod.state.running = running && !looping;
+  weather.update(dt, camera.position);
+  // the loop (plan: Decisions): past the morning window, or half an hour after sunset,
+  // fade to black and start the next morning at pre-dawn
+  if (running && !looping && tod.pastWindow(SUNSET)) {
+    looping = true;
+    hud.nextMorning(() => { tod.set('predawn'); hud.flash('06:55 · pre-dawn'); }, () => { looping = false; });
+  }
+  if (tod.update(dt, weather.state)) {
+    applyLook(tod.look, tod.state, LOOK_TARGETS);
+    hud.setClock(tod.clock(), tod.label());
+    const dns = crowdDensity(tod.sinceSunrise(SUNRISE), weather.state.fog, tod.state.hours > 12);
+    if (Math.abs(dns - density) > 0.02) { density = dns; world.crowd.setDensity(dns); }
+    const b = weather.state.fog > 0.5;
+    if (b !== bundled) { bundled = b; world.crowd.setBundled(b); }
+    // pedal boats go out after 08:30 (and not in fog or rain)
+    world.rowing.showPedal = tod.state.hours >= 8.5 && tod.state.hours < 17.25 && weather.state.kind === 'clear';
+  }
+}
+updateTime(0, false);
 
 /* ------------------------------- pipeline ------------------------------- */
 function resize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const w = window.innerWidth, h = window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   pipeline.setSize(w, h);
@@ -220,86 +220,141 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+/* ------------------------- quality fallback (plan §6) ------------------------- */
+// If frames stay over 22 ms for 5 s (after a 10 s settle, only while the tab is
+// visible), drop a tier for the parts that can change live -- pixel budget,
+// shadow map, crowd, mist -- and remember it for the session, so a reload builds
+// the lower tier throughout.
+let tier = Q.tier, slow = 0, settle = 10;
+function watchFrameTime(raw) {
+  if (document.hidden || raw > 0.5) { slow = 0; return; }
+  if (settle > 0) { settle -= raw; return; }
+  slow = raw > 0.022 ? slow + raw : Math.max(0, slow - raw * 0.5);
+  if (slow < 5) return;
+  slow = 0; settle = 10;
+  const next = lower(tier);
+  if (!next) return;
+  tier = next;
+  const T = TIERS[tier];
+  pipeline.pixelBudget = T.pixelBudget;
+  resize();
+  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  sun.shadow.mapSize.set(T.shadow, T.shadow);
+  world.crowd.setCap(T.npcs / Q.npcs);
+  world.mist.mesh.count = Math.min(world.mist.mesh.count, T.mist);
+  try { sessionStorage.setItem('sukhna-q', tier); } catch { /* optional */ }
+  hud.flash(`quality: ${tier} (frames were slow)`, 2600);
+  console.info(`[quality] fell back to ${tier}`);
+}
+
 /* --------------------------------- loop --------------------------------- */
 const clock = new THREE.Clock();
+let flatPanel = null;
 
 function frame() {
-  const dt = Math.min(clock.getDelta(), 1 / 20);
+  const raw = clock.getDelta();
+  const dt = Math.min(raw, 1 / 20);
+  watchFrameTime(raw);
   perf.begin();
-
-  if (planetView) {
-    orbit += dt * 0.09;
-    placeOrbitCamera();
-  } else {
-    moveView(dt);
-    placeGroundRig();
-  }
-  world.update(dt);
-
+  // playing whenever the card is away; pointer lock only steers the mouse (an embedded
+  // browser may refuse it), and losing it (Esc) brings the pause card back
+  const playing = hud.started && !hud.paused;
+  jogger.update(playing ? dt : 0, rig.yaw);
+  world.update(dt, camera.position, rig.mode === 'overview', jogger);
+  updateTime(dt, playing);
+  rig.update(dt, jogger, { bench: interact.benchView() });
+  if (playing) interact.update(); else hud.setPrompt('');
+  sound.update(dt, camera, playing);
+  placeLights();
+  hud.setRun(jogger);
+  if (coordsOn) {
+    const w = jogger.where();
+    hud.setCoords(`E ${jogger.e.toFixed(1)}  N ${jogger.n.toFixed(1)}  y ${jogger.y.toFixed(2)}\ns ${w.s.toFixed(1)} m  d ${(w.side * w.d).toFixed(1)} m  heading ${azimuthForYaw(jogger.heading).toFixed(0)}°\n__shot('x', 1600, 900, { s: ${w.s.toFixed(0)}, d: ${(w.side * w.d).toFixed(1)}, az: ${azimuthForYaw(rig.yaw).toFixed(0)}, pitch: ${THREE.MathUtils.radToDeg(rig.pitch).toFixed(0)} })`);
+  } else hud.setCoords('');
   pipeline.render();
   perf.end(dt);
+  flatPanel?.update(camera, dt);
   requestAnimationFrame(frame);
 }
 frame();
 
-// expose a little for tuning from the console
-window.__scene = { scene, camera, renderer, pipeline, world, sky, view, perf, sun, fill, bounce, hemi, THREE };
+if (params.has('flat')) {
+  import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
+}
+
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, sound, updateTime, watchFrameTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({
+  tier: tier,
   ...perf.bench(() => pipeline.render(), n),
   internal: `${pipeline.size.x}x${pipeline.size.y}`,
-  view: planetView ? 'planet' : 'ground',
+  view: rig.mode === 'overview' ? 'overview' : `s ${nearestS(jogger.e, jogger.n).s.toFixed(0)}, az ${azimuthForYaw(rig.yaw).toFixed(0)}`,
 });
 
 if (import.meta.env?.DEV) {
   /**
-   * Dev capture: render one frame at a fixed size and post it to the dev
-   * server, which writes `.shots/<name>.jpg`.  The camera is always resynced
-   * here, because the rAF loop is throttled when the page is not visible.
+   * Dev capture: place the jogger and the camera, render one frame at a
+   * fixed size and post it to the dev server (`.shots/<name>.jpg`).
    *
-   *   __shot('name', 1600, 900, { pos: [x, 0, z], yaw, pitch })
-   *   __shot('planet', 1600, 900, { orbit: 0.6, tilt: 0.8, dist: 3.3 })
+   *   { s, d, az, pitch, boom, first, heading }  on the walk (s from the east end, d toward the lake)
+   *   { e, n, az, pitch, boom, h }               anywhere (h: camera height override)
+   *   { overview: bearingDeg }                   the aerial orbit
+   *   { hideJogger: true }                       landscape only
    */
   window.__shot = async (name = 'shot', W = 1600, H = 900, opts = {}) => {
-    if (opts.pos) { view.x = opts.pos[0]; view.z = opts.pos[2]; }
-    if (opts.yaw !== undefined) view.yaw = opts.yaw;
-    if (opts.pitch !== undefined) view.pitch = opts.pitch;
-    if (opts.orbit !== undefined) {
-      if (!planetView) setPlanetView(true);
-      orbit = opts.orbit;
-      placeOrbitCamera(opts.tilt ?? 0.8, opts.dist ?? 3.3);
+    const wasOverview = rig.mode === 'overview';
+    if (opts.overview !== undefined) {
+      if (!wasOverview) rig.setOverview(true);
+      rig.overview(0, THREE.MathUtils.degToRad(opts.overview));
     } else {
-      if (planetView) setPlanetView(false);
-      placeGroundRig();
+      if (wasOverview) rig.setOverview(false);
+      if (opts.s !== undefined) { const f = spineAt(opts.s), d = opts.d || 0; jogger.e = f.e + f.ne * d; jogger.n = f.n + f.nn * d; }
+      if (opts.e !== undefined) { jogger.e = opts.e; jogger.n = opts.n; }
+      // no position given: shoot the jogger where they are (seated, say), untouched
+      const moved = opts.s !== undefined || opts.e !== undefined;
+      if (moved) jogger.y = collider.surfaceAt(jogger.e, jogger.n);
+      if (opts.az !== undefined) rig.yaw = yawForAzimuth(opts.az);
+      if (opts.pitch !== undefined) rig.pitch = THREE.MathUtils.degToRad(opts.pitch);
+      if (moved || opts.heading !== undefined) jogger.heading = opts.heading !== undefined ? yawForAzimuth(opts.heading) : rig.yaw;
+      if (opts.boom !== undefined) rig.boom = rig.boomTarget = opts.boom;
+      if (opts.first) rig.boom = rig.boomTarget = 0;
+      jogger.update(0, rig.yaw);
+      rig.update(0.016, jogger, { snap: true, bench: moved ? null : interact.benchView() });
+      if (opts.h !== undefined) camera.position.y = groundAt(camera.position.x, -camera.position.z) + opts.h;
+      if (opts.hideJogger) jogger.visible = false;
     }
+    // opts.time ('predawn' | 'sunrise' | 'golden' | 'bright', or hours) and opts.weather ('clear' | 'rain' | 'fog')
+    if (opts.weather) weather.set(opts.weather, true);
+    if (opts.time !== undefined || opts.weather) {
+      if (typeof opts.time === 'number') tod.state.hours = opts.time;
+      tod.set(typeof opts.time === 'string' ? opts.time : undefined);
+      updateTime(0, false);
+    }
+    placeLights();
+    world.update(0, camera.position, rig.mode === 'overview', jogger);
     if (opts.ink !== undefined) pipeline.enabled.ink = opts.ink;
     if (opts.grade !== undefined) pipeline.enabled.grade = opts.grade;
     pipeline.forceScale = opts.scale || 1;
-
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
     pipeline.setSize(W, H);
     setOutlineResolution(pipeline.size.x, pipeline.size.y);
+    camera.updateMatrixWorld();
     perf.begin();
     pipeline.render();
     const counts = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
-
     const off = document.createElement('canvas');
     const outW = opts.outW || W;
     off.width = outW;
     off.height = Math.round((outW * H) / W);
     off.getContext('2d').drawImage(canvas, 0, 0, off.width, off.height);
-    const data = off.toDataURL('image/jpeg', opts.quality || 0.86);
-
-    // hand the canvas back to the window
+    const dataUrl = off.toDataURL('image/jpeg', opts.quality || 0.86);
     pipeline.forceScale = 0;
+    if ((rig.mode === 'overview') !== wasOverview) rig.setOverview(wasOverview);
+    if (opts.hideJogger) jogger.visible = true;
     resize();
-    const r = await fetch('/__shot', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, data }),
-    });
+    const r = await fetch('/__shot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, data: dataUrl }) });
     return { ...(await r.json()), ...counts };
   };
 }

@@ -8,7 +8,7 @@ starts with a header naming its source file and what changed.
 
 Ported so far: `src/core/toon.js`, `post.js`, `outline.js`, `util.js`,
 `sky.js`, `textures.js` (helpers only), `palette.js` (structure only),
-`src/world/planet.js`, the `__shot` frame grabber in `vite.config.js`, and the
+`src/world/planet.js` (removed when the world went flat; in git history), the `__shot` frame grabber in `vite.config.js`, and the
 structure of `src/main.js`.
 
 Nothing from sakura-crossing's `public/audio/` is used or copied. That track
@@ -43,21 +43,46 @@ SOFTWARE.
 Runtime dependency (`three`, npm). Copyright © 2010–2025 three.js authors.
 https://github.com/mrdoob/three.js/blob/dev/LICENSE
 
-## OpenStreetMap data — ODbL 1.0 (placeholder, filled in Phase 2)
+## OpenStreetMap data — ODbL 1.0
 
-`src/data/sukhna.data.json` will be a derivative database of OpenStreetMap
-data: © OpenStreetMap contributors, available under the Open Database
-Licence (ODbL) 1.0, https://www.openstreetmap.org/copyright. Phase 2 records
-the query, the fetch date and the bounding box here.
+`src/data/sukhna.data.json` and `src/data/sukhna.terrain.json` (the land-cover
+grid) are derivative databases of OpenStreetMap data:
+**© OpenStreetMap contributors**, available under the Open Database Licence
+(ODbL) 1.0, https://www.openstreetmap.org/copyright.
 
-## Terrain — Terrarium elevation tiles (placeholder, filled in Phase 2)
+- Query: `scripts/sukhna/overpass.ql`, bounding box 30.72, 76.79, 30.77, 76.84 (S, W, N, E).
+- Fetched 2026-09-26T05:36:31.630Z from overpass-api.de; the raw response is kept
+  as `scripts/sukhna/raw/osm-30.72_76.79_30.77_76.84-2026-09-26.json`.
+- Rebuilt by `node scripts/sukhna/build-data.mjs`.
 
-Elevation for the Shivalik hills and ridgelines will come from the Mapzen /
-AWS Terrain Tiles (Terrarium encoding, `elevation-tiles-prod`). Phase 2
-records the attribution their documentation requires, which covers SRTM and
-the other source datasets.
+The ODbL applies to that data and its derivatives, not to this project's code
+(MIT).
 
-## Sound
+## Terrain — Mapzen / AWS Terrain Tiles (Terrarium)
 
-None yet. Phase 7 generates every sound in code. Any CC0 recording added
-later is listed here with its source URL and licence.
+The height grids in `src/data/sukhna.terrain.json` and the far ridge rings in
+`src/data/sukhna.data.json` come from the Terrain Tiles on AWS (Terrarium
+encoding, `s3://elevation-tiles-prod`), originally produced by Mapzen, with
+data from SRTM (NASA / USGS) and other public-domain and openly licensed
+sources as listed in the tiles' attribution:
+https://github.com/tilezen/joerd/blob/master/docs/attribution.md
+
+Raw tiles are kept in `scripts/sukhna/raw/terrarium/` (z11, z12, z13).
+
+## Sound and music
+
+**No recordings ship with this project.** Every sound is synthesised at run
+time with WebAudio in `src/core/sound.js` (this project's own code, MIT):
+the water, wind, leaves and rain beds are filtered noise; the birds are FM
+chirps; the oars, footsteps, breathing, horn, laughter and chatter are noise
+bursts, oscillators and formant filters; the lo-fi music that plays while
+you sit is composed live from a few chord loops, a pentatonic melody and a
+drum pattern.
+
+**Your own tracks:** audio files you put in `public/audio/` play instead of
+the generated music. That folder is git-ignored (only its README is tracked)
+and the build deletes `dist/audio`, so no track is ever committed or
+shipped. Use only music you have the rights to play.
+
+Nothing from sakura-crossing's `public/audio/` is used. Any CC0 recording
+added later will be listed here with its source URL and licence.
