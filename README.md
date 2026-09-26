@@ -8,7 +8,7 @@ and the city side come from OpenStreetMap, the Shivalik hills beyond the far
 shore from elevation data, and the sun rises where and when it really does in
 mid-January.
 
-> **Status: Phase 2 of 8.** Real data and the flat world scaffold are in.
+> **Status: Phase 4 of 8.** The real world, the jogger, the HUD and the controls are in.
 > See [`docs/plan.md`](docs/plan.md) for the plan and progress, and
 > [`docs/brief.md`](docs/brief.md) for the brief.
 
@@ -23,9 +23,9 @@ npm run build    # production build into dist/
 npm run preview  # serve dist/ on http://127.0.0.1:5179
 ```
 
-Dev viewer (until the jogger arrives): drag to look, WASD to move (Shift is
-faster), P for the aerial overview, O / G toggle the ink and grade passes, R
-resets. `?flat=1` shows the map panel, `?stats=1` draw calls and frame time.
+Controls: WASD jog, Shift run, mouse look (click to capture the pointer), wheel
+zoom to first person, V auto-jog, P aerial overview, H hide the HUD, Esc pause.
+Dev keys: C coordinates, R reset, O / G toggle the ink and grade passes. `?flat=1` shows the map panel, `?stats=1` draw calls and frame time.
 The data pipeline is described in [`scripts/sukhna/README.md`](scripts/sukhna/README.md).
 
 ## Credits

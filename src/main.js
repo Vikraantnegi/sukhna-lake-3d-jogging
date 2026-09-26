@@ -7,37 +7,36 @@ import { Pipeline } from './core/post.js';
 import { buildSky } from './core/sky.js';
 import { setOutlineResolution } from './core/outline.js';
 import { createPerf } from './core/perf.js';
-import { clamp } from './core/util.js';
 import { sunPosition, localDate } from './core/sun.js';
-import { data, spineAt, azimuthDir, yawForAzimuth, azimuthForYaw, LAKE_CENTRE, nearestS } from './world/frame.js';
+import { Jogger } from './core/jogger.js';
+import { createCameraRig } from './core/camera.js';
+import { createHud } from './core/hud.js';
+import { createTouch, isTouch } from './core/touch.js';
+import { data, L, spineAt, azimuthDir, yawForAzimuth, azimuthForYaw, nearestS, LAKE_CENTRE } from './world/frame.js';
+import { groundAt } from './world/terrain.js';
 import { LAYER } from './world/chunks.js';
 import { buildWorld } from './world/index.js';
+import { createCollider } from './world/collide.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
  *
  * The world is flat, real and 1:1 (plan §4): ENU metres about the
  * promenade midpoint, x = east, z = -north, y = metres above the lake.
- *
  * Two render passes share one frame (core/post.js): a far camera
  * (300 m - 45 km) draws the terrain, water and sky, then a near camera
  * (0.5 m - 1.2 km) draws everything close over a cleared depth buffer.
  *
- * Phase 2: a plain dev viewer (drag to look, WASD to move) and the P
- * overview.  The jogger and its camera replace the viewer in Phase 4; the
- * sun is the real one, fixed at the bright-morning preset until time of
- * day arrives in Phase 6.
+ * Phase 4: the jogger and its camera, the HUD, the hint bar, keys and
+ * touch.  The sun is the real one, fixed at the bright-morning preset
+ * until time of day arrives in Phase 6.
  * ------------------------------------------------------------------ */
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById('view');
+const TOUCH = isTouch();
 
-const renderer = new THREE.WebGLRenderer({
-  canvas,
-  antialias: false,
-  powerPreference: 'high-performance',
-  stencil: false,
-});
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
@@ -47,14 +46,12 @@ renderer.shadowMap.autoUpdate = false; // the pipeline asks for the near pass on
 renderer.setClearColor(new THREE.Color(PAL.fog), 1);
 
 const scene = new THREE.Scene();
-// aerial haze: ~2% at 1 km, ~90% at 12 km (bright morning; Phase 6 keys it to the sun)
 scene.fog = new THREE.FogExp2(PAL.fog, 1.3e-4);
 
-const NEAR = { near: 0.5, far: 1200 };
-const camera = new THREE.PerspectiveCamera(50, 1, NEAR.near, NEAR.far);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.5, 1200);
 camera.rotation.order = 'YXZ';
 camera.layers.set(LAYER.NEAR);
-const farCamera = new THREE.PerspectiveCamera(50, 1, 300, 45000);
+const farCamera = new THREE.PerspectiveCamera(55, 1, 300, 45000);
 farCamera.layers.set(LAYER.FAR);
 
 /* --------------------------------- light --------------------------------- */
@@ -65,14 +62,12 @@ sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 1, far: 400 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.035;
-// cool bounce from the other side, and a weak one from below: coloured shadows, never black
 const fill = new THREE.DirectionalLight(PAL.fill, 1.08);
 const bounce = new THREE.DirectionalLight(0xd8cbe8, 0.34);
 const hemi = new THREE.HemisphereLight(PAL.hemiSky, PAL.hemiGround, 1.12);
 for (const l of [sun, fill, bounce, hemi]) { l.layers.enableAll(); scene.add(l); }
 scene.add(sun.target, fill.target, bounce.target);
 
-// the real sun for Sukhna, at the bright-morning preset (09:15, 15 Jan)
 const [Y, M, D] = data.sun.date;
 const SUN_POS = sunPosition(localDate(Y, M, D, data.sun.presets.bright), data.sun.lat, data.sun.lon);
 const SUN_DIR = azimuthDir(SUN_POS.azimuth, SUN_POS.elevation);
@@ -82,80 +77,69 @@ const BOUNCE_DIR = azimuthDir(SUN_POS.azimuth + 150, -25);
 /* --------------------------------- world --------------------------------- */
 const sky = buildSky(scene);
 const world = buildWorld(scene);
+const collider = createCollider(world);
 const pipeline = new Pipeline(renderer, scene, camera, { farCamera });
 const perf = createPerf(renderer, { show: params.has('stats') });
 
-/* ------------------------------ dev viewer ------------------------------ */
-// spawn on the walk near the west end, looking ESE along the dam toward the sunrise
+/* ------------------------------ the jogger ------------------------------ */
+// spawn on the walk at the west end, by the plaza, facing east along the dam
 const SPAWN = (() => {
-  const f = spineAt(2300);
-  return { e: f.e, n: f.n, yaw: yawForAzimuth(data.sun.sunriseAz), pitch: -0.04 };
+  const s = Math.min(L - 60, 2330), f = spineAt(s);
+  const heading = Math.atan2(f.te, -f.tn); // facing -t: toward the east end
+  return { e: f.e + f.ne * -1.6, n: f.n + f.nn * -1.6, heading };
 })();
-const EYE = 1.7;
-const view = { ...SPAWN };
-const keys = new Set();
+let outfit = 0;
+try { outfit = Math.max(0, Math.min(2, +(localStorage.getItem('sukhna-outfit') ?? 0))); } catch { /* optional */ }
+const jogger = new Jogger({ scene, collider, spawn: SPAWN, outfit });
+const rig = createCameraRig(camera, { groundAt });
+rig.yaw = SPAWN.heading;
+const hud = createHud({ outfit, touch: TOUCH });
+hud.setClock(data.sun.clock.bright, 'bright morning');
 
-function applyCamera() {
-  camera.position.set(view.e, world.heightAt(view.e, view.n) + EYE, -view.n);
-  camera.rotation.set(view.pitch, view.yaw, 0, 'YXZ');
-}
-
-let dragging = false;
-canvas.addEventListener('pointerdown', (e) => { dragging = true; canvas.setPointerCapture(e.pointerId); });
-canvas.addEventListener('pointerup', (e) => { dragging = false; canvas.releasePointerCapture(e.pointerId); });
-canvas.addEventListener('pointermove', (e) => {
-  if (!dragging || overview) return;
-  view.yaw -= e.movementX * 0.0035;
-  view.pitch = clamp(view.pitch - e.movementY * 0.0035, -1.3, 1.2);
-});
+/* -------------------------------- actions -------------------------------- */
+/* One table for keys and touch buttons.  T, K and M are wired by the time
+ * of day (Phase 6), weather (Phase 6) and sound (Phase 7). */
+const actions = {
+  E: () => world.interact?.(jogger, hud),
+  V: () => { const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off'); },
+  T: () => world.cycleTime?.(hud) ?? hud.flash('time of day: coming in Phase 6'),
+  K: () => world.cycleWeather?.(hud) ?? hud.flash('weather: coming in Phase 6'),
+  P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
+  M: () => world.toggleSound?.(hud) ?? hud.flash('sound: coming in Phase 7'),
+  H: () => hud.toggleHidden(),
+};
+let coordsOn = false;
 window.addEventListener('keydown', (e) => {
+  if (e.code.startsWith('Key') || e.code.startsWith('Arrow') || e.code.startsWith('Shift')) jogger.keys.add(e.code);
+  if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ArrowUp', 'ArrowDown'].includes(e.code)) e.preventDefault();
   if (e.repeat) return;
-  keys.add(e.code);
-  if (e.code === 'KeyP') setOverview(!overview);
-  if (e.code === 'KeyR') Object.assign(view, SPAWN);
+  const k = e.code.replace('Key', '');
+  if (actions[k] && hud.started) actions[k]();
+  if (e.code === 'KeyC') coordsOn = !coordsOn;
+  if (e.code === 'KeyR') { jogger.e = SPAWN.e; jogger.n = SPAWN.n; jogger.heading = SPAWN.heading; jogger.auto = false; rig.yaw = SPAWN.heading; }
   if (e.code === 'KeyO') pipeline.enabled.ink = !pipeline.enabled.ink;
   if (e.code === 'KeyG') pipeline.enabled.grade = !pipeline.enabled.grade;
 });
-window.addEventListener('keyup', (e) => keys.delete(e.code));
-window.addEventListener('blur', () => keys.clear());
+window.addEventListener('keyup', (e) => jogger.keys.delete(e.code));
+window.addEventListener('blur', () => jogger.keys.clear());
 
-function moveView(dt) {
-  const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0);
-  const s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
-  if (!f && !s) return;
-  const speed = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 14 : 4;
-  // camera forward on the ground is (-sin yaw, -cos yaw) in (x, z); n = -z
-  const fx = -Math.sin(view.yaw), fz = -Math.cos(view.yaw);
-  view.e += (fx * f - fz * s) * speed * dt;
-  view.n -= (fz * f + fx * s) * speed * dt;
-}
-
-/* ------------------------------ P overview ------------------------------ */
-/* An aerial orbit of the whole lake (plan §4): ~1.1 km up, ~2.4 km out. */
-let overview = false;
-let orbit = 3.6; // radians; starts looking north-east over the dam at the hills
-const OV = { radius: 2400, height: 1100 };
-
-function setOverview(on) {
-  overview = on;
-  // nothing is close from up there, so the near pass can reach much further
-  camera.near = on ? 5 : NEAR.near;
-  camera.far = on ? 6000 : NEAR.far;
-  camera.updateProjectionMatrix();
-}
-
-function placeOverview(angle = orbit) {
-  const [ce, cn] = LAKE_CENTRE;
-  camera.position.set(ce + Math.sin(angle) * OV.radius, OV.height, -(cn + Math.cos(angle) * OV.radius));
-  camera.lookAt(ce, 0, -cn);
+/* ----------------------------- mouse and touch ----------------------------- */
+const locked = () => document.pointerLockElement === canvas;
+canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { canvas.requestPointerLock?.(); hud.setPaused(false); } });
+document.addEventListener('pointerlockchange', () => { if (!TOUCH) hud.setPaused(!locked()); });
+document.addEventListener('mousemove', (e) => { if (locked()) rig.look(e.movementX * 0.0022, e.movementY * 0.0022); });
+window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
+hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setItem('sukhna-outfit', String(i)); } catch { /* optional */ } };
+hud.onStart = () => { if (!TOUCH) canvas.requestPointerLock?.(); world.onStart?.(); };
+if (TOUCH) {
+  createTouch({ keys: jogger.keys, onLook: (dx, dy) => rig.look(dx, dy), onZoom: (d) => rig.zoom(d), onButton: (k) => actions[k]?.() });
 }
 
 /* -------------------------------- lights -------------------------------- */
 const _target = new THREE.Vector3();
 function placeLights() {
-  // the shadow box follows the viewer; the light keeps the real sun's direction
-  if (overview) _target.set(LAKE_CENTRE[0], 0, -LAKE_CENTRE[1]);
-  else _target.set(view.e, world.heightAt(view.e, view.n), -view.n);
+  if (rig.mode === 'overview') _target.set(LAKE_CENTRE[0], 0, -LAKE_CENTRE[1]);
+  else _target.set(jogger.e, jogger.y, -jogger.n);
   const put = (light, dir, dist) => { light.target.position.copy(_target); light.position.copy(_target).addScaledVector(dir, dist); };
   put(sun, SUN_DIR, 200);
   put(fill, FILL_DIR, 100);
@@ -166,8 +150,7 @@ function placeLights() {
 
 /* ------------------------------- pipeline ------------------------------- */
 function resize() {
-  const w = window.innerWidth;
-  const h = window.innerHeight;
+  const w = window.innerWidth, h = window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   pipeline.setSize(w, h);
@@ -183,15 +166,18 @@ let flatPanel = null;
 function frame() {
   const dt = Math.min(clock.getDelta(), 1 / 20);
   perf.begin();
-  if (overview) {
-    orbit += dt * 0.05;
-    placeOverview();
-  } else {
-    moveView(dt);
-    applyCamera();
-  }
+  // playing whenever the card is away; pointer lock only steers the mouse (an embedded
+  // browser may refuse it), and losing it (Esc) brings the pause card back
+  const playing = hud.started && !hud.paused;
+  jogger.update(playing ? dt : 0, rig.yaw);
+  world.update(dt, camera.position, rig.mode === 'overview', jogger);
+  rig.update(dt, jogger, { bench: world.benchView?.() });
   placeLights();
-  world.update(dt, camera.position, overview);
+  hud.setRun(jogger);
+  if (coordsOn) {
+    const w = jogger.where();
+    hud.setCoords(`E ${jogger.e.toFixed(1)}  N ${jogger.n.toFixed(1)}  y ${jogger.y.toFixed(2)}\ns ${w.s.toFixed(1)} m  d ${(w.side * w.d).toFixed(1)} m  heading ${azimuthForYaw(jogger.heading).toFixed(0)}°\n__shot('x', 1600, 900, { s: ${w.s.toFixed(0)}, d: ${(w.side * w.d).toFixed(1)}, az: ${azimuthForYaw(rig.yaw).toFixed(0)}, pitch: ${THREE.MathUtils.radToDeg(rig.pitch).toFixed(0)} })`);
+  } else hud.setCoords('');
   pipeline.render();
   perf.end(dt);
   flatPanel?.update(camera, dt);
@@ -203,48 +189,50 @@ if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
 }
 
-// expose a little for tuning from the console
-window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, view, perf, sun, fill, bounce, hemi, THREE, data };
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({
   ...perf.bench(() => pipeline.render(), n),
   internal: `${pipeline.size.x}x${pipeline.size.y}`,
-  view: overview ? 'overview' : `s ${nearestS(view.e, view.n).s.toFixed(0)}, az ${azimuthForYaw(view.yaw).toFixed(0)}`,
+  view: rig.mode === 'overview' ? 'overview' : `s ${nearestS(jogger.e, jogger.n).s.toFixed(0)}, az ${azimuthForYaw(rig.yaw).toFixed(0)}`,
 });
 
 if (import.meta.env?.DEV) {
   /**
-   * Dev capture: render one frame at a fixed size and post it to the dev
-   * server, which writes `.shots/<name>.jpg`.
+   * Dev capture: place the jogger and the camera, render one frame at a
+   * fixed size and post it to the dev server (`.shots/<name>.jpg`).
    *
-   *   __shot('name', 1600, 900, { s: 1200, d: 0, az: 20, pitch: -4 })   on the walk
-   *   __shot('name', 1600, 900, { e, n, az, pitch, h })                 anywhere (h: eye height)
-   *   __shot('name', 1600, 900, { overview: 200 })                      aerial, from that bearing
+   *   { s, d, az, pitch, boom, first, heading }  on the walk (s from the east end, d toward the lake)
+   *   { e, n, az, pitch, boom, h }               anywhere (h: camera height override)
+   *   { overview: bearingDeg }                   the aerial orbit
+   *   { hideJogger: true }                       landscape only
    */
   window.__shot = async (name = 'shot', W = 1600, H = 900, opts = {}) => {
-    const wasOverview = overview;
+    const wasOverview = rig.mode === 'overview';
     if (opts.overview !== undefined) {
-      if (!overview) setOverview(true);
-      placeOverview(THREE.MathUtils.degToRad(opts.overview));
+      if (!wasOverview) rig.setOverview(true);
+      rig.overview(0, THREE.MathUtils.degToRad(opts.overview));
     } else {
-      if (overview) setOverview(false);
-      if (opts.s !== undefined) {
-        const f = spineAt(opts.s), d = opts.d || 0;
-        view.e = f.e + f.ne * d; view.n = f.n + f.nn * d;
-      }
-      if (opts.e !== undefined) { view.e = opts.e; view.n = opts.n; }
-      if (opts.az !== undefined) view.yaw = yawForAzimuth(opts.az);
-      if (opts.pitch !== undefined) view.pitch = THREE.MathUtils.degToRad(opts.pitch);
-      applyCamera();
-      if (opts.h !== undefined) camera.position.y = world.heightAt(view.e, view.n) + opts.h;
+      if (wasOverview) rig.setOverview(false);
+      if (opts.s !== undefined) { const f = spineAt(opts.s), d = opts.d || 0; jogger.e = f.e + f.ne * d; jogger.n = f.n + f.nn * d; }
+      if (opts.e !== undefined) { jogger.e = opts.e; jogger.n = opts.n; }
+      jogger.y = collider.surfaceAt(jogger.e, jogger.n);
+      if (opts.az !== undefined) rig.yaw = yawForAzimuth(opts.az);
+      if (opts.pitch !== undefined) rig.pitch = THREE.MathUtils.degToRad(opts.pitch);
+      jogger.heading = opts.heading !== undefined ? yawForAzimuth(opts.heading) : rig.yaw;
+      if (opts.boom !== undefined) rig.boom = rig.boomTarget = opts.boom;
+      if (opts.first) rig.boom = rig.boomTarget = 0;
+      jogger.update(0, rig.yaw);
+      rig.update(0.016, jogger, { snap: true });
+      if (opts.h !== undefined) camera.position.y = groundAt(camera.position.x, -camera.position.z) + opts.h;
+      if (opts.hideJogger) jogger.visible = false;
     }
     placeLights();
-    world.update(0, camera.position, overview);
+    world.update(0, camera.position, rig.mode === 'overview', jogger);
     if (opts.ink !== undefined) pipeline.enabled.ink = opts.ink;
     if (opts.grade !== undefined) pipeline.enabled.grade = opts.grade;
     pipeline.forceScale = opts.scale || 1;
-
     camera.aspect = W / H;
     camera.updateProjectionMatrix();
     pipeline.setSize(W, H);
@@ -253,23 +241,17 @@ if (import.meta.env?.DEV) {
     perf.begin();
     pipeline.render();
     const counts = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };
-
     const off = document.createElement('canvas');
     const outW = opts.outW || W;
     off.width = outW;
     off.height = Math.round((outW * H) / W);
     off.getContext('2d').drawImage(canvas, 0, 0, off.width, off.height);
     const dataUrl = off.toDataURL('image/jpeg', opts.quality || 0.86);
-
-    // hand the canvas back to the window
     pipeline.forceScale = 0;
-    if (overview !== wasOverview) setOverview(wasOverview);
+    if ((rig.mode === 'overview') !== wasOverview) rig.setOverview(wasOverview);
+    if (opts.hideJogger) jogger.visible = true;
     resize();
-    const r = await fetch('/__shot', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ name, data: dataUrl }),
-    });
+    const r = await fetch('/__shot', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, data: dataUrl }) });
     return { ...(await r.json()), ...counts };
   };
 }

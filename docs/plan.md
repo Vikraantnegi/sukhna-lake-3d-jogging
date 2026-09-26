@@ -13,8 +13,8 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | 2 (planet version) | **superseded**, kept in history | `build` | `27ca69a` |
 | 2 Flat real-data pipeline + flat scaffold | **done** | `build` | "Phase 2: flat real-data pipeline and world scaffold" |
 | 3 World layout, LOD and self-checks | **done** | `build` | `1d299d4` (part 1) + "Phase 3: world layout …" |
-| 4 Jogger, camera, HUD, controls, touch | **next** | `build` | — |
-| 5 NPCs, interactions, rowing, birds | — | `build` | — |
+| 4 Jogger, camera, HUD, controls, touch | **done** | `build` | "Phase 4: the jogger …" |
+| 5 NPCs, interactions, rowing, birds | **next** | `build` | — |
 | 6 Time of day, haze, mist, weather, signage | — | `build` | — |
 | 7 Sound | — | `build` | — |
 | 8 Quality tiers, verification, compare.md | — | `build` | — |
@@ -39,6 +39,9 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Phase 3: vegetation** is two instanced pools refilled by distance (near < 230 m: trunk + canopy per species, casting shadows; mid to 1.5 km, 3.8 km in the overview: one blob), 25 898 trees scattered from the cover grid plus a belt behind the dam's land side, masked off roads, paths, buildings, the dam and the water. Five draw calls.
 - **Phase 3: city buildings** are the OSM footprints extruded floor by floor (3.3 m) in whitewash, béton brut or exposed brick (by hash), with a dark window band per floor and a parapet: Chandigarh modernist in spirit, not copies. Merged per 400 m chunk with roads, paths, parking and pitches; drawn to 2.2 km.
 - **Phase 3: stylised or generic, flagged in code:** lamps, benches, bins, the 100 m markers (not real), the three water steps (OSM has none), the regulator's gates, gauge and bridge railings, the gateway frame (r2), the chai stall and vendor cart, the lake-club and Nature Centre pavilions, the Buddha figure (OSM names it; the model is generic), the swan boats (r7 colours).
+- **Phase 4: play doesn't depend on pointer lock.** The game runs whenever the start/pause card is away; pointer lock only steers the mouse (embedded browsers may refuse it) and losing it (Esc) brings the pause card back.
+- **Phase 4: the body has a face**: an extra `eyes` part (two small dark ellipsoids) on every body; one more instanced draw for the crowd. Only the player carries hull outlines (19 parts).
+- **Phase 4: auto-jog lane** is 1.6 m to the city side of the centreline; it turns round 7 m short of each end and counts a length on every arrival at one end after touching the other. Verified: 15 simulated minutes from the east end → turned at s 6.8 and s 2 488.8, 1 length, never stuck.
 - **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
@@ -68,6 +71,12 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
   - Landmark handles for Phase 4/5: `world.landmarks.plaza` (`kiosk` [e, n], `cart`, `gate` s), `world.landmarks.club.jetty` ({ s, d0, d1, deckY }), `world.dam.cityStairs` / `waterStairs`, `world.debug` (ground functions for the console).
   - Checks (dev start-up, `window.__checks`): shoreCheck 0/4 426 fail; damCheck walk ≥ 2.50 m; hillSafety 0.00 m.
   - Known gaps: parapet blocks step where the walk climbs at the west end (reads as masonry, left as is); no terrain colour for city parks beyond the OSM cover; the water is still a flat colour (Phase 6 shader).
+- **State after Phase 4:**
+  - `people/body.js`: the parametric body (a row of numbers → 20 parts; `poseBody` FK writes one Matrix4 per part relative to the root; upward parts use a half-turn, never a mirror, so instances stay right side out); `OUTFITS` (3). `people/gait.js`: phase-driven gait from speed (walk → run blend, bent elbows, bounce, lean, twist; `style` rows for NPCs; `sit`).
+  - `core/jogger.js` (movement, stamina, V auto with turnaround, lengths, pace; `avoid` hook for the crowd; `frozen`/`sitting` for interactions), `core/camera.js` (boom 0–5.5 m, first person under 0.35 m, V drift toward the lake, `bench` view, P overview), `core/hud.js` (jog HUD, hint bar `HINT`, prompt, toast, speech `say()`, start/pause card with outfits and credits, C coordinates), `core/touch.js` (stick → the same key codes; drag look; pinch zoom; E V T K P M H buttons), `world/collide.js` (`surfaceAt` with the jetty and footbridge decks; `move` with sliding; water, parapet except the water steps, building footprints).
+  - `main.js` `actions` table: E → `world.interact`, T → `world.cycleTime`, K → `world.cycleWeather`, M → `world.toggleSound` (placeholders toast until Phases 5–7 add them); `world.benchView()` feeds the camera.
+  - `__shot` opts now place the jogger: `{ s, d, az, heading, pitch, boom, first, hideJogger }` or `{ e, n, … }` or `{ overview }`.
+- **Measured at the end of Phase 4** (same GPU, 1900×1320): spawn 255 calls / 0.94 M tris / 0.57 ms; mid-walk across 196 / 0.99 M / 0.55 ms; bend 245 / 0.98 M / 0.58 ms.
 - **Dev hooks:**
   - `window.__scene` exposes the scene objects and `data`.
   - `window.__shot(name, W, H, opts)` writes `.shots/<name>.jpg` and returns draw calls. opts: `{ s, d, az, pitch, h }` on the walk (s from the east end, d toward the lake, az compass degrees, pitch degrees, h eye height), `{ e, n, az, pitch, h }` anywhere, or `{ overview: bearingDeg }`.

@@ -160,7 +160,7 @@ function buildGarden(p) {
 function buildRegulator(p) {
   const bridge = data.features.paths.find((q) => q.bridge);
   const reg = lm('regulator');
-  if (!bridge || !reg) return;
+  if (!bridge || !reg) return null;
   const pts = bridge.p;
   const a = pts[0], b = pts[pts.length - 1];
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -188,6 +188,7 @@ function buildRegulator(p) {
   const ge = a[0] + (b[0] - a[0]) * 0.3 - Math.sin(ang) * 6, gn = a[1] + (b[1] - a[1]) * 0.3 + Math.cos(ang) * 6;
   p.box(0.3, 4, 0.1, 0xf4f2ec, ge, 0.5, -gn, ang);
   for (let k = 0; k < 6; k++) p.box(0.32, 0.12, 0.12, k % 2 ? 0x2a2a2a : 0xc8322d, ge, -1 + k * 0.5, -gn, ang);
+  return deckY;
 }
 
 /* ------------------------------ west end ------------------------------ */
@@ -377,7 +378,7 @@ export function buildLandmarks(scene) {
   };
   const east = new Parts();
   buildGarden(east);
-  buildRegulator(east);
+  const regulatorDeckY = buildRegulator(east);
   const g = lm('garden_of_silence') || lm('buddha_statue');
   place(east, 'eastEnd', g ? g.at : [0, 0], 1100);
 
@@ -401,5 +402,5 @@ export function buildLandmarks(scene) {
   if (am) { setLayers(am, LAYER.NEAR); group.add(am); } // small and scattered: frustum culling is enough
 
   scene.add(group);
-  return { group, lod, plaza, club, amenities };
+  return { group, lod, plaza, club, amenities, regulatorDeckY };
 }
