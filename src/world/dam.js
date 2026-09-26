@@ -512,36 +512,6 @@ function placeAt(s, d, y, turn = 0, scale = 1) {
 
 /* ------------------------------ stairs ------------------------------ */
 
-function stairGeometry(steps) {
-  // steps: [{ s, from:{d,y}, to:{d,y}, width }] -> merged boxes along the lake normal
-  const parts = [];
-  for (const st of steps) {
-    const f = spineAt(st.s);
-    const yaw = Math.atan2(-f.ne, f.nn);
-    const rise = 0.17, count = Math.max(1, Math.round(Math.abs(st.from.y - st.to.y) / rise));
-    for (let q = 0; q < count; q++) {
-      const t = (q + 0.5) / count;
-      const d = lerp(st.from.d, st.to.d, t), y = lerp(st.from.y, st.to.y, t);
-      const run = Math.abs(st.to.d - st.from.d) / count;
-      parts.push({ geo: new THREE.BoxGeometry(st.width, 0.18, run + 0.02), color: q % 2 ? PAL.concrete : PAL.concreteDark,
-        matrix: M4(f.e + f.ne * d, y - 0.09, -(f.n + f.nn * d), yaw) });
-    }
-    // low side walls
-    const len = Math.hypot(st.to.d - st.from.d, st.to.y - st.from.y), pitch = Math.atan2(st.from.y - st.to.y, Math.abs(st.to.d - st.from.d));
-    const dm = (st.from.d + st.to.d) / 2, ym = (st.from.y + st.to.y) / 2;
-    for (const side of [-1, 1]) {
-      const off = (st.width / 2 + 0.15) * side;
-      const e = f.e + f.ne * dm + f.te * off, n = f.n + f.nn * dm + f.tn * off;
-      const dir = Math.sign(st.to.d - st.from.d);
-      // local -z faces the lake: a positive x-rotation would lift the -z end, so the
-      // cheek walls tilt by -dir * pitch to run down with the steps (they stood up
-      // over the water as beams before)
-      parts.push({ geo: new THREE.BoxGeometry(0.3, 0.5, len), color: PAL.concreteDark, matrix: M4(e, ym + 0.1, -n, yaw, 1, 1, 1, -dir * pitch) });
-    }
-  }
-  return parts.length ? mergedParts(parts) : null;
-}
-
 /**
  * A box with world-scaled UVs for the cobble texture, matching the parapet's
  * mapping (one repeat per 2 m along, per 0.45 m up a face, per 0.5 m across
@@ -574,6 +544,7 @@ function cobbleBox(w, h, d, matrix, top = [2, 0.5]) {
  * of a steep embankment and runs on over the water to the deck.
  */
 function flightProfile(st) {
+  if (st.groundTreads) return st.groundTreads;
   const y0 = st.from.y, d0 = st.from.d, out = [];
   if (st.pier) {
     const drop = y0 - st.to.y, count = Math.max(1, Math.round(drop / 0.16)), rise = drop / count;
@@ -593,6 +564,40 @@ function flightProfile(st) {
   return out;
 }
 
+/**
+ * A flight down whatever ground is really there (the six OSM stairs down the city
+ * face): walk the ground along the flight's line from its head; a tread ends where the
+ * ground has fallen one riser (0.17 m) below its upper edge, its top 3 cm over the highest
+ * ground under it; stop where the ground stops falling.  (The old city stairs were laid on
+ * a straight-line guess of the face and floated up to 0.4 m or lay buried, and at s 1524
+ * and 1898, where the walk is on higher ground, never met the ground at all -- found by
+ * the playtest.)  `base` reaches 0.6 m under the ground.
+ */
+function groundFlight(st, ground) {
+  const f = spineAt(st.s);
+  const h = (a) => { const d = st.from.d + st.dir * a; const y = ground(f.e + f.ne * d, f.n + f.nn * d); return Number.isFinite(y) ? y : -10; };
+  const out = [], RISE = 0.17, MIN = 0.3, MAX = 40, STEP = 0.02;
+  const range = (a, b) => { let hi = -Infinity, lo = Infinity; for (let x = a; x <= b + 1e-6; x += STEP) { const y = h(x); hi = Math.max(hi, y); lo = Math.min(lo, y); } return [hi, lo]; };
+  let a = 0, top = st.from.y + 0.03;
+  for (let k = 0; k < 120 && a < MAX; k++) {
+    // this tread's top: one riser under the last, but never under the ground beneath it
+    const t = k === 0 ? Math.max(top, range(a, a + MIN)[0] + 0.03) : Math.max(top - RISE, range(a, a + MIN)[0] + 0.03);
+    // it runs on until the ground has fallen a riser below it (or 1.6 m: level ground)
+    let b = a + MIN;
+    while (b - a < 1.6 && h(b) > t - 0.03 - RISE) b += STEP;
+    const flat = b - a >= 1.6;
+    // on level ground but still more than a riser up: keep stepping down at the normal pitch
+    if (flat && t - h(b) > RISE + 0.03) b = a + MIN;
+    const [hi, lo] = range(a, b);
+    top = Math.max(t, hi + 0.03);
+    const d0 = st.from.d + st.dir * a, d1 = st.from.d + st.dir * (flat && t - h(b) <= RISE + 0.03 ? a + 0.6 : b);
+    out.push({ d0: Math.min(d0, d1), d1: Math.max(d0, d1), top, base: lo - 0.6 });
+    if (flat && t - h(b) <= RISE + 0.03) break; // down at ground level, on level ground: done
+    a = b;
+  }
+  return out;
+}
+
 function waterStairGeometry(stairs) {
   const stone = [], slabs = [];
   for (const st of stairs) {
@@ -603,22 +608,24 @@ function waterStairGeometry(stairs) {
     // tread k spans [d0 + k·run, d0 + (k+1)·run] with its top on the slope at its upper
     // edge, so every tread and riser stands clear of the grass (the old flight sat half a
     // step *under* the slope, which is why it read as flat slabs), down into the water
-    const y0 = st.from.y;
-    const base = -0.9, wall = 0.35, half = st.width / 2;
+    const y0 = st.from.y, dir = st.dir ?? 1;
+    const wall = 0.35, half = st.width / 2;
     st.treads = [];
-    // the landing, at walk level through the parapet gap
-    const dl = (st.landing.d0 + st.landing.d1) / 2, rl = st.landing.d1 - st.landing.d0;
-    // (2 cm proud of the walk and the parapet's footing under it: no coplanar faces)
-    slabs.push(cobbleBox(st.width, 0.1, rl, at(dl, y0 - 0.03), [2, 1]));
-    for (const side of [-1, 1]) stone.push(cobbleBox(wall, y0 + DAM.parH - base, rl, M4(f.e + f.ne * dl + f.te * (half + wall / 2) * side, (y0 + DAM.parH + base) / 2, -(f.n + f.nn * dl + f.tn * (half + wall / 2) * side), yaw)));
+    if (st.landing) {
+      // the landing, at walk level through the parapet gap
+      // (2 cm proud of the walk and the parapet's footing under it: no coplanar faces)
+      const base = -0.9, dl = (st.landing.d0 + st.landing.d1) / 2, rl = st.landing.d1 - st.landing.d0;
+      slabs.push(cobbleBox(st.width, 0.1, rl, at(dl, y0 - 0.03), [2, 1]));
+      for (const side of [-1, 1]) stone.push(cobbleBox(wall, y0 + DAM.parH - base, rl, M4(f.e + f.ne * dl + f.te * (half + wall / 2) * side, (y0 + DAM.parH + base) / 2, -(f.n + f.nn * dl + f.tn * (half + wall / 2) * side), yaw)));
+    }
     for (const tr of flightProfile(st)) {
-      const top = tr.top, run = tr.d1 - tr.d0, dm = (tr.d0 + tr.d1) / 2;
+      const top = tr.top, run = tr.d1 - tr.d0, dm = (tr.d0 + tr.d1) / 2, base = tr.base ?? -0.9;
       // the block under the tread
       stone.push(cobbleBox(st.width, top - 0.07 - base, run, at(dm, (top - 0.07 + base) / 2)));
       // the tread: a pale slab with a 6 cm lip toward the water, alternate slabs a shade apart
       // the tread: a dressed-stone slab with a 5 cm lip toward the water; it stops short of
       // the next tread's riser, so treads never overlap
-      slabs.push(cobbleBox(st.width, 0.08, run + 0.05, at(dm + 0.025, top - 0.04), [2, 1]));
+      slabs.push(cobbleBox(st.width, 0.08, run + 0.05, at(dm + 0.025 * dir, top - 0.04), [2, 1]));
       // stepped cheek walls, parapet height above the tread
       for (const side of [-1, 1]) {
         const off = (half + wall / 2) * side;
@@ -650,8 +657,12 @@ export function buildDam(scene, { ground }) {
 
   // the stairs: six real ones down the city face (OSM highway=steps), three stylised to the water
   const cityStairs = data.steps.filter((st) => st.side === 'city').map((st) => {
-    const k = idx(st.s), yW = walkY(st.s), toe = PROF.dToe[k];
-    return { s: st.s, from: { d: -DAM.verge + 0.2, y: yW }, to: { d: -toe, y: yW - (toe - DAM.verge) * DAM.face }, width: 3, ref: st.ref };
+    const yW = walkY(st.s);
+    const c = { s: st.s, from: { d: -DAM.verge, y: yW }, dir: -1, city: true, width: 3, ref: st.ref };
+    c.groundTreads = groundFlight(c, ground);
+    const last = c.groundTreads[c.groundTreads.length - 1];
+    c.to = { d: last.d0, y: last.top };
+    return c;
   });
   // on the crest (≤ 3.2 m over the water, and a bank gentler than the stair) a flight follows
   // the embankment down into the water; above it, a pier stair out to a landing 0.3 m over the water
@@ -750,15 +761,8 @@ export function buildDam(scene, { ground }) {
     stats.sectors++;
   }
 
-  const stairParts = stairGeometry(cityStairs);
-  if (stairParts) {
-    const stairs = new THREE.Mesh(stairParts, vcProps);
-    stairs.name = 'stairs';
-    stairs.castShadow = stairs.receiveShadow = true;
-    setLayers(stairs, LAYER.NEAR);
-    group.add(stairs);
-  }
-  const ws = waterStairGeometry(waterStairs);
+  // every flight -- to the water, to the jetty, and down the city face -- in one style
+  const ws = waterStairGeometry([...waterStairs, ...cityStairs]);
   const slabMat = cel({ color: 0xffffff, map: slabTex() });
   for (const [geo, mat, name] of [[ws.stone, parapetMat, 'waterSteps.stone'], [ws.slabs, slabMat, 'waterSteps.treads']]) {
     if (!geo) continue;
@@ -774,5 +778,6 @@ export function buildDam(scene, { ground }) {
     group, lod, stats, cityStairs, waterStairs,
     /** 0..1: how brightly the lanterns glow (time of day and weather). */
     setLamps(v) { lampMat.userData.lampGlow.value = v; },
+    get lampLevel() { return lampMat.userData.lampGlow.value; },
   };
 }

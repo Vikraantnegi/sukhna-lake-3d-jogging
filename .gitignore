@@ -15,3 +15,8 @@ scripts/sukhna/debug/
 # the user's own music for the water steps (Phase 7): never committed, never built
 public/audio/*
 !public/audio/README.md
+
+# the playtest's output (tests/playtest): screenshots, reports, Playwright's scratch
+tests/playtest/report/
+test-results/
+playwright-report/

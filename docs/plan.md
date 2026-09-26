@@ -18,6 +18,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | 6 Time of day, haze, mist, weather, signage | **done** | `build` | "Phase 6: time of day, haze, mist, weather, signage" + "Phase 6 additions: conditions card, next-morning loop, lamps, sunset" |
 | 7 Sound | **done** | `build` | "Phase 7: sound, music on the water steps" + "Phase 7 fixes: seated framing and pose, steps, NPC fade, ink" |
 | 8 Quality tiers, verification, compare.md | **done** | `build` | "Phase 8: quality tiers, verification, compare.md" |
+| Playtest: automated bot, 9 scenarios, fixes | **done**, 9/9 green | `playtest` (from `main` after merging `build`) | "Playtest: automated bot and the fixes it found" |
 
 **Polish notes from the user's review (after Phase 4), folded into Phase 5:**
 - [x] The parapet zigzags at curves: now one continuous swept mesh along the curve (1 m steps, cobble texture every 2 m), capped at the water steps (`parapetGeometry` in `world/dam.js`).
@@ -67,6 +68,24 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
   - **Found while testing the piers:** the collider and the sit prompt looked treads up by `nearestS`, which follows the curved spine, but a flight runs straight out from its spine point; on a 20 m pier over a bend they disagreed by metres, so a tread could be missed (the height went to −∞, then NaN), and the prompt at a pier's foot never showed. Both now measure in the flight's own straight frame. Tested at all eight: walk down, E to sit, stand, walk back up and over the walk; no bad heights. seatCheck: 37 seats, 0 violations.
   - **Tested at every flight:** 0 of 15 dry treads covered; seated; standing up and walking toward land climbs the flight, crosses the walk and goes on down the city side. seatCheck still 22 seats, 0 violations.
 
+**The automated playtest (user, after merging `build` into `main`; branch `playtest`):**
+- The user's brief: a bot that roams Sukhna and asserts (screenshots alone aren't a test), and it must catch the two bugs found by hand: the water-step sit glitch and "can't climb up or down the stairs". Playwright was approved as a devDependency. How to run it: `tests/playtest/README.md`.
+- The first runs failed in most scenarios; every item below was found by the bot, then fixed and rerun. Final run: **9/9 pass** (stairs 270 s, sit 248 s, the rest under 30 s each).
+- Before/after shots of the city stairs and the jetty-stair sit: `docs/shots/playtest/`.
+- [x] **Stairs, climbing: the jogger sank 0.13–0.21 m into each tread going up.** Root cause: the height eased toward the surface at rate 18/s, too slow for 0.16 m risers at 3 m/s, so each riser was half-climbed inside the tread; the tread was also looked up at the old position, before the move. Fix: on a flight the pace is capped at 1.6 m/s, the height snaps up to a higher tread at once and eases down at 40/s, and the surface is read after the move.
+- [x] **Stairs, city side: the six real stairs floated up to 0.52 m over the grass or were buried, and at s 1524 and 1898 the collider never touched them** (you walked down the slope through them). Root cause: they were drawn from a straight line between the verge and a guess of the ground at the foot, while the ground under them bends; and the collider only knew the water flights. Fix: `groundFlight` in `world/dam.js` lays each tread on the real ground (0.17 m risers, 0.3–1.6 m runs, never more than one riser down per tread, ≥ 3 cm over the ground), and the collider looks city treads up like the water ones. The flight-extent check assumed every flight runs toward the lake; it now uses the span's min/max.
+- [x] **Stairs, one-sample sinks** at the tread lip, the landing, and the jetty stair's foot. Root causes: the collider ignored the 5 cm lip and the landing, returned the jetty deck before the treads, and tested a point, not a foot. Fix: treads are looked up in the flight's frame over the foot (±0.1 m, `FOOT`), with the lip, and the landing counts as a tread; the jetty deck no longer hides the treads above it.
+- [x] **Ground: the jogger floated above land that lies below lake level** (the city side near the golf course is ~3 m under the lake). Root cause: `surfaceAt` clamped all ground to ≥ 0 (the water surface). Fix: the clamp applies only inside the lake.
+- [x] **Sit: on the jetty stair the jogger was hidden behind the treads above.** Root cause: the seated camera was level, and on the steep pier stair (1:2) the treads above filled the view. Fix: the seated pitch follows the flight's grade (`busy.grade` from the treads), so the camera looks down the flight. Every bench and flight now passes: nothing under the seat, feet on the tread below, head and hips in frame and unoccluded, music in over ~3 s and out over ~2 s, W stands up.
+- [x] **Promenade: the lengths counter missed the first length** when a jog starts 12 m from an end. Root cause: the end zones were 10 m and the auto-jog turns 7 m short, so starting inside the zone never registered it. Fix: 25 m end zones.
+- [x] **Time and weather: the crowd ran ~15% over the density rule** (e.g. 0.30 before dawn read 0.35). Root cause: `setDensity` scaled by the count of all walkers, followers in pairs and groups included, then showed leaders with their followers. Fix: it counts leaders.
+- [x] **Interactions: chai and yoga couldn't be cancelled, and the laughter club wasn't joinable.** Fix: any movement key ends an interaction (chai only refills stamina if finished); "E · join the laughter club" within 7 m of the club (6 s, frozen, laughing, the club answers). The greeting's reply could repeat your own words; it now never does. Interaction timers ran on the wall clock (so pause didn't hold them); they run on game time.
+- [x] **Camera: people inside 1.5 m of the lens were not faded enough.** The dissolve is now 2.0 m → 1.0 m (half gone at 1.5 m, fully gone by 1.0 m).
+- [x] **Boundaries: there was no edge to the world**; the bot walked off the detailed terrain. Fix: `collider.free` refuses anything within 20 m of the near grid's edge.
+- [x] **UI: Esc didn't pause when the pointer wasn't locked** (the Browser pane, touch, `?nolock`), and `setPointerCapture` threw an uncaught error when the pointer had already gone. Fix: Esc toggles pause when unlocked; the capture calls are guarded.
+- Test-side fixes (not game bugs): music fades run on the audio clock, so the sit spec waits in real time; the climb stops once back on the walk; the camera spec's thresholds match the brief (1.5 / 1.0 m).
+- Performance (RTX 4080 SUPER, 1920×1080, three worst views: spawn at sunrise, the bend across the lake, P overview): high 315–398 calls / 1.19–1.34 ms at 2859×1608; med 272–329 / 0.65–0.90 ms at 2231×1254; low 249–322 / 0.58–0.63 ms at 1520×855. All within targets (high ≤ 900, low ≤ 350).
+
 **Decisions made during the run** (newest last; each one is something the plan left open, the data forced, or the user changed):
 - ~~**Phase 2: R ≈ 403 m, not 320.**~~ *Superseded by the flat world below.* (OSM measured the promenade at 2 494.9 m, which with a 40 m join gave R ≈ 403; the user chose the full walk, 1:1, and raised the high/medium NPC and bird limits by about 25%. Those limits stay: the walk is the same length.)
 - **Phase 2: the working tree is LF.** `.gitattributes` sets `* text=auto eol=lf`, because `core.autocrlf=true` checked files out with CRLF and broke multi-line edits in the pipeline scripts. The repo contents are unchanged.
@@ -113,6 +132,17 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Phase 8: run-time fallback.** After a 10 s settle, frames over 22 ms for 5 s (tab visible) drop one tier for what can change live — pixel budget, shadow map, crowd (`crowd.setCap`), mist — and store the tier in sessionStorage, so a reload builds it throughout. Tested with synthetic frame times: high → med → low.
 - **Phase 8: the city detail distance** stays at 2.2 km on high (the Phase 3 decision), not the §6 table's 1.2 km; med and low scale down from it.
 - **Phase 8: verification spots and the r1 mismatch.** The spots are in docs/compare.md. r1 shows the sun rising over the lake at the garden end, but there the lake lies NNW and the January sun rises at 114° (ESE), behind the camera; the game keeps the real sun and frames r1 along the walk.
+- **Playtest: the dev-only test API.** `window.__test` (`src/dev/testapi.js`) is loaded by a dynamic import behind `import.meta.env.DEV`, so Vite drops it from production (checked: no `__test` in `dist/`). `main.js`'s per-frame logic moved into `tick(dt)` so the bot can run game time without drawing (`__test.advance`).
+- **Playtest: `?nolock`** stops pointer lock (the bot's mouse stays free); Esc then pauses and resumes directly.
+- **Playtest: stairs are walked at 1.6 m/s** (a brisk stair pace), whatever the jog or sprint speed; the height snaps up to a higher tread and eases down at 40/s.
+- **Playtest: the collider stands on a foot, not a point** (±0.1 m along the flight, with the 5 cm lip), the landing counts as a tread, and treads win over the jetty deck.
+- **Playtest: city stairs follow the real ground** (`groundFlight`), so tread count and runs vary per stair; the six stay at OSM's positions.
+- **Playtest: ground below lake level is walkable land** outside the lake polygon; only inside it is the surface held at the water.
+- **Playtest: the world edge** is 20 m inside the detailed terrain grid.
+- **Playtest: lengths count in 25 m end zones.**
+- **Playtest: crowd density counts leaders** (pairs and groups come and go together).
+- **Playtest: the near-camera fade is 2.0 → 1.0 m.**
+- **Playtest: interactions run on game time and are all cancellable** (a high five is instant); the laughter club is joinable.
 - **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
@@ -135,6 +165,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 **Notes for a fresh session:**
 - Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
 - `.ref/` is not in git. If it is missing, clone it with the command in the status line.
+- **Playtest:** `npm run playtest` (all nine, ~10 min) or `npm run playtest -- <name>`; headed Chrome on the real GPU, reusing the dev server on 5178. Results in `tests/playtest/report/` (git-ignored). See `tests/playtest/README.md`.
 - **Data:** `node scripts/sukhna/build-data.mjs` rebuilds `src/data/sukhna.data.json` (211 KB, vectors in ENU) and `src/data/sukhna.terrain.json` (247 KB, Int16 grids) from `scripts/sukhna/raw/` in ~1 s; see `scripts/sukhna/README.md` and `report.md`. All pipeline checks pass (walk length within 0.79 m of OSM, lake polygon simple, walk never in the lake).
 - **State after Phase 3:**
   - World build order (`world/index.js`): dam profile on the raw DEM → shore grading outside the dam → dam cut → overlay installed → detail patches (+1 adaptive pass) → meshes → checks. `groundAt(e, n)` = dam overlay, else detail patch, else near grid, else hill grid; `world.heightAt` never goes under the water surface.

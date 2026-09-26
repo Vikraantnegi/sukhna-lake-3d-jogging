@@ -97,7 +97,8 @@ const SPAWN = (() => {
 let outfit = 0;
 try { outfit = Math.max(0, Math.min(2, +(localStorage.getItem('sukhna-outfit') ?? 0))); } catch { /* optional */ }
 const jogger = new Jogger({ scene, collider, spawn: SPAWN, outfit });
-const rig = createCameraRig(camera, { groundAt });
+// the camera stays above the surface you stand on (treads and decks included), not just the terrain
+const rig = createCameraRig(camera, { groundAt: (e, n) => collider.surfaceAt(e, n) });
 rig.yaw = SPAWN.heading;
 const hud = createHud({ outfit, touch: TOUCH });
 
@@ -124,6 +125,9 @@ window.addEventListener('keydown', (e) => {
   const k = e.code.replace('Key', '');
   if (actions[k] && hud.started) actions[k]();
   if (e.code === 'KeyC') coordsOn = !coordsOn;
+  // Esc pauses and resumes when the pointer isn't locked (with a lock, the browser's own
+  // Esc releases it and pointerlockchange brings up the pause card)
+  if (e.code === 'Escape' && hud.started && !locked()) hud.setPaused(!hud.paused);
   if (e.code === 'KeyR') { jogger.e = SPAWN.e; jogger.n = SPAWN.n; jogger.heading = SPAWN.heading; jogger.auto = false; rig.yaw = SPAWN.heading; }
   if (e.code === 'KeyO') pipeline.enabled.ink = !pipeline.enabled.ink;
   if (e.code === 'KeyG') pipeline.enabled.grade = !pipeline.enabled.grade;
@@ -137,15 +141,16 @@ for (const ev of ['keydown', 'keyup', 'pointerdown']) window.addEventListener(ev
 /* ----------------------------- mouse and touch ----------------------------- */
 const locked = () => document.pointerLockElement === canvas;
 // pointer lock may be refused (embedded browsers): the game runs without it, so swallow the rejection
-const lockPointer = () => { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* refused */ } };
+// ?nolock (the playtest): never take the pointer, so a scripted run can't capture the user's mouse
+const lockPointer = () => { if (params.has('nolock')) return; try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* refused */ } };
 canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { lockPointer(); hud.setPaused(false); } });
 document.addEventListener('pointerlockchange', () => { if (!TOUCH) hud.setPaused(!locked()); });
 document.addEventListener('mousemove', (e) => { if (locked()) rig.look(e.movementX * 0.0022, e.movementY * 0.0022); });
 // Drag to look whenever the pointer is not locked (before Start, in the
 // overview's absence, or in an embedded browser that refuses pointer lock).
 let dragging = false;
-canvas.addEventListener('pointerdown', (e) => { if (!TOUCH && e.button === 0) { dragging = true; canvas.setPointerCapture?.(e.pointerId); } });
-canvas.addEventListener('pointerup', (e) => { dragging = false; canvas.releasePointerCapture?.(e.pointerId); });
+canvas.addEventListener('pointerdown', (e) => { if (!TOUCH && e.button === 0) { dragging = true; try { canvas.setPointerCapture?.(e.pointerId); } catch { /* a pointer the browser no longer tracks */ } } });
+canvas.addEventListener('pointerup', (e) => { dragging = false; try { canvas.releasePointerCapture?.(e.pointerId); } catch { /* not captured */ } });
 canvas.addEventListener('pointercancel', () => { dragging = false; });
 canvas.addEventListener('pointermove', (e) => { if (dragging && !locked() && !TOUCH) rig.look(e.movementX * 0.0035, e.movementY * 0.0035); });
 window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
@@ -251,11 +256,8 @@ function watchFrameTime(raw) {
 const clock = new THREE.Clock();
 let flatPanel = null;
 
-function frame() {
-  const raw = clock.getDelta();
-  const dt = Math.min(raw, 1 / 20);
-  watchFrameTime(raw);
-  perf.begin();
+/** Everything a frame does except drawing it (the playtest fast-forwards with this). */
+function tick(dt) {
   // playing whenever the card is away; pointer lock only steers the mouse (an embedded
   // browser may refuse it), and losing it (Esc) brings the pause card back
   const playing = hud.started && !hud.paused;
@@ -263,7 +265,7 @@ function frame() {
   world.update(dt, camera.position, rig.mode === 'overview', jogger);
   updateTime(dt, playing);
   rig.update(dt, jogger, { bench: interact.benchView() });
-  if (playing) interact.update(); else hud.setPrompt('');
+  if (playing) interact.update(dt); else hud.setPrompt('');
   sound.update(dt, camera, playing);
   placeLights();
   hud.setRun(jogger);
@@ -271,6 +273,14 @@ function frame() {
     const w = jogger.where();
     hud.setCoords(`E ${jogger.e.toFixed(1)}  N ${jogger.n.toFixed(1)}  y ${jogger.y.toFixed(2)}\ns ${w.s.toFixed(1)} m  d ${(w.side * w.d).toFixed(1)} m  heading ${azimuthForYaw(jogger.heading).toFixed(0)}°\n__shot('x', 1600, 900, { s: ${w.s.toFixed(0)}, d: ${(w.side * w.d).toFixed(1)}, az: ${azimuthForYaw(rig.yaw).toFixed(0)}, pitch: ${THREE.MathUtils.radToDeg(rig.pitch).toFixed(0)} })`);
   } else hud.setCoords('');
+}
+
+function frame() {
+  const raw = clock.getDelta();
+  const dt = Math.min(raw, 1 / 20);
+  watchFrameTime(raw);
+  perf.begin();
+  tick(dt);
   pipeline.render();
   perf.end(dt);
   flatPanel?.update(camera, dt);
@@ -280,6 +290,14 @@ frame();
 
 if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
+}
+
+// the playtest's API (tests/playtest): dev only, never in a production build
+if (import.meta.env.DEV) {
+  import('./dev/testapi.js').then(({ installTestApi }) => installTestApi({
+    THREE, world, jogger, collider, interact, hud, rig, camera, tod, weather, sound, pipeline, data, perf, sun, SPAWN,
+    tick, updateTime, placeLights, actions,
+  }));
 }
 
 window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, sound, updateTime, watchFrameTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
