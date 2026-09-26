@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cel } from '../core/toon.js';
 import { PAL } from '../core/palette.js';
-import { cobbleTex, slabTex } from '../core/textures.js';
+import { cobbleTex, slabTex, pitchingTex } from '../core/textures.js';
 import { rngKit } from '../core/util.js';
 import { data, L, spineAt, nearestS, rayToShore, shoreDist, inLake } from './frame.js';
 import { LodSet, LAYER, setLayers } from './chunks.js';
@@ -22,7 +22,8 @@ import { Q } from '../core/quality.js';
  *             the real ground plus 0.3 m where that is higher (the west end)
  *   parapet   0.45 m of river cobble, 1.2 m wide, sittable (r2, r8)
  *   embankment stone pitching from the parapet foot straight down to the
- *             *real* shoreline, found by casting along the normal to the
+ *             *real* shoreline (textured hand-set stones, grassed at the top,
+ *             a band of pale boulders and reeds at the waterline), found by casting along the normal to the
  *             OSM polygon -- so the dam always meets the water exactly
  *             where OSM says the water is
  *   face      the grassed downstream face, 1:2, down to the real ground
@@ -301,6 +302,94 @@ function farStations(s) {
   ];
 }
 
+/**
+ * The embankment face, textured (seen from a boat it was a flat mauve band): the pitched
+ * slope from the top of the stones to under the water, in rows every `step` m of s,
+ * broken wherever there is no water alongside.  UVs in metres / 2.5 (one tile of
+ * `pitchingTex`); vertex colours give the hue: grassed at the top, grey stone, the cream
+ * drawdown band, the damp line.  Laid 2 cm over the plain strip underneath.
+ */
+const BANK = { grass: C(0x9fc466), mix: C(0xb9c09a), stone: C(0xcfccc2), draw: C(0xfaf1dc), wet: C(0xc9bfa6), bed: C(0x9a9a80) };
+/** The embankment's surface height at (s, d), on lakeStations' slope (where there is water alongside). */
+function bankY(s, d) {
+  const k = idx(s), yW = walkY(s), dS = PROF.dShore[k];
+  const at = (t) => lerp(DAM.parOut, dS, t);
+  const pts = [[DAM.parOut, yW], [at(0.3), yW * 0.7], [at(0.45), yW * 0.55], [at(0.88), yW * 0.12], [dS - 0.4, yW * 0.04 + 0.02], [dS, 0], [dS + 3, -0.8]];
+  if (d <= pts[0][0]) return pts[0][1];
+  for (let q = 1; q < pts.length; q++) if (d <= pts[q][0]) { const [d0, y0] = pts[q - 1], [d1, y1] = pts[q]; return y0 + (y1 - y0) * (d - d0) / Math.max(1e-6, d1 - d0); }
+  return -0.8;
+}
+function bankGeometry(s0, s1, step) {
+  const pos = [], col = [], uv = [], index = [];
+  let prev = -1, count = 0;
+  for (let s = s0; s <= s1 + 1e-6; s += step) {
+    const ss = Math.min(s, L), k = idx(ss), dS = PROF.dShore[k], yW = walkY(ss);
+    if (!Number.isFinite(dS)) { prev = -1; if (ss >= L) break; continue; }
+    const f = spineAt(ss), at = (t) => lerp(DAM.parOut, dS, t);
+    // the same slope as lakeStations, with more rows where the look changes
+    const row = [
+      [at(0.3), yW * 0.7, BANK.grass], [at(0.45), yW * 0.55, BANK.grass], [at(0.6), yW * 0.4, BANK.mix],
+      [at(0.88), yW * 0.12, BANK.stone], [Math.max(dS - 1.6, at(0.88) + 0.05), NaN, BANK.draw],
+      [dS - 0.4, yW * 0.04 + 0.02, BANK.draw], [dS, 0.0, BANK.wet], [dS + 3, -0.8, BANK.bed],
+    ];
+    // keep the rows in order down the slope (a narrow bank squeezes the drawdown rows)
+    for (let q = 1; q < row.length; q++) if (row[q][0] < row[q - 1][0] + 0.05) row[q][0] = row[q - 1][0] + 0.05;
+    for (const r of row) r[1] = bankY(ss, r[0]); // exactly on the plain strip's surface
+    const base = pos.length / 3;
+    let v = 0;
+    row.forEach(([d, y, c], q) => {
+      if (q) v += Math.hypot(d - row[q - 1][0], y - row[q - 1][1]);
+      pos.push(f.e + f.ne * d, y + 0.02, -(f.n + f.nn * d));
+      col.push(c.r, c.g, c.b);
+      uv.push(ss / 2.5, v / 2.5);
+    });
+    count = row.length;
+    if (prev >= 0) for (let q = 0; q < count - 1; q++) index.push(prev + q, base + q, prev + q + 1, prev + q + 1, base + q, base + q + 1);
+    prev = base;
+    if (ss >= L) break;
+  }
+  if (!index.length) return null;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(index);
+  geo.computeVertexNormals();
+  let up = 0;
+  for (let i = 0; i < geo.attributes.normal.count; i++) up += geo.attributes.normal.getY(i);
+  if (up < 0) { index.reverse(); geo.setIndex(index); geo.computeVertexNormals(); }
+  geo.computeBoundingSphere();
+  return geo;
+}
+
+/**
+ * The drawdown band's boulders (r2, r8): pale cream rocks, faceted, half in the water
+ * along every metre of the dam that meets it (not at the flights), in one instanced mesh.
+ */
+function boulderMesh(skip) {
+  const rng = rngKit(4242), xf = [], cols = [];
+  const TONES = [0xece3cc, 0xe3d8bf, 0xd8cdb5, 0xf2eadb, 0xc9bca0].map((h) => C(h));
+  const density = Math.max(0.35, Q.dressing);
+  for (let s = 1; s < L - 1; s += 0.45 / density) {
+    const k = idx(s), dS = PROF.dShore[k];
+    if (!Number.isFinite(dS) || skip(s)) continue;
+    const f = spineAt(s);
+    for (let q = 0, n = rng.chance(0.5) ? 2 : 1; q < n; q++) {
+      const t = rng.range(-1.3, 0.7), d = dS + t, e = f.e + f.ne * d + f.te * rng.range(-0.25, 0.25), nn = f.n + f.nn * d + f.tn * rng.range(-0.25, 0.25);
+      const r = rng.range(0.2, 0.5) * (t > 0 ? 0.8 : 1);
+      const y = bankY(s, d) - r * 0.3; // bedded a third into the bank (or the lake bed)
+      xf.push(M4(e, y, -nn, rng.range(0, 6.28), r * rng.range(1.0, 1.5), r * rng.range(0.6, 0.85), r * rng.range(0.9, 1.3), rng.range(-0.25, 0.25), rng.range(-0.25, 0.25)));
+      cols.push(t > 0.1 ? TONES[4] : TONES[Math.floor(rng.next() * 4)]);
+    }
+  }
+  const m = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), cel({ color: 0xffffff, flat: true }), xf.length);
+  xf.forEach((x, i) => { m.setMatrixAt(i, x); m.setColorAt(i, cols[i]); });
+  m.computeBoundingSphere();
+  m.name = 'drawdownBoulders';
+  m.castShadow = true; m.receiveShadow = true;
+  return m;
+}
+
 /* ------------------------------ dressing ------------------------------ */
 
 function mergedParts(parts) {
@@ -480,12 +569,22 @@ function parapetGeometry(s0, s1, isGap) {
   g.computeBoundingSphere();
   return g;
 }
+// a clump of reeds: flat blades that fan out (thin round stems read as ink lines from a
+// boat, black against the water), a few bent over, some dry, and three bulrush heads
 const REEDS = (() => {
   const parts = [];
   const r = rngKit(31);
-  for (let i = 0; i < 9; i++) {
-    const h = r.range(0.9, 1.7);
-    parts.push({ geo: new THREE.ConeGeometry(0.05, h, 3), color: r.chance(0.3) ? PAL.reedDry : PAL.reed, matrix: M4(r.range(-0.5, 0.5), h / 2 - 0.1, r.range(-0.5, 0.5), 0, 1, 1, 1, r.range(-0.15, 0.15), r.range(-0.15, 0.15)) });
+  for (let i = 0; i < 14; i++) {
+    const h = r.range(0.8, 1.8), yaw = r.range(0, 6.28), lean = r.range(0.05, i % 5 === 0 ? 0.6 : 0.3);
+    const blade = new THREE.ConeGeometry(0.07, h, 4);
+    blade.scale(1.7, 1, 0.45);
+    const tone = r.chance(0.3) ? PAL.reedDry : r.chance(0.5) ? PAL.reed : 0xa3a860;
+    parts.push({ geo: blade, color: tone, matrix: M4(r.range(-0.45, 0.45), h / 2 - 0.1, r.range(-0.45, 0.45), yaw, 1, 1, 1, lean * Math.cos(yaw), lean * Math.sin(yaw)) });
+  }
+  for (let i = 0; i < 3; i++) {
+    const h = r.range(1.3, 1.9), x = r.range(-0.3, 0.3), z = r.range(-0.3, 0.3);
+    parts.push({ geo: new THREE.CylinderGeometry(0.012, 0.018, h, 4), color: PAL.reed, matrix: M4(x, h / 2 - 0.1, z) });
+    parts.push({ geo: new THREE.CylinderGeometry(0.035, 0.035, 0.22, 6), color: 0x6b4a32, matrix: M4(x, h - 0.12, z) });
   }
   return mergedParts(parts);
 })();
@@ -650,6 +749,9 @@ export function buildDam(scene, { ground }) {
   const vc = cel({ color: 0xffffff, vertexColors: true, relief: true, bands: 'terrain', flat: false });
   const vcProps = cel({ color: 0xffffff, vertexColors: true, flat: false });
   const parapetMat = cel({ color: 0xffffff, map: cobbleTex() });
+  // the pitched embankment face: stones in joints, tinted by the rows' colours, just over the plain strip
+  const bankMat = cel({ color: 0xffffff, map: pitchingTex(), vertexColors: true, relief: true, bands: 'terrain', flat: false });
+  bankMat.polygonOffset = true; bankMat.polygonOffsetFactor = -1; bankMat.polygonOffsetUnits = -2;
   const lampMat = lampGlowMaterial();
   const palmMat = cel({ color: 0xffffff, vertexColors: true, flat: false, side: THREE.DoubleSide });
   const stats = { sectors: 0, parapet: 0, lamps: 0, benches: 0, palms: 0, reeds: 0 };
@@ -705,6 +807,8 @@ export function buildDam(scene, { ground }) {
     add(new THREE.Mesh(stripGeometry(s0, s1, STEP, walkStations), vc));
     add(new THREE.Mesh(stripGeometry(s0, s1, STEP, cityStations), vc));
     add(new THREE.Mesh(stripGeometry(s0, s1, STEP, lakeStations), vc));
+    const bank = bankGeometry(s0, s1, STEP);
+    if (bank) { const m = new THREE.Mesh(bank, bankMat); m.name = 'embankment'; add(m); }
 
     // the parapet: one swept mesh along the curve, broken only at the steps to the water
     const parapet = new THREE.Mesh(parapetGeometry(s0, s1, nearGap), parapetMat);
@@ -734,10 +838,11 @@ export function buildDam(scene, { ground }) {
       palms.push(placeAt(s + rng.range(-3, 3), d, yy - 0.1, rng.range(0, 6.28), rng.range(0.85, 1.1)));
     }
     // reeds in clumps at the water's edge
-    for (let s = s0 + rng.range(2, 8); s < s1; s += rng.range(6, 16)) {
+    // (from a boat they break up the waterline: clumps every few metres, in among the boulders)
+    for (let s = s0 + rng.range(1, 5); s < s1; s += rng.range(3, 9)) {
       const dS = shoreOffset(s);
-      if (!Number.isFinite(dS) || nearGap(s) || !rng.chance(0.55 * Q.dressing)) continue;
-      for (let q = 0; q < 3; q++) reeds.push(placeAt(s + rng.range(-2, 2), dS + rng.range(0.3, 2.2), -0.25, rng.range(0, 6.28), rng.range(0.8, 1.3)));
+      if (!Number.isFinite(dS) || nearGap(s) || !rng.chance(0.75 * Q.dressing)) continue;
+      for (let q = 0, n = rng.chance(0.4) ? 5 : 3; q < n; q++) reeds.push(placeAt(s + rng.range(-2.5, 2.5), dS + rng.range(-0.6, 1.8), -0.25, rng.range(0, 6.28), rng.range(0.7, 1.35)));
     }
     stats.lamps += lamps.length; stats.benches += benches.length; stats.palms += palms.length; stats.reeds += reeds.length;
     add(instanced(LAMP, lampMat, lamps, 'lamps'));
@@ -760,6 +865,11 @@ export function buildDam(scene, { ground }) {
     lod.add(new THREE.Vector3(mid.e, 0, -mid.n), [{ dist: 380, obj: near }, { dist: 1e9, obj: far }], 'dam');
     stats.sectors++;
   }
+
+  // the drawdown band's boulders along the whole waterline: one draw call
+  const boulders = boulderMesh(nearGap);
+  setLayers(boulders, LAYER.NEAR);
+  group.add(boulders);
 
   // every flight -- to the water, to the jetty, and down the city face -- in one style
   const ws = waterStairGeometry([...waterStairs, ...cityStairs]);

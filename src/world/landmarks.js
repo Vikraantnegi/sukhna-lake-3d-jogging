@@ -259,20 +259,93 @@ function buildPlaza(p) {
 const SWANS = [PAL.boatBlue, PAL.boatSky, PAL.boatYellow, PAL.boatRed, PAL.boatOrange];
 /** Where the rider sits in a swan (local, bow +x): the seat's top and front edge, the deck the feet rest on. */
 export const SWAN_SEAT = { top: 1.05, front: -0.2, x: -0.47, deck: 0.8 };
-/** A pedal boat as a swan (r7): hull, a bench seat with a back, neck and head.  Local +x is the bow. */
-export function swanParts(color) {
-  const q = new Parts();
-  q.add(new THREE.IcosahedronGeometry(1, 1), color, M4(0, 0.35, 0, 0, 1.45, 0.45, 0.8));
-  // the seat stands on the hull's top (0.8): a bench 0.25 m up, with a low back (low enough
-  // that the chase camera behind the boat still sees the rider's back)
-  q.box(0.55, 0.3, 1.0, 0xf4f0e6, SWAN_SEAT.x, SWAN_SEAT.top - 0.15, 0);
-  q.box(0.08, 0.2, 1.0, 0xf4f0e6, SWAN_SEAT.x - 0.3, SWAN_SEAT.top + 0.06, 0, 0, 0, 0.15);
-  q.add(new THREE.CylinderGeometry(0.12, 0.2, 1.3, 6), 0xfbfaf6, M4(1.05, 1.05, 0, 0, 1, 1, 1, 0, -0.35));
-  q.add(new THREE.IcosahedronGeometry(0.24, 1), 0xfbfaf6, M4(1.3, 1.7, 0, 0, 1.3, 1, 1));
-  q.add(new THREE.ConeGeometry(0.08, 0.28, 5), 0xf08a2e, M4(1.6, 1.68, 0, 0, 1, 1, 1, 0, -Math.PI / 2));
-  const g = mergeGeometries(q.list, false);
+/** Where the paddle wheel turns (local), under its housing at the stern (core/boat.js draws the wheel). */
+export const SWAN_WHEEL = { x: -1.36, y: 0.16, r: 0.3 };
+/**
+ * A pedal boat as a swan (r7), built to read as one from behind (the chase camera): a
+ * rounded hull with a dark rubbing strake at the waterline, wings folded along the sides
+ * with their tips raised, an upswept tail, the paddle wheel's housing faired into the
+ * stern, a cream cockpit with a bench seat and a backrest, and the neck curving up to a
+ * head with an orange beak.  Local +x is the bow.
+ *
+ * One geometry with vertex colours and a per-vertex `aKeep` (0..1): how much of a part
+ * keeps its own colour rather than taking the boat's (the instance colour; swanMaterial).
+ * The hull takes the boat's colour, the wings and tail a lighter shade of it, the seat,
+ * beak and strake stay their own.
+ */
+export function swanParts() {
+  const list = [];
+  const put = (geo, color, keep, matrix) => {
+    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    if (matrix) g.applyMatrix4(matrix);
+    const c = new THREE.Color(color), n = g.attributes.position.count, col = new Float32Array(n * 3), k = new Float32Array(n).fill(keep);
+    for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('aKeep', new THREE.BufferAttribute(k, 1));
+    for (const a of Object.keys(g.attributes)) if (!['position', 'normal', 'color', 'aKeep'].includes(a)) g.deleteAttribute(a);
+    list.push(g);
+  };
+  const WHITE = 0xffffff, CREAM = 0xf4f0e6;
+  // the hull, and a dark strake round it at the waterline
+  put(new THREE.IcosahedronGeometry(1, 2), WHITE, 0, M4(0, 0.35, 0, 0, 1.45, 0.45, 0.82));
+  put(new THREE.TorusGeometry(1, 0.035, 4, 32).rotateX(Math.PI / 2), 0x3a3f48, 1, M4(0, 0.2, 0, 0, 1.42, 1, 0.8));
+  // the cockpit: a cream sole on the hull's top, the bench seat and its backrest
+  put(new THREE.CylinderGeometry(1, 1, 0.05, 20), 0xd9d3c4, 1, M4(-0.15, 0.79, 0, 0, 0.72, 1, 0.5));
+  put(new THREE.BoxGeometry(0.55, 0.3, 1.0), CREAM, 1, M4(SWAN_SEAT.x, SWAN_SEAT.top - 0.15, 0));
+  put(new THREE.BoxGeometry(0.5, 0.05, 1.02), 0xd23b35, 1, M4(SWAN_SEAT.x, SWAN_SEAT.top + 0.005, 0)); // a red cushion
+  // the backrest: a curved shell round the back of the seat (not a slab), cushioned along its top
+  const shell = new THREE.CylinderGeometry(0.5, 0.5, 0.32, 16, 1, true, Math.PI * 1.22, Math.PI * 0.56);
+  put(shell, CREAM, 1, M4(SWAN_SEAT.x + 0.14, SWAN_SEAT.top + 0.14, 0, 0, 1, 1, 1.05, 0, 0.12));
+  put(new THREE.TorusGeometry(0.5, 0.04, 5, 16, Math.PI * 0.56).rotateX(Math.PI / 2).rotateY(-Math.PI * 0.72), 0xd23b35, 1, M4(SWAN_SEAT.x + 0.1, SWAN_SEAT.top + 0.3, 0, 0, 1, 1, 1.05));
+  // the wings, folded along the sides, their tips raised toward the stern; three feather tips each
+  for (const side of [-1, 1]) {
+    put(new THREE.IcosahedronGeometry(1, 2), WHITE, 0.4, M4(-0.2, 0.66, side * 0.68, side * 0.08, 0.95, 0.19, 0.24, side * 0.35, -0.22));
+    for (let f = 0; f < 3; f++) put(new THREE.ConeGeometry(0.07, 0.34, 4), WHITE, 0.4, M4(-1.02 - f * 0.05, 0.9 - f * 0.06, side * (0.66 - f * 0.05), 0, 1, 1, 0.6, side * 0.2, 1.25 + f * 0.12));
+  }
+  // the upswept tail over the stern: a fan of flat pointed feathers, standing up and back
+  for (let f = -2; f <= 2; f++) put(new THREE.ConeGeometry(0.14, 0.78, 5), WHITE, 0.4, M4(-1.2, 1.06 - Math.abs(f) * 0.05, f * 0.1, 0, 1, 1, 0.45, f * 0.24, 0.45 + Math.abs(f) * 0.07));
+  // the paddle wheel's housing, faired into the stern: a dome over the wheel, open underneath,
+  // run into the hull with a smooth fairing (the wheel, core/boat.js, turns inside it)
+  put(new THREE.SphereGeometry(1, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), WHITE, 0, M4(SWAN_WHEEL.x, SWAN_WHEEL.y, 0, 0, SWAN_WHEEL.r + 0.06, SWAN_WHEEL.r + 0.06, 0.4));
+  put(new THREE.IcosahedronGeometry(1, 2), WHITE, 0, M4(-1.12, 0.36, 0, 0, 0.38, 0.3, 0.46));
+  // the neck, curving up and forward, and the head with its beak and eyes
+  const neck = new THREE.CatmullRomCurve3([new THREE.Vector3(0.85, 0.6, 0), new THREE.Vector3(1.12, 1.05, 0), new THREE.Vector3(1.02, 1.45, 0), new THREE.Vector3(1.2, 1.72, 0)]);
+  put(new THREE.TubeGeometry(neck, 12, 0.11, 7), WHITE, 0.55);
+  put(new THREE.IcosahedronGeometry(0.2, 1), WHITE, 0.55, M4(1.28, 1.76, 0, 0, 1.35, 0.95, 0.9));
+  put(new THREE.ConeGeometry(0.07, 0.26, 6), 0xf08a2e, 1, M4(1.56, 1.72, 0, 0, 1, 1, 1, 0, -Math.PI / 2 - 0.15));
+  for (const side of [-1, 1]) put(new THREE.IcosahedronGeometry(0.035, 0), 0x1e1a1a, 1, M4(1.36, 1.8, side * 0.15));
+  const g = mergeGeometries(list, false);
   g.computeVertexNormals();
+  g.computeBoundingSphere();
   return g;
+}
+
+/**
+ * The swans' material: cel-shaded with vertex colours, where the instance colour (the
+ * boat's) tints each part by (1 − aKeep) -- so a blue swan has a cream seat, a red
+ * cushion and an orange beak.  One draw call per swan mesh, as before.
+ */
+export function swanMaterial() {
+  const mat = cel({ color: 0xffffff, vertexColors: true, flat: false, cache: false });
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, rr) => {
+    prev?.call(mat, sh, rr);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aKeep;')
+      .replace('#include <color_vertex>', `#if defined( USE_COLOR_ALPHA )
+	vColor = vec4( 1.0 );
+#elif defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )
+	vColor = vec3( 1.0 );
+#endif
+#ifdef USE_COLOR
+	vColor *= color;
+#endif
+#ifdef USE_INSTANCING_COLOR
+	vColor.xyz *= mix( instanceColor.xyz, vec3( 1.0 ), aKeep );
+#endif`);
+  };
+  mat.customProgramCacheKey = () => (prevKey ? prevKey.call(mat) : '') + '_swanKeep';
+  return mat;
 }
 
 function buildBoatClub(p, instMat) {
@@ -312,7 +385,7 @@ function buildBoatClub(p, instMat) {
   p.box(3.0, 1.1, 1.8, 0xf4f0e6, le, 1.2, -ln, yaw + Math.PI / 2);
   p.box(3.4, 0.12, 2.2, 0xd84a6a, le, 1.85, -ln, yaw + Math.PI / 2);
 
-  const swanGeo = swanParts(0xffffff);
+  const swanGeo = swanParts();
   const inst = new THREE.InstancedMesh(swanGeo, instMat, swans.length);
   const col = new THREE.Color(), gone = new THREE.Matrix4().makeScale(0, 0, 0);
   // every slot drawn once for the bounds, then the empty ones hidden
@@ -434,7 +507,7 @@ export function buildLandmarks(scene) {
   const group = new THREE.Group();
   group.name = 'landmarks';
   const mat = cel({ color: 0xffffff, vertexColors: true, flat: false });
-  const instMat = cel({ color: 0xffffff, flat: false });
+  const instMat = swanMaterial();
   const lod = new LodSet('landmarks');
   const place = (parts, name, centre, dist = 900) => {
     const m = parts.mesh(mat, name);

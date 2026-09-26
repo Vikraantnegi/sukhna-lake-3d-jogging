@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cel, flat } from '../core/toon.js';
 import { mulberry32 } from '../core/util.js';
 import { data, shoreDist, inLake, spineAt } from './frame.js';
-import { swanParts } from './landmarks.js';
+import { swanParts, swanMaterial } from './landmarks.js';
 import { LAYER, setLayers } from './chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -204,9 +204,9 @@ export function buildRowing(scene, world) {
 
   // pedal boats off the real boating jetty, after 08:30 (plan §6)
   const jetty = world.landmarks?.club?.jetty;
-  const swanGeo = swanParts(0xffffff);
+  const swanGeo = swanParts();
   const SWAN_COLS = [0x3f7fd0, 0x62a8e6, 0xf2c230, 0xd23b35, 0xf08a2e, 0x62a8e6];
-  const swans = new THREE.InstancedMesh(swanGeo, cel({ color: 0xffffff, flat: false }), SWAN_COLS.length);
+  const swans = new THREE.InstancedMesh(swanGeo, swanMaterial(), SWAN_COLS.length);
   swans.frustumCulled = false;
   swans.castShadow = true;
   const pedal = [];

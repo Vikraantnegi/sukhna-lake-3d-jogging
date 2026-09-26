@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cel } from './toon.js';
 import { data, shoreDist } from '../world/frame.js';
-import { swanParts, SWAN_SEAT } from '../world/landmarks.js';
+import { swanParts, swanMaterial, SWAN_SEAT, SWAN_WHEEL } from '../world/landmarks.js';
 import { seatPose, applySeat } from '../people/body.js';
 import { LAYER, setLayers } from '../world/chunks.js';
 
@@ -203,10 +203,10 @@ function paddleWheel() {
     g.deleteAttribute('uv');
     return g;
   };
-  const parts = [paint(new THREE.CylinderGeometry(0.07, 0.07, 0.72, 8).rotateX(Math.PI / 2), 0x6b5a48)];
-  for (let k = 0; k < 6; k++) {
-    const a = (k / 6) * Math.PI * 2;
-    parts.push(paint(new THREE.BoxGeometry(0.04, 0.26, 0.62).rotateZ(a - Math.PI / 2).translate(Math.cos(a) * 0.17, Math.sin(a) * 0.17, 0), 0xf4f0e6));
+  const parts = [paint(new THREE.CylinderGeometry(0.06, 0.06, 0.66, 8).rotateX(Math.PI / 2), 0x6b5a48)];
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    parts.push(paint(new THREE.BoxGeometry(0.035, 0.2, 0.62).rotateZ(a - Math.PI / 2).translate(Math.cos(a) * 0.17, Math.sin(a) * 0.17, 0), 0xd9d3c4));
   }
   const g = mergeGeometries(parts, false);
   g.computeVertexNormals();
@@ -221,11 +221,14 @@ export function createBoat({ scene, world, collider }) {
   const s = sim.state;
   const group = new THREE.Group();
   group.name = 'playerBoat';
-  const hullMat = cel({ color: 0xffffff, flat: false, cache: false });
-  const hull = new THREE.Mesh(swanParts(0xffffff), hullMat);
+  // the same swan as the moored ones (one draw call), tinted by the boat's colour as they are
+  const hull = new THREE.InstancedMesh(swanParts(), swanMaterial(), 1);
+  hull.setMatrixAt(0, new THREE.Matrix4());
+  hull.setColorAt(0, new THREE.Color(0xffffff));
+  hull.frustumCulled = false;
   hull.castShadow = true;
   const wheel = paddleWheel();
-  wheel.position.set(-1.58, 0.24, 0);
+  wheel.position.set(SWAN_WHEEL.x, SWAN_WHEEL.y, 0); // inside its housing at the stern
   group.add(hull, wheel);
   group.visible = false;
   setLayers(group, LAYER.NEAR);
@@ -248,7 +251,7 @@ export function createBoat({ scene, world, collider }) {
       const b = club.berths[i];
       api.color = b.color;
       api.berth = i;
-      hullMat.color.set(b.color);
+      hull.setColorAt(0, new THREE.Color(b.color)); hull.instanceColor.needsUpdate = true;
       club.setBerth(i, null);
       Object.assign(s, { e: b.e, n: b.n, h: b.yaw, ve: 0, vn: 0, yawRate: 0, speed: 0, distance: 0, time: 0, bumps: 0 });
       seat = seatPose(jogger.body, SWAN_SEAT.top, SWAN_SEAT.deck);
