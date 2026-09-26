@@ -176,9 +176,17 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     const g = new THREE.Group();
     const body = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), dogMat(color)); body.scale.set(0.34, 0.3, 0.75); body.position.y = 0.42;
     const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), dogMat(color)); head.scale.set(0.26, 0.26, 0.3); head.position.set(0, 0.62, -0.42);
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.14), dogMat(0x2b2020)); snout.position.set(0, 0.58, -0.6);
-    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.03, 0.3, 4), dogMat(color)); tail.position.set(0, 0.55, 0.42); tail.rotation.x = -0.7;
-    g.add(body, head, snout, tail);
+    // the muzzle: a short tapered snout in the coat colour, pointing forward, with a small dark nose at the tip
+    const muzzleGeo = new THREE.CylinderGeometry(0.045, 0.075, 0.16, 7);
+    muzzleGeo.rotateX(-Math.PI / 2);
+    const snout = new THREE.Mesh(muzzleGeo, dogMat(color)); snout.position.set(0, 0.585, -0.6);
+    const nose = new THREE.Mesh(new THREE.IcosahedronGeometry(0.03, 1), dogMat(0x1e1a1a)); nose.position.set(0, 0.6, -0.685);
+    const ears = [-1, 1].map((sx) => { const e = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.1, 4), dogMat(color)); e.position.set(sx * 0.075, 0.72, -0.4); e.rotation.z = -sx * 0.35; return e; });
+    // the tail grows from the rump and curves up and back
+    const tailGeo = new THREE.CylinderGeometry(0.018, 0.035, 0.3, 5);
+    tailGeo.translate(0, 0.15, 0);
+    const tail = new THREE.Mesh(tailGeo, dogMat(color)); tail.position.set(0, 0.52, 0.33); tail.rotation.x = 0.75;
+    g.add(body, head, snout, nose, ...ears, tail);
     g.legs = [];
     for (const [x, z] of [[-0.1, -0.24], [0.1, -0.24], [-0.1, 0.24], [0.1, 0.24]]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.03, 0.34, 5), dogMat(color));
@@ -190,7 +198,13 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     return g;
   };
   const DOGS = [0xc9a06a, 0xe8e2d6, 0x3a302a, 0x8a5a3a];
-  people.filter((p) => p.T.dog).forEach((p, i) => { p.dog = makeDog(DOGS[i % DOGS.length]); props.add(p.dog); });
+  people.filter((p) => p.T.dog).forEach((p, i) => { p.dog = makeDog(DOGS[i % DOGS.length]); p.dogIdx = i; props.add(p.dog); });
+  // the leads: one line segment per dog, from the walker's hand to the dog's collar
+  const leadPos = new Float32Array(people.filter((p) => p.dog).length * 6);
+  const leads = new THREE.LineSegments(new THREE.BufferGeometry().setAttribute('position', new THREE.BufferAttribute(leadPos, 3)), new THREE.LineBasicMaterial({ color: 0x2a2a30 }));
+  leads.frustumCulled = false;
+  leads.userData.noOutline = true;
+  props.add(leads);
   setLayers(props, LAYER.NEAR);
   group.add(props);
   scene.add(group);
@@ -255,9 +269,17 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         p.dog.rotation.y = p.yaw;
         const ph = clock * 9;
         p.dog.legs.forEach((leg, k) => { leg.rotation.x = Math.sin(ph + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI / 2 : 0)) * 0.5; });
+        // the lead: from about the walker's right hand to the collar
+        const o = p.dogIdx * 6, hf = spineAt(p.s + p.dir * 0.35), hd = p.d + 0.25; // the dog walks on the lake side
+        leadPos[o] = hf.e + hf.ne * hd; leadPos[o + 1] = p.y + p.body.height * 0.52; leadPos[o + 2] = -(hf.n + hf.nn * hd);
+        leadPos[o + 3] = p.dog.position.x; leadPos[o + 4] = p.dog.position.y + 0.58; leadPos[o + 5] = p.dog.position.z;
+        p.dog.visible = p.active;
+        if (!p.active) for (let k = 0; k < 6; k++) leadPos[o + k] = 0;
       }
     }
   }
+
+  function leadsDirty() { leads.geometry.attributes.position.needsUpdate = true; }
 
   /** Stationary poses: stretching, yoga, laughing, sitting, photographing, stirring chai. */
   function actPose(p, t) {
@@ -265,9 +287,15 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     Object.assign(pose, restPose());
     const w = (x) => Math.sin(t * x + p.phase);
     switch (p.act) {
-      case 'stretch':
-        pose.lean = 0.55 + 0.1 * w(0.8); pose.shoulderL = pose.shoulderR = 1.35; pose.elbowL = pose.elbowR = 0.15;
-        pose.hipL = -0.35; pose.hipR = 0.25; pose.kneeR = 0.3 + 0.15 * w(0.8); break;
+      case 'stretch': {
+        // a routine, not a statue: hamstring reach, quad pull, arms overhead, a shake-out, ~8 s each
+        const k = Math.floor((t + p.phase * 5) / 8) % 4;
+        if (k === 0) { pose.lean = 0.5 + 0.1 * w(0.8); pose.shoulderL = pose.shoulderR = 1.35; pose.elbowL = pose.elbowR = 0.15; pose.hipL = -0.35; pose.hipR = 0.25; pose.kneeR = 0.3; }
+        else if (k === 1) { pose.kneeL = 2.3; pose.hipL = -0.15; pose.shoulderL = -0.6; pose.elbowL = 1.6; pose.armOutR = 0.5; }
+        else if (k === 2) { pose.shoulderL = pose.shoulderR = -2.9; pose.lean = -0.08 + 0.05 * w(0.6); pose.bounce = 0.01 * w(1.5); }
+        else { pose.shoulderL = 0.3 * w(6); pose.shoulderR = -0.3 * w(6); pose.bounce = 0.02 * Math.abs(w(6)); }
+        break;
+      }
       case 'yoga': {
         const k = Math.floor((t + p.phase * 3) / 9) % 3;
         if (k === 0) { pose.shoulderL = pose.shoulderR = -2.9; pose.bounce = 0.02 * w(1.2); }
@@ -363,10 +391,13 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         Object.assign(player, { e: jogger.e, n: jogger.n, s: w.s, d: w.side * w.d, speed: jogger.speed, dir: alongDir(w.s, jogger.heading) });
       }
       simMovers(dt);
+      leadsDirty();
       for (const p of people) {
         if (p.mode !== 'walk' || !p.active) continue;
         p.gait.update(dt, p.speed);
         // a high five from the player: the right hand goes up
+        // a dog walker holds the lead out on the dog's side (the lake side: right going +s, left going -s)
+        if (p.dog) { const sd = p.dir > 0 ? 'R' : 'L'; p.gait.pose['shoulder' + sd] = 0.5; p.gait.pose['elbow' + sd] = 0.55; p.gait.pose['armOut' + sd] = 0.12; }
         if (p.hf > 0) { p.hf -= dt; p.gait.pose.shoulderR = -2.7; p.gait.pose.elbowR = 0.2; p.poseAge = 99; }
       }
       api.shown = draw(camPos);

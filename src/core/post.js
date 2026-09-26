@@ -292,7 +292,7 @@ export class Pipeline {
     const autoClear = r.autoClear;
     r.autoClear = false;
     r.clear();
-    if (this.farCamera) {
+    if (this.farCamera && !this.skipFar) {
       const f = this.farCamera, c = this.camera;
       f.position.copy(c.position);
       f.quaternion.copy(c.quaternion);

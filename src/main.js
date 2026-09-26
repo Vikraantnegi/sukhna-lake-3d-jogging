@@ -7,7 +7,6 @@ import { Pipeline } from './core/post.js';
 import { buildSky } from './core/sky.js';
 import { setOutlineResolution } from './core/outline.js';
 import { createPerf } from './core/perf.js';
-import { sunPosition, localDate } from './core/sun.js';
 import { Jogger } from './core/jogger.js';
 import { createCameraRig } from './core/camera.js';
 import { createHud } from './core/hud.js';
@@ -18,6 +17,8 @@ import { LAYER } from './world/chunks.js';
 import { buildWorld } from './world/index.js';
 import { createCollider } from './world/collide.js';
 import { createInteractions } from './people/interact.js';
+import { createTod, applyLook } from './core/tod.js';
+import { createWeather } from './core/weather.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -28,9 +29,9 @@ import { createInteractions } from './people/interact.js';
  * (300 m - 45 km) draws the terrain, water and sky, then a near camera
  * (0.5 m - 1.2 km) draws everything close over a cleared depth buffer.
  *
- * Phase 4: the jogger and its camera, the HUD, the hint bar, keys and
- * touch.  The sun is the real one, fixed at the bright-morning preset
- * until time of day arrives in Phase 6.
+ * Time of day (core/tod.js) runs the real sun on 15 Jan 2027 at 4x from
+ * 06:55; its look (sky, lights, haze, grade, water, mist) is pushed to the
+ * scene whenever it changes.  Weather (core/weather.js) folds in on top.
  * ------------------------------------------------------------------ */
 
 const params = new URLSearchParams(location.search);
@@ -69,11 +70,10 @@ const hemi = new THREE.HemisphereLight(PAL.hemiSky, PAL.hemiGround, 1.12);
 for (const l of [sun, fill, bounce, hemi]) { l.layers.enableAll(); scene.add(l); }
 scene.add(sun.target, fill.target, bounce.target);
 
-const [Y, M, D] = data.sun.date;
-const SUN_POS = sunPosition(localDate(Y, M, D, data.sun.presets.bright), data.sun.lat, data.sun.lon);
-const SUN_DIR = azimuthDir(SUN_POS.azimuth, SUN_POS.elevation);
-const FILL_DIR = azimuthDir(SUN_POS.azimuth + 180, 22);
-const BOUNCE_DIR = azimuthDir(SUN_POS.azimuth + 150, -25);
+// the clock: opens at civil dawn (plan §0); ?t=predawn|sunrise|golden|bright overrides
+const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: data.sun.presets, start: data.sun.presets[params.get('t')] ? params.get('t') : 'predawn' });
+const weather = createWeather(scene);
+if (['rain', 'fog'].includes(params.get('w'))) weather.set(params.get('w'), true);
 
 /* --------------------------------- world --------------------------------- */
 const sky = buildSky(scene);
@@ -95,7 +95,7 @@ const jogger = new Jogger({ scene, collider, spawn: SPAWN, outfit });
 const rig = createCameraRig(camera, { groundAt });
 rig.yaw = SPAWN.heading;
 const hud = createHud({ outfit, touch: TOUCH });
-hud.setClock(data.sun.clock.bright, 'bright morning');
+
 jogger.avoid = world.crowd.avoid;
 const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world });
 
@@ -105,8 +105,8 @@ const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, w
 const actions = {
   E: () => interact.activate(),
   V: () => { const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off'); },
-  T: () => world.cycleTime?.(hud) ?? hud.flash('time of day: coming in Phase 6'),
-  K: () => world.cycleWeather?.(hud) ?? hud.flash('weather: coming in Phase 6'),
+  T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); },
+  K: () => { const w = weather.cycle(); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
   P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
   M: () => world.toggleSound?.(hud) ?? hud.flash('sound: coming in Phase 7'),
   H: () => hud.toggleHidden(),
@@ -154,12 +154,38 @@ function placeLights() {
   if (rig.mode === 'overview') _target.set(LAKE_CENTRE[0], 0, -LAKE_CENTRE[1]);
   else _target.set(jogger.e, jogger.y, -jogger.n);
   const put = (light, dir, dist) => { light.target.position.copy(_target); light.position.copy(_target).addScaledVector(dir, dist); };
-  put(sun, SUN_DIR, 200);
-  put(fill, FILL_DIR, 100);
-  put(bounce, BOUNCE_DIR, 100);
+  put(sun, tod.state.lightDir, 200);
+  put(fill, tod.state.fillDir, 100);
+  put(bounce, tod.state.bounceDir, 100);
   sky.dome.position.copy(camera.position);
   sky.clouds.position.copy(camera.position);
 }
+
+/* ------------------------------ time of day ------------------------------ */
+const LOOK_TARGETS = { sky, sun, fill, bounce, hemi, scene, renderer, pipeline, lake: world.lake, mist: world.mist, ridges: world.ridges };
+const SUNRISE = data.sun.sunrise;
+let density = -1, bundled = null;
+/** How many people are out (plan §6): 0.3 pre-dawn, peak from sunrise −10 to +70 min, thinning after; fog x0.45. */
+function crowdDensity(min, fog) {
+  const k = min < -30 ? 0.3 : min < -10 ? THREE.MathUtils.lerp(0.3, 1, (min + 30) / 20) : min < 70 ? 1 : min < 160 ? THREE.MathUtils.lerp(1, 0.55, (min - 70) / 90) : 0.55;
+  return k * (1 - 0.55 * fog);
+}
+function updateTime(dt, running) {
+  tod.state.running = running;
+  weather.update(dt, camera.position);
+  if (tod.update(dt, weather.state)) {
+    applyLook(tod.look, tod.state, LOOK_TARGETS);
+    const w = weather.state.kind;
+    hud.setClock(tod.clock(), tod.label() + (w === 'clear' ? '' : ` · ${w === 'fog' ? 'fog' : 'rain'}`));
+    const dns = crowdDensity(tod.sinceSunrise(SUNRISE), weather.state.fog);
+    if (Math.abs(dns - density) > 0.02) { density = dns; world.crowd.setDensity(dns); }
+    const b = weather.state.fog > 0.5;
+    if (b !== bundled) { bundled = b; world.crowd.setBundled(b); }
+    // pedal boats go out after 08:30 (and not in fog or rain)
+    world.rowing.showPedal = tod.state.hours >= 8.5 && weather.state.kind === 'clear';
+  }
+}
+updateTime(0, false);
 
 /* ------------------------------- pipeline ------------------------------- */
 function resize() {
@@ -184,6 +210,7 @@ function frame() {
   const playing = hud.started && !hud.paused;
   jogger.update(playing ? dt : 0, rig.yaw);
   world.update(dt, camera.position, rig.mode === 'overview', jogger);
+  updateTime(dt, playing);
   rig.update(dt, jogger, { bench: interact.benchView() });
   if (playing) interact.update(); else hud.setPrompt('');
   placeLights();
@@ -203,7 +230,7 @@ if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
 }
 
-window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, collider, perf, sun, fill, bounce, hemi, THREE, data };
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, updateTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({
@@ -241,6 +268,13 @@ if (import.meta.env?.DEV) {
       rig.update(0.016, jogger, { snap: true });
       if (opts.h !== undefined) camera.position.y = groundAt(camera.position.x, -camera.position.z) + opts.h;
       if (opts.hideJogger) jogger.visible = false;
+    }
+    // opts.time ('predawn' | 'sunrise' | 'golden' | 'bright', or hours) and opts.weather ('clear' | 'rain' | 'fog')
+    if (opts.weather) weather.set(opts.weather, true);
+    if (opts.time !== undefined || opts.weather) {
+      if (typeof opts.time === 'number') tod.state.hours = opts.time;
+      tod.set(typeof opts.time === 'string' ? opts.time : undefined);
+      updateTime(0, false);
     }
     placeLights();
     world.update(0, camera.position, rig.mode === 'overview', jogger);

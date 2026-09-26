@@ -87,6 +87,11 @@ export const MOVERS = ['jogger_fast', 'jogger', 'students', 'brisk', 'elderly_co
 
 /** Build a body row for one person of a type, from a seeded rng. */
 export function personRow(type, rng) {
+  const row = baseRow(type, rng);
+  row.beard = beardFor(row, rng);
+  return row;
+}
+function baseRow(type, rng) {
   const T = TYPES[type];
   const pick = (v, d) => (Array.isArray(v) ? v[Math.floor(rng() * v.length)] : v ?? d);
   const range = (r, d) => (Array.isArray(r) ? r[0] + (r[1] - r[0]) * rng() : d);
@@ -99,4 +104,9 @@ export function personRow(type, rng) {
     sleeves: pick(dr.sleeves, 'long'), legs: pick(dr.legs, 'long'), long: pick(dr.long, false), tights: 0x1b1d24,
     headwear: pick(dr.headwear, 'none'), headwearColor: pick(dr.headwearColor, 0xd23b35), dupattaColor: pick(SALWAR),
   };
+}
+/** Sikh men: most with a turban wear a full beard, some with a patka too (young ones often not yet). */
+function beardFor(row, rng) {
+  if (SALWAR.includes(row.top)) return false; // a salwar kameez: a woman (Sikh women may wear a turban too)
+  return row.headwear === 'turban' ? rng() < 0.85 : row.headwear === 'patka' ? rng() < 0.35 : false;
 }

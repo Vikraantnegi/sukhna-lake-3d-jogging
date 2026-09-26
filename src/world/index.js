@@ -14,6 +14,8 @@ import { data } from './frame.js';
 import { buildCrowd } from '../people/crowd.js';
 import { buildRowing } from './rowing.js';
 import { buildBirds } from './birds.js';
+import { buildMist } from './mist.js';
+import { buildSigns } from './signs.js';
 
 /* ------------------------------------------------------------------ *
  * World assembly (plan §4, §6).
@@ -30,7 +32,7 @@ import { buildBirds } from './birds.js';
 
 export { walkY, DAM };
 
-export function buildWorld(scene, { npcs = 200, birdCount = 175 } = {}) {
+export function buildWorld(scene, { npcs = 200, birdCount = 175, simpleWater = false, mistSheets = 140 } = {}) {
   const t0 = performance.now();
   // the DEM as decoded (smoothed, upsampled), before any shaping
   const raw = { ...NEAR, h: NEAR.h.slice() };
@@ -58,7 +60,7 @@ export function buildWorld(scene, { npcs = 200, birdCount = 175 } = {}) {
   const tShape = performance.now() - t0;
 
   const terrain = buildTerrain(scene);
-  const lake = buildLake(scene);
+  const lake = buildLake(scene, { simple: simpleWater });
   const dam = buildDam(scene, { ground: groundAt });
   const band = buildShoreBand(scene, groundAt);
   const tVeg = performance.now();
@@ -72,6 +74,9 @@ export function buildWorld(scene, { npcs = 200, birdCount = 175 } = {}) {
   const rowing = buildRowing(scene, { landmarks });
   const birds = buildBirds(scene, { count: birdCount });
   const lifeMs = Math.round(performance.now() - tLife);
+  const mist = buildMist(scene, { count: mistSheets });
+  // signs wait for the fonts; they join the scene when ready
+  const signs = { ready: buildSigns(scene, { plaza: landmarks.plaza, club: landmarks.club }) };
 
   const lods = [terrain.lod, dam.lod, city.lod, landmarks.lod];
   const timing = { shapeMs: Math.round(tShape), vegMs, buildMs: Math.round(performance.now() - t0), trees: vegetation.trees.n, lifeMs, people: crowd.people.length, birds: birds.count };
@@ -102,6 +107,8 @@ export function buildWorld(scene, { npcs = 200, birdCount = 175 } = {}) {
     crowd,
     rowing,
     birds,
+    mist,
+    signs,
     lods,
     timing,
     patches: patchRects,
@@ -116,6 +123,8 @@ export function buildWorld(scene, { npcs = 200, birdCount = 175 } = {}) {
       crowd.update(dt, viewPos, jogger);
       rowing.update(dt);
       birds.update(dt, jogger);
+      lake.update(dt);
+      mist.update(dt, viewPos);
       for (const l of this.lods) l.update(viewPos);
       vegetation.update(viewPos, overview);
       const ve = viewPos.x, vn = -viewPos.z;

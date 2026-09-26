@@ -236,7 +236,7 @@ function buildPlaza(p) {
   }
   p.box(0.5, 0.45, DAM.half * 2.4, 0xf1efe8, g.e, gy + 4.55, -g.n, gyaw);
   p.box(0.35, 0.3, DAM.half * 2.3, 0xf1efe8, g.e, gy + 4.05, -g.n, gyaw);
-  p.box(0.12, 0.9, 3.6, 0x2f8fcf, g.e, gy + 5.2, -g.n, gyaw); // the sign board (lettering in Phase 6)
+  p.box(0.12, 0.9, 3.6, 0x2f8fcf, g.e, gy + 5.2, -g.n, gyaw); // the sign board (lettering: world/signs.js)
   // the chai and nimbu-paani stall on the plaza, by the walk: booth, striped awning, counter, kettle
   const [kx, kz] = at(pe, pn, yaw, -8, 8);
   const ke = kx, kn = -kz, ky = groundAt(ke, kn);
@@ -253,7 +253,7 @@ function buildPlaza(p) {
   for (const s of [-0.6, 0.6]) p.cyl(0.32, 0.32, 0.08, 0x2a2a2a, vx + Math.cos(-yaw) * s, vy + 0.32, vz + Math.sin(-yaw) * s, 10);
   p.cyl(0.03, 0.03, 1.6, 0x444444, vx, vy + 2.0, vz, 5);
   p.add(new THREE.ConeGeometry(1.2, 0.45, 8), 0xf2c230, M4(vx, vy + 2.85, vz));
-  return { kiosk: [ke, kn], cart: [vx, -vz], gate: gs };
+  return { kiosk: [ke, kn], kioskY: ky, yaw, cart: [vx, -vz], gate: gs };
 }
 
 const SWANS = [PAL.boatBlue, PAL.boatSky, PAL.boatYellow, PAL.boatRed, PAL.boatOrange];

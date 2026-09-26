@@ -464,6 +464,15 @@ function stairGeometry(steps) {
       parts.push({ geo: new THREE.BoxGeometry(st.width, 0.18, run + 0.02), color: q % 2 ? PAL.concrete : PAL.concreteDark,
         matrix: M4(f.e + f.ne * d, y - 0.09, -(f.n + f.nn * d), yaw) });
     }
+    if (st.landing) {
+      const dl = (st.landing.d0 + st.landing.d1) / 2, run = st.landing.d1 - st.landing.d0;
+      parts.push({ geo: new THREE.BoxGeometry(st.width + 0.6, 0.12, run), color: PAL.concrete, matrix: M4(f.e + f.ne * dl, st.from.y - 0.05, -(f.n + f.nn * dl), yaw) });
+      // the cheek walls start at the parapet's inner face, as high as the parapet
+      for (const side of [-1, 1]) {
+        const off = (st.width / 2 + 0.15) * side;
+        parts.push({ geo: new THREE.BoxGeometry(0.3, DAM.parH, run), color: PAL.concreteDark, matrix: M4(f.e + f.ne * dl + f.te * off, st.from.y + DAM.parH / 2, -(f.n + f.nn * dl + f.tn * off), yaw) });
+      }
+    }
     // low side walls
     const len = Math.hypot(st.to.d - st.from.d, st.to.y - st.from.y), pitch = Math.atan2(st.from.y - st.to.y, Math.abs(st.to.d - st.from.d));
     const dm = (st.from.d + st.to.d) / 2, ym = (st.from.y + st.to.y) / 2;
@@ -471,7 +480,10 @@ function stairGeometry(steps) {
       const off = (st.width / 2 + 0.15) * side;
       const e = f.e + f.ne * dm + f.te * off, n = f.n + f.nn * dm + f.tn * off;
       const dir = Math.sign(st.to.d - st.from.d);
-      parts.push({ geo: new THREE.BoxGeometry(0.3, 0.5, len), color: PAL.concreteDark, matrix: M4(e, ym, -n, yaw, 1, 1, 1, dir * pitch) });
+      // local -z faces the lake: a positive x-rotation would lift the -z end, so the
+      // cheek walls tilt by -dir * pitch to run down with the steps (they stood up
+      // over the water as beams before)
+      parts.push({ geo: new THREE.BoxGeometry(0.3, 0.5, len), color: PAL.concreteDark, matrix: M4(e, ym + 0.1, -n, yaw, 1, 1, 1, -dir * pitch) });
     }
   }
   return parts.length ? mergedParts(parts) : null;
@@ -496,9 +508,12 @@ export function buildDam(scene, { ground }) {
     return { s: st.s, from: { d: -DAM.verge + 0.2, y: yW }, to: { d: -toe, y: yW - (toe - DAM.verge) * DAM.face }, width: 3, ref: st.ref };
   });
   const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s))).map((s) => ({
-    s, from: { d: DAM.parOut - 0.2, y: walkY(s) }, to: { d: shoreOffset(s) + 0.6, y: -0.25 }, width: WATER_STEP_HALF * 2,
+    s, from: { d: DAM.parOut, y: walkY(s) }, to: { d: shoreOffset(s) + 0.6, y: -0.25 }, width: WATER_STEP_HALF * 2,
+    // a paved landing through the parapet, at walk level, between the cheek walls
+    landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 },
   }));
-  const nearGap = (s) => waterStairs.some((w) => Math.abs(w.s - s) < WATER_STEP_HALF + 0.9);
+  // the parapet stops exactly at the stair's cheek walls (half width + wall)
+  const nearGap = (s) => waterStairs.some((w) => Math.abs(w.s - s) < WATER_STEP_HALF + 0.3);
   const nearStair = (s) => cityStairs.some((w) => Math.abs(w.s - s) < 3);
 
   for (let s0 = 0; s0 < L; s0 += SECTOR) {

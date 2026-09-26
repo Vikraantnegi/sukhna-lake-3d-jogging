@@ -5,7 +5,8 @@
  * 0.8-2 km altitude), drawn in the far render pass only; the dome's colour
  * uniforms are returned so time of day can drive them; the unused
  * `buildDistantHills` is dropped (real DEM terrain and far ridge rings
- * replace it).  The sun disc, horizon glow and stars arrive in Phase 6. */
+ * replace it); a sun disc, a glow round the sun along the horizon, and
+ * stars are added, all driven by time of day (core/tod.js). */
 import * as THREE from 'three';
 import { PAL } from './palette.js';
 import { flat } from './toon.js';
@@ -19,12 +20,20 @@ import { LAYER, setLayers } from '../world/chunks.js';
  * rather than a physical sky.
  */
 export function buildSky(scene, radius = 30000) {
-  const geo = new THREE.SphereGeometry(radius, 32, 20);
+  const geo = new THREE.SphereGeometry(radius, 96, 64); // fine enough that the sun disc stays round
   const uniforms = {
     uTop: { value: new THREE.Color(PAL.skyTop) },
     uMid: { value: new THREE.Color(PAL.skyMid) },
     uHaze: { value: new THREE.Color(PAL.skyHaze) },
     uBands: { value: 26.0 },
+    // the sun (world direction), its disc and the glow round it on the horizon
+    uSunDir: { value: new THREE.Vector3(0, 0.3, -1).normalize() },
+    uSunCol: { value: new THREE.Color(0xffd55a) },
+    uSunAmt: { value: 0 },
+    uGlow: { value: new THREE.Color(0xff9a4a) },
+    uGlowAmt: { value: 0 },
+    uGlowPow: { value: 6 },
+    uStars: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
@@ -44,7 +53,11 @@ export function buildSky(scene, radius = 30000) {
     fragmentShader: /* glsl */ `
       uniform vec3 uTop, uMid, uHaze;
       uniform float uBands;
+      uniform vec3 uSunDir, uSunCol, uGlow;
+      uniform float uSunAmt, uGlowAmt, uGlowPow, uStars;
       varying vec3 vLocal;
+
+      float hash( vec2 p ) { return fract( sin( dot( p, vec2( 127.1, 311.7 ) ) ) * 43758.5453 ); }
 
       void main() {
         float h = normalize( vLocal ).y;
@@ -57,6 +70,29 @@ export function buildSky(scene, radius = 30000) {
         col = mix( col, uTop, smoothstep( 0.26, 0.92, t ) );
 
         col = mix( col, uHaze, smoothstep( 0.12, -0.05, h ) * 0.6 );
+
+        vec3 d = normalize( vLocal );
+        float cs = dot( d, uSunDir );
+        // the glow: broad round the sun, strongest along the horizon, in painted steps
+        float along = 1.0 - smoothstep( 0.0, 0.5, abs( d.y - 0.03 ) );
+        float g = pow( max( cs, 0.0 ), uGlowPow ) * ( 0.3 + 0.7 * along );
+        g = mix( g, floor( g * 8.0 ) / 8.0, 0.4 );
+        col = mix( col, uGlow, clamp( g * uGlowAmt, 0.0, 1.0 ) );
+        // a hard disc (stylised: ~1.5° across, three times the real sun) with a tight halo
+        float disc = smoothstep( 0.99990, 0.99992, cs );
+        float halo = pow( max( cs, 0.0 ), 2400.0 ) * 0.45;
+        col = mix( col, uSunCol, clamp( ( disc + halo ) * uSunAmt, 0.0, 1.0 ) );
+
+        // stars in the pre-dawn sky: a sparse grid of points, above the haze
+        if ( uStars > 0.001 ) {
+          vec2 sph = vec2( atan( d.z, d.x ), asin( clamp( d.y, -1.0, 1.0 ) ) ) * 90.0;
+          vec2 cell = floor( sph ), f = fract( sph ) - 0.5;
+          float rnd = hash( cell );
+          vec2 off = vec2( hash( cell + 1.7 ), hash( cell + 3.1 ) ) - 0.5;
+          float star = step( 0.972, rnd ) * smoothstep( 0.16, 0.02, length( f - off * 0.6 ) );
+          star *= smoothstep( 0.05, 0.3, d.y ) * uStars * ( 0.5 + 0.5 * hash( cell + 7.3 ) );
+          col += star * vec3( 1.0, 0.96, 0.88 );
+        }
         gl_FragColor = vec4( col, 1.0 );
       }
     `,
@@ -95,7 +131,14 @@ export function buildSky(scene, radius = 30000) {
   setLayers(clouds, LAYER.FAR);
   scene.add(clouds);
 
-  return { dome, clouds, uniforms };
+  return {
+    dome, clouds, uniforms,
+    /** Time of day and weather: cloud colours and cover. */
+    setClouds(light, shade, opacity = 1) {
+      matA.color.set(light); matB.color.set(shade);
+      matA.opacity = 0.62 * opacity; matB.opacity = 0.34 * opacity;
+    },
+  };
 }
 
 /* ------------------------------ Sukhna ------------------------------ */
@@ -126,7 +169,7 @@ export function buildRidgeRing(scene, ridges, { near = 0xa3adc0, haze = PAL.skyH
   mesh.name = 'ridgeRing';
   setLayers(mesh, LAYER.FAR);
   scene.add(mesh);
-  const cTop = new THREE.Color(near), cLow = new THREE.Color(haze);
+  const cTop = new THREE.Color(near), cLow = new THREE.Color(haze), _c = new THREE.Color();
   const views = ridges.views;
   let lastS = -1;
 
@@ -148,7 +191,7 @@ export function buildRidgeRing(scene, ridges, { near = 0xa3adc0, haze = PAL.skyH
       pos[o + 3] = dx; pos[o + 4] = -d * 0.06; pos[o + 5] = dz;
       // nearer, higher ridges read darker; everything sinks into the haze below
       const k2 = THREE.MathUtils.clamp((ang + 0.3) / 3.5, 0, 1) * THREE.MathUtils.clamp(1.25 - km / 45, 0.35, 1);
-      const c = cLow.clone().lerp(cTop, 0.35 + 0.55 * k2);
+      const c = _c.copy(cLow).lerp(cTop, 0.35 + 0.55 * k2);
       col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
       col[o + 3] = cLow.r; col[o + 4] = cLow.g; col[o + 5] = cLow.b;
     }
@@ -162,6 +205,12 @@ export function buildRidgeRing(scene, ridges, { near = 0xa3adc0, haze = PAL.skyH
     update(camPos, s) {
       mesh.position.set(camPos.x, 0, camPos.z);
       if (Math.abs(s - lastS) > 25) { rebuild(s); lastS = s; }
+    },
+    /** Time of day: the ridges' own colour and the haze they sink into. */
+    setColors(nearCol, hazeCol) {
+      if (cTop.getHex() === new THREE.Color(nearCol).getHex() && cLow.getHex() === new THREE.Color(hazeCol).getHex()) return;
+      cTop.set(nearCol); cLow.set(hazeCol);
+      if (lastS >= 0) rebuild(lastS);
     },
   };
 }
