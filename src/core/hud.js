@@ -41,15 +41,18 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   const jog = el('div', 'jog', root);
   jog.innerHTML = `
     <div class="jog-grid">
-      <div><i>distance</i><b data-k="dist">0.00</b><small>km</small></div>
-      <div><i>pace</i><b data-k="pace">--:--</b><small>/km</small></div>
-      <div><i>time</i><b data-k="time">0:00</b></div>
-      <div><i>lengths</i><b data-k="len">0</b></div>
+      <div><i data-l="dist">distance</i><b data-k="dist">0.00</b><small data-u="dist">km</small></div>
+      <div><i data-l="pace">pace</i><b data-k="pace">--:--</b><small data-u="pace">/km</small></div>
+      <div><i data-l="time">time</i><b data-k="time">0:00</b></div>
+      <div data-cell="len"><i>lengths</i><b data-k="len">0</b></div>
     </div>
     <div class="stamina"><i>stamina</i><span><em data-k="stam"></em></span></div>
-    <div class="jog-mode" data-k="mode"></div>`;
+    <div class="jog-mode" data-k="mode"></div>
+    <div class="ticket" data-k="ticket">Boat ticket · 1 ride</div>`;
   const q = (k) => jog.querySelector(`[data-k="${k}"]`);
-  const refs = { dist: q('dist'), pace: q('pace'), time: q('time'), len: q('len'), stam: q('stam'), mode: q('mode') };
+  const refs = { dist: q('dist'), pace: q('pace'), time: q('time'), len: q('len'), stam: q('stam'), mode: q('mode'), ticket: q('ticket') };
+  const labels = { dist: jog.querySelector('[data-l=dist]'), pace: jog.querySelector('[data-l=pace]'), time: jog.querySelector('[data-l=time]'), paceU: jog.querySelector('[data-u=pace]'), lenCell: jog.querySelector('[data-cell=len]') };
+  const clockText = (secs) => { const t = Math.floor(secs), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60; return h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`; };
 
   // ---------------------------- conditions ----------------------------
   const cond = el('div', 'cond', root);
@@ -100,16 +103,39 @@ export function createHud({ outfit = 0, touch = false } = {}) {
     hidden: false,
     started: false,
     paused: false,
-    setRun(j) {
-      refs.dist.textContent = (j.distance / 1000).toFixed(2);
-      refs.pace.textContent = j.pace();
-      const t = Math.floor(j.elapsed), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-      refs.time.textContent = h ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`;
-      refs.len.textContent = String(j.lengths);
+    /** The jog card: the run's numbers, or (with `boat`) the ride's: distance, speed, time. */
+    setRun(j, boat = null) {
+      const boating = !!boat;
+      if (api.boating !== boating) {
+        api.boating = boating;
+        labels.dist.textContent = boating ? 'boat distance' : 'distance';
+        labels.pace.textContent = boating ? 'speed' : 'pace';
+        labels.paceU.textContent = boating ? 'km/h' : '/km';
+        labels.time.textContent = boating ? 'ride time' : 'time';
+        labels.lenCell.classList.toggle('off', boating);
+      }
+      if (boating) {
+        const st = boat.state;
+        put(refs.dist, (st.distance / 1000).toFixed(2));
+        put(refs.pace, (Math.abs(st.speed) * 3.6).toFixed(1));
+        put(refs.time, clockText(st.time));
+        refs.mode.textContent = boat.phase === 'docking' ? 'docking' : st.speed < -0.1 ? 'pedal boat · astern' : j.sprinting ? 'pedal boat · pedalling hard' : 'pedal boat';
+      } else {
+        refs.dist.textContent = (j.distance / 1000).toFixed(2);
+        refs.pace.textContent = j.pace();
+        refs.time.textContent = clockText(j.elapsed);
+        refs.len.textContent = String(j.lengths);
+        refs.mode.textContent = j.auto ? 'auto-jog' : j.sprinting ? 'running' : j.speed > 2.2 ? 'jogging' : j.speed > 0.3 ? 'walking' : '';
+      }
       refs.stam.style.width = `${j.stamina.toFixed(0)}%`;
       refs.stam.classList.toggle('low', j.stamina < 30);
-      refs.mode.textContent = j.auto ? 'auto-jog' : j.sprinting ? 'running' : j.speed > 2.2 ? 'jogging' : j.speed > 0.3 ? 'walking' : '';
     },
+    boating: false,
+    /** A boat ticket in hand (one ride). */
+    setTicket(on) { api.ticket = on; refs.ticket.classList.toggle('on', on); },
+    ticket: false,
+    /** The hint bar's line (null: the usual one). */
+    setHint(text) { put(hint, text || HINT); },
     setClock(clock, preset) { put(cref.clock, clock); put(cref.preset, preset); },
     setWeather(kind) { put(cref.weather, kind === 'rain' ? 'Rain' : kind === 'fog' ? 'Fog' : 'Clear'); },
     setSound(on, music = false) { put(cref.sound, !on ? 'Sound off' : music ? 'Music' : 'Sound on'); cond.classList.toggle('muted', !on); },

@@ -15,6 +15,7 @@ export async function openGame(page, { query = '', start = true } = {}) {
   if (start) {
     await page.click('.overlay .go');
     await page.waitForFunction(() => window.__test.getHud().started);
+    await page.waitForTimeout(800); // the card's fade-out, so it isn't in the first screenshots
   }
   return gpu;
 }

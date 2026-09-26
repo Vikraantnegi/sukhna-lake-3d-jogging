@@ -7,7 +7,7 @@
  *   speed    [min, max] m/s on the walk; 0 for stationary types
  *   weight   how common, before time of day scales the whole crowd
  *   group    how many move together (students in pairs, couples)
- *   act      what stationary people do (stretch, yoga, laugh, sit, photo, vend)
+ *   act      what stationary people do (stretch, yoga, laugh, chat, sit, photo, vend)
  *
  * Colours are dress, not skin: skin tones come from one shared table.
  * ------------------------------------------------------------------ */
@@ -77,6 +77,7 @@ export const TYPES = {
   stretcher: { body: { height: [1.6, 1.82] }, dress: { top: BRIGHT, bottom: TRACK, shoe: SHOES, sleeves: ['short'], legs: ['long', 'shorts'], headwear: ['none', 'patka'] }, gait: {}, speed: [0, 0], act: 'stretch' },
   yoga: { body: { height: [1.52, 1.78], girth: [0.95, 1.2] }, dress: { top: [0xf4f2ec, 0xe8a060, ...SALWAR], bottom: [0xf4f2ec, ...TRACK], shoe: [0xc08b63], sleeves: ['short', 'long'], legs: ['long'], headwear: ['none'] }, gait: {}, speed: [0, 0], act: 'yoga' },
   laugh: { body: { height: [1.55, 1.78], girth: [1.05, 1.35], stoop: [0.02, 0.12] }, dress: { top: [0xf4f2ec, ...MUTED, ...SALWAR], bottom: [...MUTED, ...TRACK], shoe: SHOES, sleeves: ['long'], legs: ['long'], headwear: ['none', 'monkey', 'turban', 'dupatta'], headwearColor: TURBAN, hair: [0, 3, 4] }, gait: {}, speed: [0, 0], act: 'laugh' },
+  chat: { body: { height: [1.52, 1.8], girth: [1.0, 1.35], stoop: [0, 0.1] }, dress: { top: [...MUTED, ...SALWAR, 0xf4f2ec], bottom: [...MUTED, ...TRACK], shoe: SHOES, sleeves: ['long'], legs: ['long'], headwear: ['none', 'monkey', 'turban', 'dupatta', 'cap'], headwearColor: TURBAN, hair: [0, 3, 4] }, gait: {}, speed: [0, 0], act: 'chat' },
   sitter: { body: { height: [1.55, 1.8], girth: [1.0, 1.3] }, dress: { top: [...MUTED, ...SALWAR], bottom: MUTED, shoe: SHOES, sleeves: ['long'], legs: ['long'], headwear: ['none', 'monkey', 'turban', 'dupatta'], headwearColor: TURBAN, hair: [0, 3, 4] }, gait: {}, speed: [0, 0], act: 'sit' },
   photographer: { body: { height: [1.65, 1.8] }, dress: { top: [0x3a3f48, 0x6b7a5a], bottom: [0x2b3040], shoe: [0x2b2b2b], sleeves: ['long'], legs: ['long'], headwear: ['cap'] }, gait: {}, speed: [0, 0], act: 'photo' },
   vendor: { body: { height: [1.62, 1.75], girth: [1.0, 1.2] }, dress: { top: [0xf4f2ec, 0xcfc8b8], bottom: [0x6b6a60], shoe: [0x2b2b2b], sleeves: ['long'], legs: ['long'], headwear: ['none', 'monkey'] }, gait: {}, speed: [0, 0], act: 'vend' },

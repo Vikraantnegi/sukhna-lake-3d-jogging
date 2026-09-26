@@ -1,6 +1,6 @@
-// 4. Interactions: greet, chai, yoga, the laughter club, and a high five with a jogger coming
-// the other way.  Each: the prompt shows its text (never an empty pill), E does it, it
-// completes, and (the ones that take time) any movement key cancels it.
+// 4. Interactions: greet, chai, yoga, and a high five with a jogger coming the other way.
+// Each: the prompt shows its text (never an empty pill), E does it, it completes, and (the
+// ones that take time) any movement key cancels it.  (Circles and boating have their own.)
 import { test, expect } from '@playwright/test';
 import { openGame, T, reporter, checks } from './helpers.js';
 
@@ -72,7 +72,7 @@ test('interactions', async ({ page }) => {
     c.ok(cancelled ? p.stamina < 60 : p.stamina >= 99, `chai: stamina ${p.stamina} after ${cancelled ? 'cancelling' : 'finishing'}`);
   });
   await timed(page, api, c, rep, 'yoga', 'join the yoga', 5.3);
-  await timed(page, api, c, rep, 'laugh', 'join the laughter club', 6.3);
+  // (the laughter club is now a circle you stay in until you leave: groups.spec.js)
 
   // high five: meet a runner head on
   const runner = await api.findPerson('runner', 400, 2000);

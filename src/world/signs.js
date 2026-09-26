@@ -13,6 +13,8 @@ import { walkY, DAM } from './dam.js';
  *                             lake's name, name:hi and name:pa in OSM)
  *   the chai stall            Chai · Nimbu Paani, in all three
  *   the boating jetty         Boating (OSM's name) / नौका विहार / ਬੋਟਿੰਗ
+ *   the ticket shack          Boating Tickets / नौका विहार टिकट / ਬੋਟਿੰਗ ਟਿਕਟ
+ *                             (no prices, anywhere)
  *   four boards on the verge  Please keep the lake clean
  *   the 100 m markers         a small plate with the distance (stylised,
  *                             like the markers themselves)
@@ -28,6 +30,8 @@ const TEXT = {
   chai: [['Chai · Nimbu Paani', 'latn'], ['चाय · नींबू पानी', 'deva'], ['ਚਾਹ · ਨਿੰਬੂ ਪਾਣੀ', 'guru']],
   boat: [['Boating', 'latn'], ['नौका विहार', 'deva'], ['ਬੋਟਿੰਗ', 'guru']],
   clean: [['Please keep the lake clean', 'latn'], ['कृपया झील को स्वच्छ रखें', 'deva'], ['ਕਿਰਪਾ ਕਰਕੇ ਝੀਲ ਨੂੰ ਸਾਫ਼ ਰੱਖੋ', 'guru']],
+  // the boat-ticket shack; the Hindi and Punjabi follow the Boating board's words (for review)
+  tickets: [['Boating Tickets', 'latn'], ['नौका विहार टिकट', 'deva'], ['ਬੋਟਿੰਗ ਟਿਕਟ', 'guru']],
 };
 
 /** A board face: a coloured panel with a border and three stacked lines. */
@@ -124,6 +128,16 @@ export async function buildSigns(scene, { plaza, club } = {}) {
     for (const side of [-1, 1]) frames.push(boxAt(0.1, 2.6, 0.1, 0x3e4a46, f.e + f.ne * d + f.te * px * side, y0 + 1.3, f.n + f.nn * d + f.tn * px * side, -f.ne, -f.nn));
     frames.push(boxAt(3.5, 0.95, 0.06, BLUE_HEX, f.e + f.ne * d, y0 + 2.2, f.n + f.nn * d, -f.ne, -f.nn));
     group.add(signMesh([facePlane(3.4, 0.9, f.e + f.ne * (d - 0.035), y0 + 2.2, f.n + f.nn * (d - 0.035), -f.ne, -f.nn)], tex, 'sign.boating'));
+    out.boards++;
+  }
+
+  // 3b. the ticket shack beside it (landmarks.js): a board on the roof's front edge, facing the walk
+  if (club?.shack) {
+    const sh = club.shack, f = spineAt(sh.s), d = sh.d - sh.hv - 0.2, y = sh.y + 2.95;
+    const tex = boardTex(TEXT.tickets, 1024, 320);
+    frames.push(boxAt(2.3, 0.72, 0.06, BLUE_HEX, f.e + f.ne * (d + 0.035), y, f.n + f.nn * (d + 0.035), -f.ne, -f.nn));
+    for (const u of [-0.9, 0.9]) frames.push(boxAt(0.06, 0.4, 0.06, 0x3e4a46, f.e + f.ne * (d + 0.05) + f.te * u, sh.y + 2.62, f.n + f.nn * (d + 0.05) + f.tn * u, -f.ne, -f.nn));
+    group.add(signMesh([facePlane(2.2, 0.69, f.e + f.ne * d, y, f.n + f.nn * d, -f.ne, -f.nn)], tex, 'sign.tickets'));
     out.boards++;
   }
 

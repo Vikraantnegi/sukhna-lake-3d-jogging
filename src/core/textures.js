@@ -139,6 +139,45 @@ export const cobbleTex = () =>
   );
 
 /**
+ * Stone pitching on the embankment (r2, r8): irregular hand-set stones, 20-35 cm across,
+ * in dark joints.  Neutral and light -- the strip's vertex colours give the hue (grey
+ * stone on the slope, grassed at the top, cream boulders at the waterline, damp at the
+ * edge), so one texture serves the whole face.  Tiles seamlessly; one repeat is 2.5 m.
+ */
+export const pitchingTex = () =>
+  cached('pitchingTex', () =>
+    make(256, 256, (c, w, h) => {
+      c.fillStyle = '#8c877c'; // the joints (mortar and earth)
+      c.fillRect(0, 0, w, h);
+      let seed = 23;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const tones = ['#f2efe8', '#e4dfd4', '#d6d0c4', '#ece7dd', '#cbc4b7', '#ddd8cc'];
+      const G = 7, cell = w / G; // ~36 cm stones on the 2.5 m tile
+      for (let j = 0; j < G; j++) for (let i = 0; i < G; i++) {
+        // a stone per jittered cell: an irregular 6-gon, drawn at each wrap so the tile is seamless
+        const cx = (i + 0.5 + (rnd() - 0.5) * 0.35) * cell, cy = (j + 0.5 + (rnd() - 0.5) * 0.35) * cell;
+        const pts = [], n = 6, rot = rnd() * Math.PI;
+        for (let k = 0; k < n; k++) { const a = rot + (k / n) * Math.PI * 2 + (rnd() - 0.5) * 0.5, r = cell * (0.44 + rnd() * 0.1); pts.push([Math.cos(a) * r, Math.sin(a) * r * (0.8 + rnd() * 0.3)]); }
+        const tone = tones[Math.floor(rnd() * tones.length)], shade = rnd();
+        for (const ox of [-w, 0, w]) for (const oy of [-h, 0, h]) {
+          const x0 = cx + ox, y0 = cy + oy;
+          if (x0 < -cell || x0 > w + cell || y0 < -cell || y0 > h + cell) continue;
+          c.fillStyle = tone;
+          c.beginPath();
+          pts.forEach(([px, py], k) => (k ? c.lineTo(x0 + px, y0 + py) : c.moveTo(x0 + px, y0 + py)));
+          c.closePath();
+          c.fill();
+          // a flat cel-style shadow on the lower edge of each stone
+          c.save(); c.clip();
+          c.fillStyle = `rgba(70,64,56,${0.1 + shade * 0.08})`;
+          c.fillRect(x0 - cell, y0 + cell * 0.18, cell * 2, cell);
+          c.restore();
+        }
+      }
+    }, { repeat: [1, 1], aniso: 8 })
+  );
+
+/**
  * Dressed stone for the water-step treads (Phase 7 review): pale slabs in
  * two or three tones, thin darker joints, a faint speckle.  One repeat is
  * 2 m along a tread (u) by 1 m across (v); the joints fall every ~0.8 m.

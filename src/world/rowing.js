@@ -3,7 +3,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cel, flat } from '../core/toon.js';
 import { mulberry32 } from '../core/util.js';
 import { data, shoreDist, inLake, spineAt } from './frame.js';
-import { swanParts } from './landmarks.js';
+import { swanParts, swanMaterial } from './landmarks.js';
 import { LAYER, setLayers } from './chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -192,15 +192,21 @@ export function buildRowing(scene, world) {
   const wake = new THREE.InstancedMesh(wakeGeo, flat({ color: 0xf4f6f8, transparent: true, opacity: 0.45, depthWrite: false }), WAKE);
   wake.frustumCulled = false;
   wake.userData.noOutline = true;
-  const wakeLife = new Float32Array(WAKE).fill(99), wakePos = new Float32Array(WAKE * 3);
+  const wakeLife = new Float32Array(WAKE).fill(99), wakePos = new Float32Array(WAKE * 3), wakeSize = new Float32Array(WAKE).fill(1);
   let wakeNext = 0;
+  /** Drop a foam disc at (e, n); `size` scales how far it spreads (the player's pedal boat: ~0.4). */
+  const foam = (e, n, size = 1) => {
+    const k = wakeNext++ % WAKE;
+    wakeLife[k] = 0; wakeSize[k] = size;
+    wakePos[k * 3] = e; wakePos[k * 3 + 1] = n;
+  };
   group.add(wake);
 
   // pedal boats off the real boating jetty, after 08:30 (plan §6)
   const jetty = world.landmarks?.club?.jetty;
-  const swanGeo = swanParts(0xffffff);
+  const swanGeo = swanParts();
   const SWAN_COLS = [0x3f7fd0, 0x62a8e6, 0xf2c230, 0xd23b35, 0xf08a2e, 0x62a8e6];
-  const swans = new THREE.InstancedMesh(swanGeo, cel({ color: 0xffffff, flat: false }), SWAN_COLS.length);
+  const swans = new THREE.InstancedMesh(swanGeo, swanMaterial(), SWAN_COLS.length);
   swans.frustumCulled = false;
   swans.castShadow = true;
   const pedal = [];
@@ -223,7 +229,11 @@ export function buildRowing(scene, world) {
   let t = 0;
 
   const api = {
-    group, lanes, boats, showPedal: true,
+    group, lanes, boats, showPedal: true, foam,
+    /** The pedal swans out on the water ({ e, n, yaw }); shown only when showPedal. */
+    pedal,
+    /** The player's boat ({ e, n }) while boating, so the swans keep out of its way. */
+    player: null,
     /** The eight's world position and stroke, for the oar and cox sounds (Phase 7). */
     eight: { e: 0, n: 0, phase: 0, catchCount: 0 },
     update(dt) {
@@ -239,7 +249,7 @@ export function buildRowing(scene, world) {
         const p = laneAt(b.lane, b.s);
         const fe = p.te * b.dir, fn = p.tn * b.dir;
         const yaw = Math.atan2(-fe, fn);
-        b.e = p.e; b.n = p.n;
+        b.e = p.e; b.n = p.n; b.fe = fe; b.fn = fn; // (the player's pedal boat keeps clear: core/boat.js)
         hullM.compose(V.set(p.e, 0.02, -p.n), Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), yaw), S1);
         if (b.kind === 'eight') {
           hullEight.setMatrixAt(0, hullM);
@@ -264,15 +274,13 @@ export function buildRowing(scene, world) {
         }
         // foam at the stern on each drive
         if (st.drive && Math.random() < dt * 8) {
-          const k = wakeNext++ % WAKE;
-          wakeLife[k] = 0;
           const off = b.len * 0.5;
-          wakePos[k * 3] = p.e - fe * off; wakePos[k * 3 + 1] = p.n - fn * off;
+          foam(p.e - fe * off, p.n - fn * off);
         }
       }
       for (let k = 0; k < WAKE; k++) {
         wakeLife[k] += dt;
-        const life = wakeLife[k], sc = life < 7 ? (0.6 + life * 0.9) * (1 - life / 7) : 0;
+        const life = wakeLife[k], sc = life < 7 ? (0.6 + life * 0.9) * (1 - life / 7) * wakeSize[k] : 0;
         M.compose(V.set(wakePos[k * 3], 0.05, -wakePos[k * 3 + 1]), Q.identity(), new THREE.Vector3(sc, 1, sc * 0.6));
         wake.setMatrixAt(k, M);
       }
@@ -292,7 +300,10 @@ export function buildRowing(scene, world) {
           w.yaw += THREE.MathUtils.clamp(want, -0.5 * dt, 0.5 * dt);
           const sp = 0.8 * Math.max(0, Math.cos(want));
           const ne = w.e - Math.sin(w.yaw) * sp * dt, nn = w.n + Math.cos(w.yaw) * sp * dt;
-          if (shoreDist(ne, nn, 60) < -18) { w.e = ne; w.n = nn; }
+          // and never into the player's boat: wait, and pick somewhere else to go
+          const pb = api.player, tooClose = pb && Math.hypot(ne - pb.e, nn - pb.n) < 4.5 && Math.hypot(ne - pb.e, nn - pb.n) < Math.hypot(w.e - pb.e, w.n - pb.n);
+          if (tooClose) w.wait = Math.min(w.wait, 1);
+          else if (shoreDist(ne, nn, 60) < -18) { w.e = ne; w.n = nn; }
         }
         M.compose(V.set(w.e, 0.02 + Math.sin(t * 1.3 + i) * 0.03, -w.n), Q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), w.yaw + Math.PI / 2), S1);
         swans.setMatrixAt(i, M);

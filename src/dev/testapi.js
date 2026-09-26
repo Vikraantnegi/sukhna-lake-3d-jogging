@@ -8,11 +8,12 @@
  * auto-jog takes seconds, not half an hour.
  * ------------------------------------------------------------------ */
 
-import { spineAt, nearestS, inLake, azimuthForYaw, yawForAzimuth, L } from '../world/frame.js';
+import { spineAt, nearestS, inLake, shoreDist, azimuthForYaw, yawForAzimuth, L } from '../world/frame.js';
 import { BENCHES, BENCH_SEAT, walkY, DAM } from '../world/dam.js';
+import { BOAT } from '../core/boat.js';
 
 export function installTestApi(ctx) {
-  const { THREE, world, jogger, collider, interact, hud, rig, camera, tod, weather, sound, pipeline, perf, tick, updateTime, placeLights } = ctx;
+  const { THREE, world, jogger, collider, interact, boat, hud, rig, camera, tod, weather, sound, pipeline, perf, tick, updateTime, placeLights } = ctx;
   const errors = [];
   const origError = console.error.bind(console);
   console.error = (...a) => { errors.push(a.map(String).join(' ')); origError(...a); };
@@ -104,7 +105,7 @@ export function installTestApi(ctx) {
       const w = nearestS(jogger.e, jogger.n);
       const surface = collider.surfaceAt(jogger.e, jogger.n);
       const st = interact.state;
-      const state = st === 'bench' || st === 'steps' ? 'sitting' : st === 'yoga' || st === 'laugh' ? 'in-group' : st === 'chai' ? 'chai'
+      const state = st === 'bench' || st === 'steps' ? 'sitting' : st === 'boat' ? 'boating' : st === 'yoga' || st === 'group' ? 'in-group' : st === 'chai' ? 'chai'
         : jogger.speed > 3.4 ? 'running' : jogger.speed > 2.2 ? 'jogging' : jogger.speed > 0.3 ? 'walking' : 'idle';
       return {
         e: +jogger.e.toFixed(3), n: +jogger.n.toFixed(3), y: +jogger.y.toFixed(3), s: +w.s.toFixed(2), d: +(w.side * w.d).toFixed(2),
@@ -125,6 +126,9 @@ export function installTestApi(ctx) {
         prompt: pill(q('.prompt')), bubble: pill(q('.bubble')), toast: pill(q('.toast')),
         hidden: !!q('.jog')?.classList.contains('off') && !!q('.cond')?.classList.contains('off') && !!q('.hintbar')?.classList.contains('off'),
         hint: q('.hintbar')?.textContent, started: hud.started, paused: hud.paused,
+        ticket: !!q('.ticket')?.classList.contains('on'),
+        stats: [...document.querySelectorAll('.jog-grid > div')].filter((d) => !d.classList.contains('off')).map((d) => `${d.querySelector('i')?.textContent}: ${d.querySelector('b')?.textContent}`),
+        mode: q('.jog-mode')?.textContent,
         card: { visible: !q('.overlay')?.classList.contains('hidden'), mode: q('.overlay')?.dataset.mode },
         overview: rig.mode === 'overview',
       };
@@ -196,14 +200,29 @@ export function installTestApi(ctx) {
       return { active: movers.filter((p) => p.active).length, movers: movers.length, sinceSunrise: tod.sinceSunrise(ctx.data.sun.sunrise), hours: tod.state.hours, fog: weather.state.fog };
     },
     lamps() { return world.dam.lampLevel; },
-    music() { const g = sound.nodes?.music?.gain?.value ?? 0; return { enabled: sound.enabled, music: sound.music, gain: +g.toFixed(3), mode: sound.mode, ctx: sound.ctx?.state ?? 'none' }; },
+    music() { const N = sound.nodes || {}, g = N.music?.gain?.value ?? 0, bus = (k) => +(N[k]?.gain?.value ?? 0).toFixed(3); return { enabled: sound.enabled, music: sound.music, gain: +g.toFixed(3), mode: sound.mode, ctx: sound.ctx?.state ?? 'none', buses: { amb: bus('amb'), rain: bus('rain'), boat: bus('boat') } }; },
     camera() { return { mode: rig.mode, yaw: +azimuthForYaw(rig.yaw).toFixed(1), pitch: +THREE.MathUtils.radToDeg(rig.pitch).toFixed(1), boom: +rig.boom.toFixed(2), pos: camera.position.toArray().map((x) => +x.toFixed(2)) } },
     bench(n = 120) { return window.__bench(n); },
     renderOnce() { placeLights(); pipeline.render(); },
     world: () => ({ L, parIn: DAM.parIn, parOut: DAM.parOut, near: world.debug.NEAR.rect, step: world.debug.NEAR.step }),
-    /** Stand next to the chai stall, the yoga group or the laughter club (kind: chai | yoga | laugh). */
+    /**
+     * Stand somewhere: the chai stall, the yoga group, the laughter club or a chatting circle
+     * (kind: chai | yoga | laugh | chat), the ticket counter ('counter'), the stair head over
+     * the jetty ('jettyStair', facing down it), or on the jetty beside a moored swan ('berth').
+     */
     toSpot(kind) {
       if (kind === 'chai') { const [e, n] = world.landmarks.plaza.kiosk; return api.teleportTo(e + 2, n + 0.5); }
+      const club = world.landmarks.club, jf = spineAt(club.jetty.s);
+      if (kind === 'counter') { const [e, n] = club.shack.counter; const p = api.teleportTo(e, n); api.lookAt(club.shack.e, club.shack.n); return p; }
+      if (kind === 'jettyStair') return api.teleport(club.jetty.s, DAM.parIn - 0.6, 'lake');
+      if (kind === 'berth') { const b = club.berths.find((x) => x.color && x.d > club.jetty.d0 + 8); const p = api.teleportTo(b.e - jf.te * b.side * 2.3, b.n - jf.tn * b.side * 2.3); api.lookAt(b.e, b.n); return { ...p, berth: b.i }; }
+      if (kind === 'laugh' || kind === 'chat') {
+        const c = world.crowd.circles.find((x) => x.kind === kind);
+        if (!c) return null;
+        // 2.5 m outside the circle's edge, on open ground, facing its middle
+        for (let a = 0; a < 6.28; a += 0.3) { const e = c.ce + Math.cos(a) * (c.r + 2.5), n = c.cn + Math.sin(a) * (c.r + 2.5); if (collider.free(e, n)) { const p = api.teleportTo(e, n); api.lookAt(c.ce, c.cn); return p; } }
+        return null;
+      }
       const group = world.crowd.people.filter((p) => p.act === kind);
       const c = group.reduce((a, p) => [a[0] + p.e / group.length, a[1] + p.n / group.length], [0, 0]);
       // just outside the group, on open ground
@@ -236,6 +255,74 @@ export function installTestApi(ctx) {
     /** Point the camera (and so W) at world (e, n). */
     lookAt(e, n) { const y = Math.atan2(-(e - jogger.e), n - jogger.n); rig.yaw = y; jogger.heading = y; return azimuthForYaw(y); },
     setStamina(v) { jogger.stamina = v; },
+
+    /* ---------------- boating and circles ---------------- */
+    /** The pedal boat: where it is, how it moves, how far inside the water it keeps. */
+    boat() {
+      const s = boat.state;
+      return { phase: boat.phase, e: +s.e.toFixed(2), n: +s.n.toFixed(2), heading: +azimuthForYaw(s.h).toFixed(1), speed: +s.speed.toFixed(2), distance: +s.distance.toFixed(1), time: +s.time.toFixed(1),
+        shore: +(-shoreDist(s.e, s.n, 400)).toFixed(2), clear: +s.clear.toFixed(2), bumps: s.bumps, yielding: s.yielding, berth: boat.berth, color: boat.color, visible: boat.group.visible, margin: BOAT.margin };
+    },
+    berths() { return world.landmarks.club.berths.map((b) => ({ i: b.i, e: +b.e.toFixed(2), n: +b.n.toFixed(2), side: b.side, d: +b.d.toFixed(1), moored: !!b.color })); },
+    jetty() { const j = world.landmarks.club.jetty, f = spineAt(j.s); return { s: j.s, d0: j.d0, d1: j.d1, deckY: j.deckY, e: f.e, n: f.n, ne: f.ne, nn: f.nn, te: f.te, tn: f.tn }; },
+    /** Where the jogger is in the jetty's frame (u out along it, v across) and whether on its deck. */
+    onJetty() { const f = spineAt(world.landmarks.club.jetty.s), de = jogger.e - f.e, dn = jogger.n - f.n, j = world.landmarks.club.jetty; const u = de * f.ne + dn * f.nn, v = de * f.te + dn * f.tn; return { u: +u.toFixed(2), v: +v.toFixed(2), deck: u > j.d0 && u < j.d1 && Math.abs(v) < 3.05 }; },
+    /**
+     * Pedal to (e, n) with the real keys (W, A/D, Shift): steer by the bearing each step.
+     * Returns the path's worst shore margin, bumps, whether it arrived and how long it took.
+     */
+    driveTo(e, n, { tol = 8, maxT = 400, fast = false, dt = 1 / 30 } = {}) {
+      const keys = jogger.keys;
+      let t = 0, worst = Infinity, arrived = false, lastProgress = 0, best = Infinity, fails = 0, framed = 0, frames = 0, maxSpeed = 0, minStamina = 100;
+      const s = boat.state;
+      while (t < maxT) {
+        const de = e - s.e, dn = n - s.n, dist = Math.hypot(de, dn);
+        if (dist < tol) { arrived = true; break; }
+        if (dist < best - 1) { best = dist; lastProgress = t; }
+        if (t - lastProgress > 40) break; // stuck
+        let err = Math.atan2(-de, dn) - s.h;
+        err = Math.atan2(Math.sin(err), Math.cos(err));
+        keys.add('KeyW');
+        keys.delete('KeyA'); keys.delete('KeyD');
+        if (err > 0.1) keys.add('KeyA'); else if (err < -0.1) keys.add('KeyD');
+        if (fast && jogger.stamina > 35) keys.add('ShiftLeft'); else keys.delete('ShiftLeft');
+        tick(dt);
+        t += dt;
+        const sd = -shoreDist(s.e, s.n, 400);
+        worst = Math.min(worst, sd);
+        maxSpeed = Math.max(maxSpeed, s.speed); minStamina = Math.min(minStamina, jogger.stamina);
+        if (sd < BOAT.margin - 0.01) fails++;
+        if (Math.round(t / dt) % 15 === 0) { frames++; const f = api.boatInFrame(); if (f.inFrame) framed++; }
+      }
+      for (const k of ['KeyW', 'KeyA', 'KeyD', 'ShiftLeft']) keys.delete(k);
+      placeLights();
+      return { arrived, t: +t.toFixed(1), worstShore: +worst.toFixed(2), belowMargin: fails, bumps: s.bumps, left: +Math.hypot(e - s.e, n - s.n).toFixed(1), framed, frames, maxSpeed: +maxSpeed.toFixed(2), minStamina: +minStamina.toFixed(1) };
+    },
+    /** Are the boat and the jogger in the camera's frame (hull centre, bow, stern, head)? */
+    boatInFrame() {
+      camera.updateMatrixWorld();
+      const s = boat.state, fe = -Math.sin(s.h), fn = Math.cos(s.h);
+      const pts = [[s.e, 0.4, s.n], [s.e + fe * 1.3, 0.5, s.n + fn * 1.3], [s.e - fe * 1.3, 0.4, s.n - fn * 1.3]].map(([e, y, n]) => new THREE.Vector3(e, y, -n).project(camera));
+      const head = new THREE.Vector3(); jogger.eye(head); const h = head.project(camera);
+      const inside = (p) => p.z < 1 && Math.abs(p.x) <= 1 && Math.abs(p.y) <= 1;
+      return { inFrame: pts.every(inside) && inside(h), hull: pts.map((p) => [+p.x.toFixed(2), +p.y.toFixed(2)]), head: [+h.x.toFixed(2), +h.y.toFixed(2)], camDist: +camera.position.distanceTo(new THREE.Vector3(s.e, 0.5, -s.n)).toFixed(2), camY: +camera.position.y.toFixed(2) };
+    },
+    /** The standing circles, and the player's place in one. */
+    circles() {
+      return world.crowd.circles.map((c) => ({ kind: c.kind, ce: +c.ce.toFixed(2), cn: +c.cn.toFixed(2), r: c.r, joined: !!c.player, burst: c.kind === 'laugh' ? world.crowd.laughBurst() : null,
+        members: c.members.map((p) => ({ id: p.id, e: +p.e.toFixed(2), n: +p.n.toFixed(2), active: p.active, home: Math.abs(Math.atan2(Math.sin(p.ang - p.ang0), Math.cos(p.ang - p.ang0))) < 0.01 })) }));
+    },
+    /** Stand at (e, n) and frame (te, tn) from there: the camera's pitch (°) and boom (m) for a picture. */
+    frameShot(e, n, te, tn, pitch = -5, boom = 4.5) {
+      api.teleportTo(e, n); api.lookAt(te, tn);
+      rig.pitch = THREE.MathUtils.degToRad(pitch); rig.boom = rig.boomTarget = boom;
+      rig.update(0.016, jogger, { snap: true });
+      return api.camera();
+    },
+    /** Everything the page shows as text (the HUD, the card): to check nothing quotes a price. */
+    pageText() { return document.body.innerText; },
+    /** The speech bubble on screen now. */
+    bubble() { const b = document.querySelector('.bubble'); return { visible: b.classList.contains('on'), text: b.textContent }; },
   };
   window.__test = api;
   return api;
