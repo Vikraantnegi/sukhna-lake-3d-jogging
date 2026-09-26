@@ -1,6 +1,6 @@
 # Sukhna: a sunrise jog around Sukhna Lake (plan)
 
-Status: **re-planned after Phase 2: the world is now FLAT, at Sukhna's real shape and 1:1 scale** (the user's decision; see Decisions). Waiting for the user's approval of this plan before building. Implementation runs locally (Claude Code Desktop on the user's Windows machine). Overpass (overpass-api.de, fallback overpass.kumi.systems) and the AWS terrain tiles are reachable; no allowlist. Reference engine lives at `.ref/sakura-crossing/` (git-ignored, read-only): `git clone --depth 1 https://github.com/Kenton-GMI/sakura-crossing .ref/sakura-crossing`.
+Status: **re-planned after Phase 2: the world is now FLAT, at Sukhna's real shape and 1:1 scale** (the user's decision; see Decisions). **The re-plan is approved; the continuous run resumes at Phase 2 (flat).** Implementation runs locally (Claude Code Desktop on the user's Windows machine). Overpass (overpass-api.de, fallback overpass.kumi.systems) and the AWS terrain tiles are reachable; no allowlist. Reference engine lives at `.ref/sakura-crossing/` (git-ignored, read-only): `git clone --depth 1 https://github.com/Kenton-GMI/sakura-crossing .ref/sakura-crossing`.
 
 Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-world addendum at its end) + this file. Where they disagree, the Decisions below win. Each new phase starts by re-reading both, then Progress and Working rules.
 
@@ -11,7 +11,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | 0 Plan | done | `claude/charming-hawking-lsp0mx` (PR #1, merged) | `f2ffc9a` |
 | 1 Scaffold + engine port | done | `phase-1-scaffold` (PR #2, merged) | `4c528c4` |
 | 2 (planet version) | **superseded**, kept in history | `build` | `27ca69a` |
-| 2 Flat real-data pipeline + flat scaffold | **next (awaiting plan approval)** | `build` | — |
+| 2 Flat real-data pipeline + flat scaffold | **in progress** (plan approved) | `build` | — |
 | 3 World layout, LOD and self-checks | — | `build` | — |
 | 4 Jogger, camera, HUD, controls, touch | — | `build` | — |
 | 5 NPCs, interactions, rowing, birds | — | `build` | — |
@@ -56,7 +56,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 
 ## Working rules
 
-Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built in one go, **once this re-plan is approved**.
+Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built in one go (re-plan approved).
 
 - Work on one branch, `build`, created from the latest main. At least one commit per phase, each with the build passing. Push after every phase so progress is saved. Don't wait for the user to merge.
 - At the end of each phase: update Progress, write a 3–4 line summary in chat (what's new on screen, draw calls, frame time), then go straight on to the next phase.

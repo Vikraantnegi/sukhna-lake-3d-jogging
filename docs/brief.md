@@ -1,3 +1,5 @@
+> **Note (2026-09-26): parts of this brief are superseded.** The planet-specific sections (the equator/loop, R, the join, "P planet", the planet camera, the lake leak check, and "stop after each phase") are replaced by the flat-world addendum at the end of this file and by `docs/plan.md`. **Wherever this brief and plan.md differ, plan.md wins.**
+
 # Sukhna: a sunrise jog around Sukhna Lake, Chandigarh (three.js) — LOCAL session
 
 ## Where we are
