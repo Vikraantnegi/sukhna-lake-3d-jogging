@@ -6,6 +6,7 @@ import { cobbleTex, slabTex } from '../core/textures.js';
 import { rngKit } from '../core/util.js';
 import { data, L, spineAt, nearestS, rayToShore, shoreDist, inLake } from './frame.js';
 import { LodSet, LAYER, setLayers } from './chunks.js';
+import { Q } from '../core/quality.js';
 
 /* ------------------------------------------------------------------ *
  * The dam and its promenade, along the real curve (plan §4, §6).
@@ -636,6 +637,7 @@ export function buildDam(scene, { ground }) {
     // royal palms along the land side of the verge (r2)
     for (let s = s0 + 11; s < s1; s += 22) {
       if (nearStair(s)) continue;
+      if (Q.dressing < 0.6 && Math.round((s - 11) / 22) % 2) continue; // low tier: every other palm
       const k = idx(s);
       const d = -Math.min(PROF.dToe[k] + 2, DAM.verge + 1.6 + rng.range(0, 1.5));
       const y = ground(spineAt(s).e + spineAt(s).ne * d, spineAt(s).n + spineAt(s).nn * d);
@@ -645,7 +647,7 @@ export function buildDam(scene, { ground }) {
     // reeds in clumps at the water's edge
     for (let s = s0 + rng.range(2, 8); s < s1; s += rng.range(6, 16)) {
       const dS = shoreOffset(s);
-      if (!Number.isFinite(dS) || nearGap(s) || !rng.chance(0.55)) continue;
+      if (!Number.isFinite(dS) || nearGap(s) || !rng.chance(0.55 * Q.dressing)) continue;
       for (let q = 0; q < 3; q++) reeds.push(placeAt(s + rng.range(-2, 2), dS + rng.range(0.3, 2.2), -0.25, rng.range(0, 6.28), rng.range(0.8, 1.3)));
     }
     stats.lamps += lamps.length; stats.benches += benches.length; stats.palms += palms.length; stats.reeds += reeds.length;

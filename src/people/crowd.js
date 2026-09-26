@@ -258,7 +258,7 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     for (const st of world.dam?.cityStairs || []) list.push({ s: st.s, d: -DAM.half + 0.3 });
     return list;
   };
-  let density = 1;
+  let density = 1, keep = 1; // keep: the run-time quality fallback thins the crowd
   let clock = 0;
   const player = { e: 0, n: 0, s: 0, d: 0, speed: 0 };
 
@@ -417,10 +417,12 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     /** Scale how many movers are out (time of day, weather): 0..1. */
     setDensity(f) {
       density = THREE.MathUtils.clamp(f, 0, 1);
-      const want = Math.round(moverCount * density);
+      const want = Math.round(moverCount * density * keep);
       let i = 0;
       for (const p of people) { if (p.mode !== 'walk' || p.leader !== undefined) continue; p.active = i++ < want; }
     },
+    /** Run-time quality fallback: keep only this share of the movers. */
+    setCap(f) { keep = THREE.MathUtils.clamp(f, 0, 1); api.setDensity(density); },
     /** Winter fog: shawls and monkey caps for everyone (plan §6). */
     setBundled(on) {
       for (const p of people) {

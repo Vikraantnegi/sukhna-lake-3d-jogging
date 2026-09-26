@@ -3,6 +3,7 @@ import terrainData from '../data/sukhna.terrain.json';
 import { cel } from '../core/toon.js';
 import { PAL } from '../core/palette.js';
 import { LodSet, LAYER, setLayers } from './chunks.js';
+import { Q } from '../core/quality.js';
 
 /* ------------------------------------------------------------------ *
  * Terrain: the real DEM, as two grids (plan §3, §4).
@@ -296,7 +297,8 @@ export function buildTerrain(scene) {
   }
 
   // the hills: 3.6 km chunks, full detail to 9 km, with a hole under the basin
-  addGrid(HILLS, 30, [{ dist: 9000, stride: 1 }, { dist: 1e9, stride: 2 }], {
+  // the low tier builds the hills at half resolution throughout (quality.js)
+  addGrid(HILLS, 30, Q.hillHalf ? [{ dist: 1e9, stride: 2 }] : [{ dist: 9000, stride: 1 }, { dist: 1e9, stride: 2 }], {
     heightFn: (e, n, h) => (insideNear(e, n) ? h - 4 : h),
     colourFn: hillColour,
     skip: (e, n) => insideNear(e, n, HILLS.step * 2),

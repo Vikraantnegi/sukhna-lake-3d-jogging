@@ -20,6 +20,7 @@ import { createInteractions } from './people/interact.js';
 import { createTod, applyLook } from './core/tod.js';
 import { createWeather } from './core/weather.js';
 import { createSound } from './core/sound.js';
+import { Q, TIERS, lower } from './core/quality.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -61,7 +62,7 @@ farCamera.layers.set(LAYER.FAR);
 const SHADOW_HALF = 40;
 const sun = new THREE.DirectionalLight(PAL.sun, 2.25);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(Q.shadow, Q.shadow);
 Object.assign(sun.shadow.camera, { left: -SHADOW_HALF, right: SHADOW_HALF, top: SHADOW_HALF, bottom: -SHADOW_HALF, near: 1, far: 400 });
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.035;
@@ -75,14 +76,15 @@ scene.add(sun.target, fill.target, bounce.target);
 // the four morning presets plus the real sunset (17:45 on 15 Jan)
 const PRESET_HOURS = { ...data.sun.presets, sunset: data.sun.sunset };
 const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'predawn' });
-const weather = createWeather(scene);
+const weather = createWeather(scene, { drops: Q.rain });
 if (['rain', 'fog'].includes(params.get('w'))) weather.set(params.get('w'), true);
 
 /* --------------------------------- world --------------------------------- */
 const sky = buildSky(scene);
 const world = buildWorld(scene);
 const collider = createCollider(world);
-const pipeline = new Pipeline(renderer, scene, camera, { farCamera });
+const pipeline = new Pipeline(renderer, scene, camera, { farCamera, pixelBudget: Q.pixelBudget });
+console.info(`[quality] ${Q.tier} (${Q.why}): ${(Q.pixelBudget / 1e6).toFixed(1)} MP, shadows ${Q.shadow}, water ${Q.water}, ${Q.npcs} people, ${Q.birds} birds`);
 const perf = createPerf(renderer, { show: params.has('stats') });
 
 /* ------------------------------ the jogger ------------------------------ */
@@ -218,12 +220,41 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+/* ------------------------- quality fallback (plan §6) ------------------------- */
+// If frames stay over 22 ms for 5 s (after a 10 s settle, only while the tab is
+// visible), drop a tier for the parts that can change live -- pixel budget,
+// shadow map, crowd, mist -- and remember it for the session, so a reload builds
+// the lower tier throughout.
+let tier = Q.tier, slow = 0, settle = 10;
+function watchFrameTime(raw) {
+  if (document.hidden || raw > 0.5) { slow = 0; return; }
+  if (settle > 0) { settle -= raw; return; }
+  slow = raw > 0.022 ? slow + raw : Math.max(0, slow - raw * 0.5);
+  if (slow < 5) return;
+  slow = 0; settle = 10;
+  const next = lower(tier);
+  if (!next) return;
+  tier = next;
+  const T = TIERS[tier];
+  pipeline.pixelBudget = T.pixelBudget;
+  resize();
+  if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+  sun.shadow.mapSize.set(T.shadow, T.shadow);
+  world.crowd.setCap(T.npcs / Q.npcs);
+  world.mist.mesh.count = Math.min(world.mist.mesh.count, T.mist);
+  try { sessionStorage.setItem('sukhna-q', tier); } catch { /* optional */ }
+  hud.flash(`quality: ${tier} (frames were slow)`, 2600);
+  console.info(`[quality] fell back to ${tier}`);
+}
+
 /* --------------------------------- loop --------------------------------- */
 const clock = new THREE.Clock();
 let flatPanel = null;
 
 function frame() {
-  const dt = Math.min(clock.getDelta(), 1 / 20);
+  const raw = clock.getDelta();
+  const dt = Math.min(raw, 1 / 20);
+  watchFrameTime(raw);
   perf.begin();
   // playing whenever the card is away; pointer lock only steers the mouse (an embedded
   // browser may refuse it), and losing it (Esc) brings the pause card back
@@ -251,10 +282,11 @@ if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
 }
 
-window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, sound, updateTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, sound, updateTime, watchFrameTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({
+  tier: tier,
   ...perf.bench(() => pipeline.render(), n),
   internal: `${pipeline.size.x}x${pipeline.size.y}`,
   view: rig.mode === 'overview' ? 'overview' : `s ${nearestS(jogger.e, jogger.n).s.toFixed(0)}, az ${azimuthForYaw(rig.yaw).toFixed(0)}`,

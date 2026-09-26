@@ -153,7 +153,7 @@ function meshFrom(pos, col, idx, mat, name) {
 
 const ROAD_W = { secondary: 9, tertiary: 7, residential: 5, service: 3.5, unclassified: 5, secondary_link: 5, tertiary_link: 5, living_street: 4, track: 3, primary: 10 };
 
-export function buildCityside(scene) {
+export function buildCityside(scene, { dist = 2200 } = {}) {
   const group = new THREE.Group();
   group.name = 'cityside';
   const lod = new LodSet('city');
@@ -225,7 +225,7 @@ export function buildCityside(scene) {
     if (bld) { bld.castShadow = true; grp.add(bld); }
     setLayers(grp, LAYER.NEAR, LAYER.FAR);
     group.add(grp);
-    lod.add(new THREE.Vector3(c.e, 0, -c.n), [{ dist: 2200, obj: grp }], 'city');
+    lod.add(new THREE.Vector3(c.e, 0, -c.n), [{ dist, obj: grp }], 'city');
   }
   stats.chunks = chunks.size;
   scene.add(group);

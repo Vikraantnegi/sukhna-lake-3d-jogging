@@ -8,9 +8,18 @@ and the city side come from OpenStreetMap, the Shivalik hills beyond the far
 shore from elevation data, and the sun rises where and when it really does in
 mid-January.
 
-> **Status: Phase 4 of 8.** The real world, the jogger, the HUD and the controls are in.
-> See [`docs/plan.md`](docs/plan.md) for the plan and progress, and
-> [`docs/brief.md`](docs/brief.md) for the brief.
+You jog, or walk, or sit, among the morning crowd: joggers, walkers, a laughter
+club, yoga on the grass, Sikh uncles in turbans, a chai stall; the eight and the
+sculls on the water, egrets and parakeets. The clock runs from civil dawn
+(06:55) at 4×, through sunrise and golden hour to bright morning, then fades to
+the next morning. Rain and winter fog come on K. Every sound is synthesised in
+the browser; sit on a bench or the steps down to the water and a lo-fi loop
+plays.
+
+> **Status: all 8 phases built.** See [`docs/plan.md`](docs/plan.md) for the plan,
+> progress and every decision made along the way, [`docs/compare.md`](docs/compare.md)
+> for the game set against the reference photos, and [`docs/brief.md`](docs/brief.md)
+> for the brief.
 
 ## Run
 
@@ -18,14 +27,29 @@ Needs Node 18+.
 
 ```bash
 npm install
-npm run dev      # http://127.0.0.1:5178  (?stats=1 for draw calls and frame time)
+npm run dev      # http://127.0.0.1:5178
 npm run build    # production build into dist/
 npm run preview  # serve dist/ on http://127.0.0.1:5179
 ```
 
-Controls: WASD jog, Shift run, mouse look (click to capture the pointer), wheel
-zoom to first person, V auto-jog, P aerial overview, H hide the HUD, Esc pause.
-Dev keys: C coordinates, R reset, O / G toggle the ink and grade passes. `?flat=1` shows the map panel, `?stats=1` draw calls and frame time.
+**Controls:** WASD jog · Shift run · mouse look (click to capture the pointer, or
+drag) · wheel zoom down to first person · **E** interact (greet, a cutting chai,
+join the yoga, sit on a bench or the water steps, high five) · **V** auto-jog ·
+**T** time of day (pre-dawn, sunrise, golden hour, bright morning, sunset) ·
+**K** weather (clear, rain, fog) · **P** aerial overview · **M** sound · **H** hide
+the HUD · Esc pause. On touch: a left stick (push to the rim to run), drag to
+look, pinch to zoom, and buttons for E V T K P M H.
+
+**URL options:** `?q=low|med|high` quality tier (otherwise detected, with an
+automatic step down if frames stay slow) · `?t=predawn|sunrise|golden|bright|sunset`
+start time · `?w=rain|fog` start weather · `?stats=1` draw calls and frame time ·
+`?flat=1` the map panel · `?checks` run the self-checks in a production build
+(they always run in dev).
+
+**Dev keys:** C coordinates, R reset, O / G toggle the ink and grade passes.
+
+**Your own music:** audio files in `public/audio/` play while you sit, in place of
+the generated loop (dev server only; the folder is git-ignored and never built).
 The data pipeline is described in [`scripts/sukhna/README.md`](scripts/sukhna/README.md).
 
 ## Credits

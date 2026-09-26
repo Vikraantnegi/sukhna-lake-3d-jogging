@@ -14,9 +14,9 @@ import { LAYER, setLayers } from '../world/chunks.js';
  * ------------------------------------------------------------------ */
 
 export const WEATHERS = ['clear', 'rain', 'fog'];
-const DROPS = 1800, BOX = 34, TOP = 22;
+const BOX = 34, TOP = 22;
 
-export function createWeather(scene) {
+export function createWeather(scene, { drops: DROPS = 1800 } = {}) {
   const pos = new Float32Array(DROPS * 6);
   const drops = [];
   for (let i = 0; i < DROPS; i++) drops.push({ x: (Math.random() - 0.5) * BOX * 2, y: Math.random() * TOP, z: (Math.random() - 0.5) * BOX * 2, v: 8 + Math.random() * 3 });

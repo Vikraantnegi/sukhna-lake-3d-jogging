@@ -17,6 +17,7 @@ import { buildRowing } from './rowing.js';
 import { buildBirds } from './birds.js';
 import { buildMist } from './mist.js';
 import { buildSigns } from './signs.js';
+import { Q } from '../core/quality.js';
 
 /* ------------------------------------------------------------------ *
  * World assembly (plan §4, §6).
@@ -33,7 +34,7 @@ import { buildSigns } from './signs.js';
 
 export { walkY, DAM };
 
-export function buildWorld(scene, { npcs = 200, birdCount = 175, simpleWater = false, mistSheets = 140 } = {}) {
+export function buildWorld(scene, { npcs = Q.npcs, birdCount = Q.birds, simpleWater = Q.water === 'flat', mistSheets = Q.mist } = {}) {
   const t0 = performance.now();
   // the DEM as decoded (smoothed, upsampled), before any shaping
   const raw = { ...NEAR, h: NEAR.h.slice() };
@@ -65,9 +66,9 @@ export function buildWorld(scene, { npcs = 200, birdCount = 175, simpleWater = f
   const dam = buildDam(scene, { ground: groundAt });
   const band = buildShoreBand(scene, groundAt);
   const tVeg = performance.now();
-  const vegetation = buildVegetation(scene);
+  const vegetation = buildVegetation(scene, { density: Q.dressing, nearR: Q.treeNear, midR: Q.treeMid });
   const vegMs = Math.round(performance.now() - tVeg);
-  const city = buildCityside(scene);
+  const city = buildCityside(scene, { dist: Q.city });
   const landmarks = buildLandmarks(scene);
   const ridges = buildRidgeRing(scene, data.ridges);
   const tLife = performance.now();

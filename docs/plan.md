@@ -17,7 +17,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | 5 NPCs, interactions, rowing, birds | **done** | `build` | "Phase 5: NPCs, interactions, rowing, birds" |
 | 6 Time of day, haze, mist, weather, signage | **done** | `build` | "Phase 6: time of day, haze, mist, weather, signage" + "Phase 6 additions: conditions card, next-morning loop, lamps, sunset" |
 | 7 Sound | **done** | `build` | "Phase 7: sound, music on the water steps" + "Phase 7 fixes: seated framing and pose, steps, NPC fade, ink" |
-| 8 Quality tiers, verification, compare.md | **next** | `build` | — |
+| 8 Quality tiers, verification, compare.md | **done** | `build` | "Phase 8: quality tiers, verification, compare.md" |
 
 **Polish notes from the user's review (after Phase 4), folded into Phase 5:**
 - [x] The parapet zigzags at curves: now one continuous swept mesh along the curve (1 m steps, cobble texture every 2 m), capped at the water steps (`parapetGeometry` in `world/dam.js`).
@@ -98,6 +98,11 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Phase 6 additions: lamp glow** is a per-vertex `aGlow` attribute (1 on the lantern glass) and a warm emissive term chained onto the lamp material's shader, so it adds no draw calls.
 - **Phase 7: sound** (`core/sound.js`), all synthesised, no recordings. Buses: ambience (ducked under the music), rain (never ducked), music (low-pass + soft saturation, echo send), into a master with a fog muffle (low-pass 18 kHz → 5.5 kHz in fog) and a gentle compressor. Beds: water lapping (band-passed noise in slow swells, gain from the camera's distance to the real shoreline, panned to the water), wind and leaves (gusting), rain on the ground and rain on the water. One-shots, each placed with an equal-power PannerNode at its real position: birdsong by sun elevation (red-wattled lapwing calls before dawn; the dawn chorus of bulbuls, mynas, sparrows; crows later; a dusk chorus), parakeets screeching as their flock crosses, a rush of wings when a resting flock lifts off, the eight's catch splash and oarlock on every stroke and the cox every seventh (babble plus a bubble within 160 m: "Ready… row!", "Power ten!"...), footsteps on each gait half-cycle and breathing every other step (louder when tired or sprinting), a scooter horn from the city side every 25–60 s (half as often before dawn), the laughter club's bursts, and chatter from about one in three walkers you pass (formant babble plus a bubble: "Ki haal aa?", "Aaj thand bahut hai!"...). Audio starts on the Start click (browsers need a gesture); M toggles and is remembered; paused mutes.
 - **Phase 7: pointer lock** requests now swallow the embedded browser's rejection (it was logging an uncaught error per click).
+- **Phase 8: quality tiers** (`core/quality.js`): one table read by the modules at build time: pixel budget 4.6 / 2.8 / 1.3 MP, shadow map 2048 / 1024 / 1024, water shader / shader / flat, dressing 100 / 75 / 45% (trees, reeds; every other palm on low), NPCs 200 / 125 / 50, birds 175 / 100 / 35, trees near/mid 230–1 500 / 150–1 000 / 100–600 m, city detail 2 200 / 1 400 / 800 m, hills full / full / half resolution, mist banks 140 / 100 / 50, rain streaks 1 800 / 1 200 / 700. `?q=` wins; else a session fallback; else detection (touch or ≤ 4 GB → low, ≤ 4 cores → med, else high).
+- **Phase 8: the pixel budget may now render under native resolution** (down to 0.5×, upscaled by the final pass): at 1900×1320 the low tier renders 1367×950. Before, the budget only limited supersampling, so it never helped a slow device.
+- **Phase 8: run-time fallback.** After a 10 s settle, frames over 22 ms for 5 s (tab visible) drop one tier for what can change live — pixel budget, shadow map, crowd (`crowd.setCap`), mist — and store the tier in sessionStorage, so a reload builds it throughout. Tested with synthetic frame times: high → med → low.
+- **Phase 8: the city detail distance** stays at 2.2 km on high (the Phase 3 decision), not the §6 table's 1.2 km; med and low scale down from it.
+- **Phase 8: verification spots and the r1 mismatch.** The spots are in docs/compare.md. r1 shows the sun rising over the lake at the garden end, but there the lake lies NNW and the January sun rises at 114° (ESE), behind the camera; the game keeps the real sun and frames r1 along the walk.
 - **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
@@ -146,6 +151,11 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
   - `people/interact.js`: `steps` sitting, `seated`, `say(who, text, secs, delay)` (used by the sound for chatter and the cox), `benchView()` returns `{ yaw, pitch?, boom? }`. `core/camera.js` honours `pitch` and `boom`.
   - `world.dam.waterStairs[i].treads` = [{ d, y, d0, d1 }]; `world.birds.parakeets`, `world.birds.flocks`.
   - `vite.config.js` `localTracks` plugin; `public/audio/README.md`.
+- **State after Phase 8 (the end of the run):**
+  - `core/quality.js` (`Q`, `TIERS`, `lower`); `main.js` `watchFrameTime` (the fallback; on `__scene` for tests); `__bench` reports the tier.
+  - docs/compare.md (reference photos vs the game, the numbers, the camera spots) and docs/shots/ (29 verification shots plus 3 seated views).
+  - `.claude/launch.json` has `dev` (5178) and `preview` (5179).
+- **Measured at the end of Phase 8** (RTX 4080 SUPER, 1900×1320 window, `__bench(150)`), worst views: high 268–384 calls / 1.0–1.26 ms at 2573×1787; med 255–321 / 1.0–1.17 ms at 2007×1394; low 248–307 / 0.9–1.0 ms at 1367×950 (targets: high ≤ 900, low ≤ 350). Production build: `npm run build` (index 181 kB, three 710 kB, data 469 kB before gzip; 73 / 183 / 206 kB gzipped) and `npm run preview` load and run with no console errors; `?checks` passes all six checks there, at low too (50 people, 35 birds, 11 851 trees, world built in 1.35 s).
 - **Measured at the end of Phase 7** (same GPU, 800×555 pane): seated on the steps at golden hour, 288 calls / 1.23 ms. The audio graph costs no draw calls; the beds are 6 looping noise sources.
 - **Measured at the end of Phase 6** (same GPU; spawn looking at the sunrise, 1400×800): pre-dawn 297 calls, sunrise/golden 375, bright 383; rain on the walk 377 calls / 1.03 ms; fog 204 calls / 0.88 ms (far pass skipped).
 - **Measured at the end of Phase 5** (same GPU, 1900×1320): spawn 381 calls / 1.22 M tris / 1.24 ms; laughter-club stretch along the walk 376 / 1.05 M / 1.28 ms; mid-walk across 279 / 1.32 M / 1.08 ms; overview 272 / 1.29 M / 1.08 ms.
@@ -157,6 +167,46 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
   - `?stats=1` live readout; `?flat=1` map panel. Keys: drag to look, WASD (Shift faster), P overview, O ink, G grade, R reset.
 - **Measured at the end of Phase 2 (flat)** (RTX 4080 SUPER, ANGLE/D3D11, window 1900×1320, internal 2573×1787), `__bench(200)`: spawn 52 calls, 96k tris, 0.47 ms; mid-walk looking across the lake 69 calls, 109k tris, 0.28 ms; P overview 83 calls, 141k tris, 0.38 ms.
 - **Measured at the end of Phase 3** (same GPU, 1900×1320 window), `__bench(150)`: spawn 196 calls / 0.94 M tris / 0.55 ms; bend looking across the lake 168 / 0.95 M / 0.52 ms; mid-walk across 135 / 0.98 M / 0.56 ms; along the walk 159 / 0.83 M / 0.53 ms. Start-up world build ~0.7–0.8 s (shaping ~0.5 s).
+
+## Final summary (end of Phase 8)
+
+**What was built.** Sukhna Lake at its real shape and 1:1 scale, as a three.js cel-shaded jog:
+- **The world:** the 2.5 km dam promenade on the real OSM curve, the real lake and its islands, the city side, and the Shivaliks from DEM terrain to 45 km.
+- **The morning:** the real sun on 15 Jan 2027, running at 4× from civil dawn, with the look keyed to sun elevation. Mist, rain and fog; lamps that follow the light. A loop to the next morning, and a sunset preset.
+- **Life:** a 200-strong part-instanced crowd with stationary groups, a jogger with stamina, auto-jog and E interactions, the eight and sculls on real-lake lanes, and 175 birds.
+- **Signs and sound:** trilingual signs, and WebAudio sound synthesised in code, with a generated lo-fi loop when you sit on a bench or the water steps.
+- **Around the game:** quality tiers with a run-time fallback, touch controls, and six self-checks.
+
+**Files** (≈ 9 400 lines of source):
+- `src/core`: camera, hud, jogger, outline, palette, perf, post, quality, sky, sound, sun, textures, tod, toon, touch, util, weather.
+- `src/people`: body, crowd, gait, interact, types.
+- `src/world`: birds, checks, chunks, cityside, collide, dam, flat, frame, index, lake, landmarks, mist, patches, rowing, shore, signs, terrain, vegetation.
+- `src/main.js`, plus the data pipeline in `scripts/sukhna/` and the generated data in `src/data/`.
+
+**Real data or photo-based:**
+- **From OSM:** the promenade curve and length, the lake polygon and islands, the shoreline the dam meets, the city footprints, roads, paths, pitches and golf course, the six real city-side stairs, landmark positions, and the lake's names in three scripts.
+- **From the DEM:** the terrain and the far ridgelines.
+- **From NOAA:** the sun's times and positions.
+- **From the photos:** the colours and forms of the walk, parapet, embankment, palms, benches, pedal boats, launch, gateway and plaza pavers.
+
+**Stylised or invented (flagged in code):** the lamps, benches, bins and 100 m markers; the three water steps (OSM has none); the regulator's gates; the gateway frame; the chai stall and cart; the pavilions; the generic seated statue; the swan boats; the city buildings (Chandigarh modernist in spirit, not copies); the crowd, birds and rowing; all sound and music.
+
+**Known limitations:**
+- No water reflections.
+- The embankment is narrow where the real shoreline comes close to the parapet (r2 and r8 show a wider slope at their spots).
+- The garden end lacks r1's gazebo, flower beds and fence.
+- Forest areas read as flat dark patches from the air.
+- The chatter and cox calls are babble with the words in bubbles; synthesised speech isn't intelligible.
+- Sunset reuses the dawn palette.
+- Frame time was measured on one fast GPU only; the tiers are sized from the budgets, not from low-end measurements.
+
+**Next steps, if wanted:**
+- Planar or screen-space treeline reflections on the high tier.
+- A wider embankment slope where the photos show one (a shoreline offset for the look only, kept out of shoreCheck).
+- r1's garden furniture at the east end.
+- Low-end device measurements for the tiers.
+- A dusk palette distinct from dawn.
+- CC0 recordings for birds or ambience, dropped in and listed in THIRD_PARTY_LICENSES.md.
 
 ## Working rules
 

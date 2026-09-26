@@ -263,7 +263,8 @@ export class Pipeline {
     const dpr = window.devicePixelRatio || 1;
     let scale = this.forceScale || (dpr < 1.5 ? 1.5 : Math.min(dpr, 2));
     if (w * h * scale * scale > this.pixelBudget) {
-      scale = Math.max(1, Math.sqrt(this.pixelBudget / (w * h)));
+      // over budget: supersample less, or (the low tier) render under native and upscale
+      scale = Math.max(0.5, Math.sqrt(this.pixelBudget / (w * h)));
     }
     this.scale = scale;
     const rw = Math.max(2, Math.floor(w * scale));
