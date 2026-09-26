@@ -50,6 +50,18 @@ export const PAL = {
   mortar: 0x6f6b63,
   pitching: 0xa5a39a,      // stone pitching on the embankment
   drawdown: 0xd8cdb5,      // cream boulders at the waterline
+  drawdownWet: 0xa89f88,   // the damp line at the water's edge
+  stoneDark: 0x7d7a72,
+  concrete: 0xc9c4b8,      // Chandigarh béton brut, weathered
+  concreteDark: 0x9e988c,
+  lampPole: 0x3e4a46,
+  benchFrame: 0x2f2f33,
+  reed: 0x8a8a4e,
+  reedDry: 0xb3a36a,
+  palmFrond: 0x5f7f3a,
+  path: 0xc2b49a,          // footways: compacted earth and pavers
+  road: 0x6f7079,
+  roadEdge: 0x8b8b90,
 
   // --- gardens and plaza (r1) ---
   paverRed: 0xc77d5e,

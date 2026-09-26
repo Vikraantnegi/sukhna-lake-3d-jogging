@@ -104,6 +104,45 @@ export function inLake(e, n) {
   return inRing(e, n, OUTER) && !INNER.some((r) => inRing(e, n, r));
 }
 
+/** Every shoreline edge (outer ring and islands) as [ax, ay, bx, by]. */
+const EDGES = [];
+for (const ring of [OUTER, ...INNER]) {
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) EDGES.push([ring[j][0], ring[j][1], ring[i][0], ring[i][1]]);
+}
+export const SHORE_EDGES = EDGES;
+
+/**
+ * Signed distance (m) from (e, n) to the real shoreline: negative on the
+ * water, positive on land.  Beyond `cap` metres from the lake's bounding
+ * box it just returns `cap`, which is all the callers need.
+ */
+export function shoreDist(e, n, cap = 200) {
+  if (e < OB[0] - cap || e > OB[2] + cap || n < OB[1] - cap || n > OB[3] + cap) return cap;
+  let best = Infinity;
+  for (const [ax, ay, bx, by] of EDGES) {
+    const dx = bx - ax, dy = by - ay, l2 = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((e - ax) * dx + (n - ay) * dy) / l2));
+    const d = (ax + dx * t - e) ** 2 + (ay + dy * t - n) ** 2;
+    if (d < best) best = d;
+  }
+  best = Math.sqrt(best);
+  return inLake(e, n) ? -best : Math.min(best, cap);
+}
+
+/** Distance along the ray (e, n) + t (de, dn) to the first shoreline crossing, or NaN within maxT. */
+export function rayToShore(e, n, de, dn, maxT = 60) {
+  let best = NaN;
+  for (const [ax, ay, bx, by] of EDGES) {
+    const sx = bx - ax, sy = by - ay;
+    const den = de * sy - dn * sx;
+    if (Math.abs(den) < 1e-9) continue;
+    const t = ((ax - e) * sy - (ay - n) * sx) / den;
+    const u = ((ax - e) * dn - (ay - n) * de) / den;
+    if (t > 0 && t <= maxT && u >= 0 && u <= 1 && !(t >= best)) best = t;
+  }
+  return best;
+}
+
 /** The lake's centroid (area-weighted), for the overview camera. */
 export const LAKE_CENTRE = (() => {
   let a = 0, cx = 0, cy = 0;

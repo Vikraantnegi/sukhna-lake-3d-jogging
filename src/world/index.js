@@ -1,119 +1,79 @@
 import * as THREE from 'three';
-import { PAL } from '../core/palette.js';
-import { cel } from '../core/toon.js';
-import { data, L, spineAt, nearestS, inLake } from './frame.js';
-import { buildTerrain, groundAt } from './terrain.js';
+import { nearestS, inLake, shoreDist } from './frame.js';
+import { NEAR, groundGrid, groundAt, setOverlay, setPatches, sampleNear, buildTerrain } from './terrain.js';
+import { detectPatches, buildPatchGrids } from './patches.js';
+import { gradeGrid, buildShoreBand } from './shore.js';
+import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM } from './dam.js';
 import { buildLake } from './lake.js';
-import { LAYER, setLayers } from './chunks.js';
+import { runChecks, shoreCheck } from './checks.js';
 
 /* ------------------------------------------------------------------ *
- * World assembly.
+ * World assembly (plan §4, §6).
  *
- * Phase 2 (flat scaffold): the real DEM terrain, the real lake, the walk
- * as a plain ribbon at the planned crest height, and pins on the real
- * landmarks and stairs.  Phase 3 replaces the ribbon and pins with the
- * promenade, the dam and the landmarks themselves.
+ * The order matters, because every layer is built on the one before and
+ * the ground function has to agree with every mesh:
+ *
+ *   1. the dam's cross-section is measured against the DEM;
+ *   2. the near grid is graded to the real shoreline, outside the dam;
+ *   3. the grid is cut under the dam, and the dam becomes the overlay
+ *      `groundAt` consults first;
+ *   4. only then are meshes built.
  * ------------------------------------------------------------------ */
 
-/** Planned height of the walk above the water on the bund (plan §4, stylised). */
-export const WALK_Y = 2.5;
-const WALK_HALF = 4;
-
-/* The walk's height along s: at least the bund crest, and never under the
- * real ground (at the west end the walk runs up onto the city's higher
- * ground).  The DEM is sampled every 4 m either side of the centreline
- * and smoothed over +-40 m, so the walk rises and falls gently. */
-const WALK_PROFILE = (() => {
-  const step = 4, n = Math.ceil(L / step) + 1, raw = new Float32Array(n);
-  for (let k = 0; k < n; k++) {
-    const f = spineAt(k * step);
-    let h = -Infinity;
-    for (const o of [-6, 0, 6]) h = Math.max(h, groundAt(f.e + f.ne * o, f.n + f.nn * o));
-    raw[k] = h + 0.3;
-  }
-  const out = new Float32Array(n), w = 10;
-  for (let k = 0; k < n; k++) {
-    let a = 0, c = 0;
-    for (let d = -w; d <= w; d++) { const q = k + d; if (q >= 0 && q < n) { a += raw[q]; c++; } }
-    out[k] = Math.max(WALK_Y, a / c);
-  }
-  return { step, h: out };
-})();
-/** Height of the walk surface at arc length s. */
-export function walkY(s) {
-  const f = THREE.MathUtils.clamp(s / WALK_PROFILE.step, 0, WALK_PROFILE.h.length - 1);
-  const i = Math.min(WALK_PROFILE.h.length - 2, Math.floor(f)), a = f - i;
-  return WALK_PROFILE.h[i] * (1 - a) + WALK_PROFILE.h[i + 1] * a;
-}
-
-function buildWalkRibbon() {
-  // SCAFFOLD (Phase 2): the smoothed OSM centreline, 8 m wide, at WALK_Y
-  const pos = [], idx = [];
-  const n = Math.ceil(L / 4);
-  for (let k = 0; k <= n; k++) {
-    const s = (k / n) * L, f = spineAt(s), y = walkY(s);
-    for (const side of [-1, 1]) {
-      const e = f.e + f.ne * WALK_HALF * side, nn = f.n + f.nn * WALK_HALF * side;
-      pos.push(e, y, -nn);
-    }
-    if (k) { const a = (k - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geo.setIndex(idx);
-  geo.computeVertexNormals();
-  // make sure it faces up whichever way the strip was wound
-  if (geo.attributes.normal.getY(0) < 0) { idx.reverse(); geo.setIndex(idx); geo.computeVertexNormals(); }
-  geo.computeBoundingSphere();
-  const m = new THREE.Mesh(geo, cel({ color: PAL.asphalt, side: THREE.DoubleSide }));
-  m.name = 'walkRibbon';
-  m.receiveShadow = true;
-  return setLayers(m, LAYER.NEAR, LAYER.FAR);
-}
-
-const PIN_COLOUR = {
-  garden: 0x3f9a4f, statue: 0xf2c230, regulator: 0x3f7fd0, bridge: 0x3f7fd0, viewpoint: 0xd84a6a,
-  boat_rental: 0xf08a2e, plaza: 0xd23b35, club: 0x8f6fb5, golf: 0x8fb35a, information: 0x2f8fcf,
-};
-function buildPins() {
-  // SCAFFOLD (Phase 2): a cone on every real landmark and at the top of every real stair
-  const items = [
-    ...data.landmarks.map((l) => ({ at: l.at, c: PIN_COLOUR[l.kind] ?? 0x9a9aa0, h: PIN_COLOUR[l.kind] ? 14 : 7 })),
-    ...data.steps.map((s) => ({ at: s.top, c: 0x322e3b, h: 9 })),
-  ];
-  const geo = new THREE.ConeGeometry(1.4, 1, 8);
-  geo.rotateX(Math.PI);
-  geo.translate(0, 0.5, 0);
-  const mesh = new THREE.InstancedMesh(geo, cel({ color: 0xffffff }), items.length);
-  const m = new THREE.Matrix4(), col = new THREE.Color();
-  items.forEach((it, i) => {
-    const ns = nearestS(it.at[0], it.at[1]);
-    const y = Math.max(groundAt(it.at[0], it.at[1]), ns.d < WALK_HALF ? walkY(ns.s) : 0);
-    m.makeScale(1, it.h, 1).setPosition(it.at[0], y, -it.at[1]);
-    mesh.setMatrixAt(i, m);
-    mesh.setColorAt(i, col.set(it.c));
-  });
-  mesh.computeBoundingSphere();
-  mesh.name = 'pins';
-  mesh.castShadow = true;
-  return setLayers(mesh, LAYER.NEAR, LAYER.FAR);
-}
+export { walkY, DAM };
 
 export function buildWorld(scene) {
+  const t0 = performance.now();
+  // the DEM as decoded (smoothed, upsampled), before any shaping
+  const raw = { ...NEAR, h: NEAR.h.slice() };
+  const sampleRaw = (e, n) => {
+    const fx = (e - raw.rect[0]) / raw.step, fy = (n - raw.rect[1]) / raw.step;
+    const i = Math.max(0, Math.min(raw.nx - 2, Math.floor(fx))), j = Math.max(0, Math.min(raw.ny - 2, Math.floor(fy)));
+    const ax = fx - i, ay = fy - j, k = j * raw.nx + i;
+    return (raw.h[k] * (1 - ax) + raw.h[k + 1] * ax) * (1 - ay) + (raw.h[k + raw.nx] * (1 - ax) + raw.h[k + raw.nx + 1] * ax) * ay;
+  };
+  buildProfile(groundGrid);
+  const shaped = { shore: gradeGrid(NEAR, inFootprint) };
+  shaped.dam = cutTerrain(NEAR);
+  // detail patches where the shoreline is too narrow for the 10 m grid (world/patches.js)
+  setOverlay(damAt);
+  let patchRects = detectPatches();
+  setPatches(buildPatchGrids(patchRects, sampleRaw, sampleNear, inFootprint));
+  // one refinement pass: wherever the shoreline still is not held, patch there too
+  const first = shoreCheck();
+  if (first.fails.length) {
+    patchRects = detectPatches(first.fails.map(([, e, n]) => [e, n]));
+    setPatches(buildPatchGrids(patchRects, sampleRaw, sampleNear, inFootprint));
+  }
+  shaped.patches = patchRects.length;
+  shaped.refined = first.fails.length;
+  const tShape = performance.now() - t0;
+
   const terrain = buildTerrain(scene);
   const lake = buildLake(scene);
-  const walk = buildWalkRibbon();
-  const pins = buildPins();
-  scene.add(walk, pins);
+  const dam = buildDam(scene, { ground: groundAt });
+  const band = buildShoreBand(scene, groundAt);
+
+  const lods = [terrain.lod, dam.lod];
+  const timing = { shapeMs: Math.round(tShape), buildMs: Math.round(performance.now() - t0) };
+  console.info(`[world] shaped ${shaped.shore} shore + ${shaped.dam} dam grid nodes, ${shaped.patches} detail patches (${shaped.refined} spots refined); built in ${timing.buildMs} ms`, dam.stats);
+
+  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks() : [];
+  window.__checks = checks;
 
   return {
+    checks,
     terrain,
     lake,
-    lods: [terrain.lod],
-    /** Standing height at (e, n): the walk where you are on it, else the ground (never under the water). */
+    dam,
+    band,
+    lods,
+    timing,
+    patches: patchRects,
+    /** Console access to the ground functions (dev). */
+    debug: { groundGrid, groundAt, damAt, inFootprint, shoreDist, nearestS, inLake, NEAR },
+    /** Standing height at (e, n): the dam where you are on it, else the ground (never under the water). */
     heightAt(e, n) {
-      const ns = nearestS(e, n);
-      if (ns.d < WALK_HALF) return walkY(ns.s);
       const g = groundAt(e, n);
       return inLake(e, n) ? Math.max(0, g) : g;
     },

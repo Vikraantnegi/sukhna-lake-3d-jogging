@@ -109,3 +109,31 @@ export const cloudTex = () =>
       c.globalCompositeOperation = 'source-over';
     }, { srgb: false })
   );
+
+/* ------------------------------ Sukhna ------------------------------ */
+
+/**
+ * The dam parapet: rounded grey river cobbles in dark mortar (photo r2, r8).
+ * Low frequency on purpose -- stones about 20 cm across on a 2 m block.
+ */
+export const cobbleTex = () =>
+  cached('cobbleTex', () =>
+    make(256, 64, (c, w, h) => {
+      c.fillStyle = '#6f6b63';
+      c.fillRect(0, 0, w, h);
+      let seed = 7;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const tones = ['#9a978d', '#b9b3a4', '#a8a397', '#8f8b82', '#c2bcae'];
+      for (let row = 0; row < 4; row++) {
+        let x = -rnd() * 10;
+        while (x < w + 10) {
+          const rw = 11 + rnd() * 9, rh = 6 + rnd() * 3;
+          c.fillStyle = tones[Math.floor(rnd() * tones.length)];
+          c.beginPath();
+          c.ellipse(x + rw / 2, row * 16 + 8 + (rnd() - 0.5) * 3, rw / 2, rh, 0, 0, Math.PI * 2);
+          c.fill();
+          x += rw + 1.5 + rnd() * 2;
+        }
+      }
+    }, { repeat: [1, 1] })
+  );

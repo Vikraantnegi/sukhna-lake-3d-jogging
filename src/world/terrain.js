@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import terrainData from '../data/sukhna.terrain.json';
 import { cel } from '../core/toon.js';
 import { PAL } from '../core/palette.js';
-import { inLake } from './frame.js';
 import { LodSet, LAYER, setLayers } from './chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -17,9 +16,10 @@ import { LodSet, LAYER, setLayers } from './chunks.js';
  * the near grid is (their vertices under it are sunk a few metres, so the
  * finer grid always wins).
  *
- * Phase 2 scaffold: the lake bed is simply sunk 2.5 m under the water
- * wherever the lake polygon is.  Phase 3 replaces that with the
- * procedural dam, shore and lake-bed overlays.
+ * The near grid is shaped before it is meshed (world/index.js): graded to
+ * the real shoreline (world/shore.js) and cut under the dam (world/dam.js).
+ * `groundAt` then asks the dam first (`setOverlay`) and the grid second, so
+ * the surface drawn is the surface walked.
  * ------------------------------------------------------------------ */
 
 function decodeGrid(g, unit) {
@@ -65,17 +65,36 @@ function smoothGrid(g, passes) {
   return g;
 }
 
-export const NEAR = smoothGrid(decodeGrid(terrainData.near, terrainData.unit), 3);
+/**
+ * Upsample a grid 2x (bilinear).  No new information -- the DEM is ~30 m --
+ * but the shoreline grading and the dam cut need finer vertices than 20 m
+ * to put the water's edge where OSM says it is (see world/shore.js).
+ */
+function upsample(g) {
+  const nx = g.nx * 2 - 1, ny = g.ny * 2 - 1, h = new Float32Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) {
+    const i0 = i >> 1, j0 = j >> 1, i1 = Math.min(g.nx - 1, i0 + (i & 1)), j1 = Math.min(g.ny - 1, j0 + (j & 1));
+    h[j * nx + i] = (g.h[j0 * g.nx + i0] + g.h[j0 * g.nx + i1] + g.h[j1 * g.nx + i0] + g.h[j1 * g.nx + i1]) / 4;
+  }
+  return { rect: g.rect, step: g.step / 2, nx, ny, h };
+}
+
+export const NEAR = upsample(smoothGrid(decodeGrid(terrainData.near, terrainData.unit), 3));
 export const HILLS = smoothGrid(decodeGrid(terrainData.hills, terrainData.unit), 1);
 export const COVER = decodeCover(terrainData.cover);
 
-/** Bilinear height from a grid at (e, n); NaN outside it. */
+/**
+ * Height from a grid at (e, n), interpolated over the same two triangles
+ * per cell the mesh is drawn with, so the ground walked on and checked is
+ * exactly the ground drawn (at full LOD).  NaN outside the grid.
+ */
 function sample(g, e, n) {
   const fx = (e - g.rect[0]) / g.step, fy = (n - g.rect[1]) / g.step;
   const i = Math.floor(fx), j = Math.floor(fy);
   if (i < 0 || j < 0 || i >= g.nx - 1 || j >= g.ny - 1) return NaN;
   const ax = fx - i, ay = fy - j, k = j * g.nx + i, h = g.h;
-  return (h[k] * (1 - ax) + h[k + 1] * ax) * (1 - ay) + (h[k + g.nx] * (1 - ax) + h[k + g.nx + 1] * ax) * ay;
+  const a = h[k], b = h[k + 1], d = h[k + g.nx], f = h[k + g.nx + 1];
+  return ax + ay <= 1 ? a + (b - a) * ax + (d - a) * ay : f + (d - f) * (1 - ax) + (b - f) * (1 - ay);
 }
 
 /** Land-cover class name at (e, n). */
@@ -85,14 +104,37 @@ export function coverAt(e, n) {
   return COVER.classes[COVER.cells[j * COVER.nx + i]];
 }
 
-const LAKE_BED = -2.5;
+let PATCHES = [];
+/** Install the detail patches (world/patches.js): fine grids that win over the near grid. */
+export function setPatches(list) { PATCHES = list; }
+/** The near grid as it stands, ignoring patches (for building the patches' borders). */
+export const sampleNear = (e, n) => sample(NEAR, e, n);
+
+/** The terrain grids alone (m above the lake): a detail patch, else the near grid, else the hill grid. */
+export function groundGrid(e, n) {
+  for (const p of PATCHES) {
+    if (e >= p.rect[0] && e <= p.rect[2] && n >= p.rect[1] && n <= p.rect[3]) {
+      const v = sample(p, Math.min(e, p.rect[2] - 1e-6), Math.min(n, p.rect[3] - 1e-6));
+      if (Number.isFinite(v)) return v;
+    }
+  }
+  const h = sample(NEAR, e, n);
+  if (Number.isFinite(h)) return h;
+  const g = sample(HILLS, e, n);
+  return Number.isFinite(g) ? g : 0;
+}
+
+let overlay = null;
+/** Install a surface that overrides the grids where it returns a number (the dam). */
+export function setOverlay(fn) { overlay = fn; }
 
 /** Ground height (m above the lake) at (e, n): the surface drawn is the surface walked. */
 export function groundAt(e, n) {
-  let h = sample(NEAR, e, n);
-  if (Number.isFinite(h)) return inLake(e, n) ? Math.min(h, LAKE_BED) : h;
-  h = sample(HILLS, e, n);
-  return Number.isFinite(h) ? h : 0;
+  if (overlay) {
+    const o = overlay(e, n);
+    if (Number.isFinite(o)) return o;
+  }
+  return groundGrid(e, n);
 }
 
 /* ------------------------------- colour ------------------------------- */
@@ -104,16 +146,27 @@ const COVER_COLOR = {
 };
 const _c = new THREE.Color();
 const _c2 = new THREE.Color();
+const _c3 = new THREE.Color();
 
+/**
+ * Unclassified land, the same rule for both grids so they meet without a
+ * seam: dry winter grass on the plains, scrub forest as the ground rises
+ * into the Shivaliks, barer on steep faces and greyer high up.
+ */
+function landColour(h, slope, out) {
+  out.set(PAL.groundDry);
+  const hill = THREE.MathUtils.smoothstep(h, 8, 40);
+  if (hill > 0) out.lerp(_c2.set(PAL.leafDeep).lerp(_c3.set(PAL.scrub), THREE.MathUtils.clamp(slope * 1.4, 0, 0.8)), hill);
+  if (h > 500) out.lerp(_c2.set(PAL.ridgeRock), THREE.MathUtils.clamp((h - 500) / 900, 0, 0.5));
+  return out;
+}
 function nearColour(e, n, h, slope, out) {
-  return out.set(COVER_COLOR[coverAt(e, n)] ?? PAL.groundDry);
+  const cls = coverAt(e, n);
+  if (cls === 'land') return landColour(h, slope, out);
+  return out.set(COVER_COLOR[cls] ?? PAL.groundDry);
 }
 function hillColour(e, n, h, slope, out) {
-  // the Shivalik foothills: scrub forest, barer on steep ground, greyer high up
-  out.set(PAL.leafDeep).lerp(_c2.set(PAL.scrub), THREE.MathUtils.clamp(slope * 1.4, 0, 0.8));
-  if (h > 500) out.lerp(_c2.set(PAL.ridgeRock), THREE.MathUtils.clamp((h - 500) / 900, 0, 0.5));
-  if (h < 15) out.lerp(_c2.set(PAL.groundDry), 0.6); // the plains
-  return out;
+  return landColour(h, slope, out);
 }
 
 /* ------------------------------- meshes ------------------------------- */
@@ -220,11 +273,27 @@ export function buildTerrain(scene) {
   const nr = NEAR.rect;
   const insideNear = (e, n, pad = 0) => e > nr[0] + pad && e < nr[2] - pad && n > nr[1] + pad && n < nr[3] - pad;
 
-  // the lake basin: 1 km chunks, full detail to 1.8 km
-  addGrid(NEAR, 50, [{ dist: 1800, stride: 1 }, { dist: 1e9, stride: 2 }], {
-    heightFn: (e, n, h) => (inLake(e, n) ? Math.min(h, LAKE_BED) : h),
+  // the lake basin: 1 km chunks (100 cells of 10 m), full detail to 1.2 km, then 20 m, then 40 m,
+  // with a hole under every detail patch (their rectangles are snapped to 40 m, so every LOD's cells align)
+  const inPatch = (e, n) => PATCHES.some((p) => e > p.rect[0] && e < p.rect[2] && n > p.rect[1] && n < p.rect[3]);
+  addGrid(NEAR, 100, [{ dist: 1200, stride: 1 }, { dist: 2600, stride: 2 }, { dist: 1e9, stride: 4 }], {
+    heightFn: (e, n, h) => h,
     colourFn: nearColour,
+    skip: inPatch,
   }, [LAYER.NEAR, LAYER.FAR], 'near');
+
+  // the detail patches themselves, one mesh each, drawn at every distance
+  for (const p of PATCHES) {
+    const geo = chunkGeometry(p, 0, 0, p.nx - 1, p.ny - 1, 1, { heightFn: (e, n, h) => h, colourFn: nearColour });
+    const m = new THREE.Mesh(geo, mat);
+    m.name = 'terrainPatch';
+    m.receiveShadow = true;
+    m.userData.noOutline = true;
+    setLayers(m, LAYER.NEAR, LAYER.FAR);
+    group.add(m);
+    stats.patches = (stats.patches || 0) + 1;
+    stats.tris += geo.index.count / 3;
+  }
 
   // the hills: 3.6 km chunks, full detail to 9 km, with a hole under the basin
   addGrid(HILLS, 30, [{ dist: 9000, stride: 1 }, { dist: 1e9, stride: 2 }], {
