@@ -38,7 +38,10 @@ export const DAM = { half: 4, parIn: 4.0, parOut: 5.2, parH: 0.45, verge: 6.5, c
 const STEP = 2;
 const SECTOR = 100;
 /** Where the stylised steps down to the water go (s, m).  Not in OSM: flagged generic. */
-export const WATER_STEPS = [820, 1480, 2130];
+// All three on the 2.5 m crest of the bund.  (s 2130 was dropped after the Phase 7 review:
+// the walk there is on the higher ground of the west end, ~6 m over the water, and its
+// flight came out as a 39-tread ladder with the shore band over its foot.)
+export const WATER_STEPS = [240, 820, 1480];
 const WATER_STEP_HALF = 1.6;
 /** Every bench on the walk, { s, d }: the crowd sits people on them, the jogger can sit too. */
 export const BENCHES = [];
@@ -346,6 +349,19 @@ function lampGlowMaterial() {
   mat.userData.lampGlow = u.uLampGlow;
   return mat;
 }
+/**
+ * Where to sit on a flight of water steps: the lowest tread that is dry
+ * (top ≥ 12 cm over the lake) and that you may stand on (clear of the
+ * collider's 0.5 m keep-off-the-water margin), and the tread below it for the
+ * feet.  Shared by the E interaction and seatCheck, so they always agree.
+ */
+export function stepSeat(st) {
+  const f = spineAt(st.s);
+  const ok = st.treads.filter((q) => q.y > 0.12 && shoreDist(f.e + f.ne * q.d, f.n + f.nn * q.d, 5) >= 0.55);
+  const seat = ok[ok.length - 1];
+  if (!seat) return null;
+  return { seat, foot: st.treads[st.treads.indexOf(seat) + 1] || seat, f };
+}
 /** The bench seat's top, over the ground it stands on (the seat slab: 0.45 m centre, 6 cm thick). */
 export const BENCH_SEAT = 0.48;
 /** Red-brown wooden bench on a dark frame (photo r1), facing -z. */
@@ -599,7 +615,8 @@ export function buildDam(scene, { ground }) {
     const k = idx(st.s), yW = walkY(st.s), toe = PROF.dToe[k];
     return { s: st.s, from: { d: -DAM.verge + 0.2, y: yW }, to: { d: -toe, y: yW - (toe - DAM.verge) * DAM.face }, width: 3, ref: st.ref };
   });
-  const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s))).map((s) => ({
+  // a flight only where the walk is on the crest (≤ 3.2 m over the water) and the lake is there
+  const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s)) && walkY(s) <= 3.2).map((s) => ({
     s, from: { d: DAM.parOut, y: walkY(s) }, to: { d: shoreOffset(s) + 0.6, y: -0.25 }, width: WATER_STEP_HALF * 2,
     // a paved landing through the parapet, at walk level, between the cheek walls
     landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 },

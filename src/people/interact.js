@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { spineAt, nearestS } from '../world/frame.js';
-import { walkY, BENCHES, BENCH_SEAT } from '../world/dam.js';
+import { walkY, BENCHES, BENCH_SEAT, stepSeat as stairSeat } from '../world/dam.js';
 import { seatPose, stepSeat, applySeat } from './body.js';
 
 /* ------------------------------------------------------------------ *
@@ -54,9 +54,9 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
         const last = st.treads[st.treads.length - 1].d;
         if (Math.abs(w.s - st.s) < st.width / 2 + 0.6 && d > st.landing.d0 - 1.2 && d < last + 0.5) {
           // the lowest tread that is still dry (its top at least 12 cm over the lake)
-          const dry = st.treads.filter((tr) => tr.y > 0.12);
-          const seat = dry[dry.length - 1], foot = st.treads[st.treads.indexOf(seat) + 1] || seat;
-          if (seat) return { kind: 'steps', label: 'sit on the steps', st, seat, foot, f: spineAt(st.s) };
+          // the lowest tread that is dry and that you may stand on (world/dam.js stepSeat)
+          const pick = stairSeat(st);
+          if (pick) return { kind: 'steps', label: 'sit on the steps', st, seat: pick.seat, foot: pick.foot, f: pick.f };
         }
       }
     }

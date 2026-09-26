@@ -92,6 +92,9 @@ export function createCollider(world) {
     /** Move from (e, n) by (de, dn), sliding along whatever blocks the step. */
     move(e, n, de, dn) {
       if (free(e + de, n + dn)) return [e + de, n + dn, false];
+      // standing somewhere not free (the water's edge of a flight, after a teleport):
+      // any step away from the water is allowed, so nobody is ever trapped
+      if (!free(e, n) && shoreDist(e + de, n + dn, 5) > shoreDist(e, n, 5) && !inBuilding(e + de, n + dn)) return [e + de, n + dn, false];
       if (free(e + de, n)) return [e + de, n, true];
       if (free(e, n + dn)) return [e, n + dn, true];
       return [e, n, true];
