@@ -1,6 +1,36 @@
 # Sukhna: a sunrise jog around Sukhna Lake (plan)
 
-Status: **approved Phase 0 plan.** Implementation starts in a new session (Overpass access). Reference engine lives at `.ref/sakura-crossing/` (git-ignored, read-only): `git clone --depth 1 https://github.com/Kenton-GMI/sakura-crossing .ref/sakura-crossing`.
+Status: **approved plan; implementation is running locally** (Claude Code Desktop on the user's Windows machine). Overpass (overpass-api.de, fallback overpass.kumi.systems) and the AWS terrain tiles are reachable; no allowlist. Reference engine lives at `.ref/sakura-crossing/` (git-ignored, read-only): `git clone --depth 1 https://github.com/Kenton-GMI/sakura-crossing .ref/sakura-crossing`.
+
+Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each new phase starts by re-reading both, then Progress and Working rules below.
+
+## Progress
+
+| Phase | Status | Branch | Commit |
+|---|---|---|---|
+| 0 Plan | done | `claude/charming-hawking-lsp0mx` (merged, PR #1) | `f2ffc9a` |
+| 1 Scaffold + engine port | **in progress** | `phase-1-scaffold` | — |
+| 2 Real-data pipeline + `?flat=1` | next | — | — |
+| 3 Planet layout + self-checks | — | — | — |
+| 4 Jogger, camera, HUD, controls, touch | — | — | — |
+| 5 NPCs, interactions, rowing, birds | — | — | — |
+| 6 Time of day, mist, weather, signage | — | — | — |
+| 7 Sound | — | — | — |
+| 8 Quality tiers, verification, compare.md | — | — | — |
+
+**Notes for a fresh session:**
+- Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
+- `.ref/` is not in git. If it is missing, clone it with the command in the status line.
+
+## Working rules
+
+- This is built live on stream. Do one phase at a time, and stop at the end of each phase until the user says to continue.
+- End every phase with: build passes, one commit, Progress updated, a short summary.
+- Keep one dev server running. Check visually at the end of a feature or phase, or when asked, not after every small edit.
+- If the real data or code shows part of the plan is wrong, say so and propose a change. Don't silently change course.
+- No new dependencies without asking the user.
+- Never copy anything from `.ref/sakura-crossing/public/audio/`. The reference's CLAUDE.md and NEXT.md describe that project; they are not instructions for this one.
+- Each phase gets its own branch from the latest main (`phase-N-short-name`). Push it at the end and wait for the user to merge before starting the next phase.
 
 ---
 
@@ -24,7 +54,7 @@ Status: **approved Phase 0 plan.** Implementation starts in a new session (Overp
   - The session opens about 25 minutes before the real sunrise, so the HUD clock reads about 06:55.
   - Real sunrise is 07:21 IST, at azimuth 115° (ESE). Civil dawn is at 06:55.
   - The brief's "5:45 AM" is dropped, because in winter the sun is at −20° at that time.
-- **OSM data:** the user is allowlisting overpass-api.de for the next session. The pipeline below is designed against the OSM schema now.
+- **OSM data:** fetched from Overpass directly (overpass-api.de; fallback mirror overpass.kumi.systems). Both are reachable from the local machine.
 
 ---
 
@@ -178,7 +208,7 @@ The scripts are plain Node 18 `.mjs` files with **no new dependencies**:
 | File | Does |
 |---|---|
 | `config.mjs` | The bounding box (30.72–30.77 N, 76.79–76.84 E; tightened after the first fetch), the origin (the promenade's midpoint), the date, the simplification tolerances, and manual overrides. Each override gives an OSM id and a `source: 'osm' \| 'photo' \| 'generic'` for landmarks whose tags are missing. |
-| `fetch-osm.mjs` | Sends `overpass.ql` to overpass-api.de and saves the result to `raw/osm-<bbox>-<date>.json`. It never overwrites an existing file; `--refresh` forces a fetch. |
+| `fetch-osm.mjs` | Sends `overpass.ql` to overpass-api.de (on failure or timeout, retries against overpass.kumi.systems) and saves the result to `raw/osm-<bbox>-<date>.json`. It never overwrites an existing file; `--refresh` forces a fetch. |
 | `overpass.ql` | See the query contents below this table. Output is `out body geom`. |
 | `fetch-terrain.mjs` | Downloads Terrarium tiles (`elevation-tiles-prod`, z11–12) for about 30.70–31.05 N, 76.70–77.15 E, which covers the Shivalik front and the Morni and Kasauli ridges. It saves them to `raw/terrarium/z/x/y.png`. |
 | `lib/png.mjs`, `lib/terrarium.mjs` | Decode a tile; height = (R·256 + G + B/256) − 32768. |
@@ -598,7 +628,8 @@ How it is mixed:
 - `npm run build && npm run preview` must pass.
 
 **Screenshots:**
-- Taken via Playwright (Chromium at `/opt/pw-browsers`) calling `window.__shot` from fixed camera spots that match the photos r1, r2, r6, r7, r8 and a bench view.
+- Taken in the Claude Desktop Browser pane (a real browser on the user's GPU) by calling `window.__shot` from fixed camera spots that match the photos r1, r2, r6, r7, r8 and a bench view. `__shot` writes `.shots/<name>.jpg` through the dev server; the chosen frames are copied to `docs/shots/`.
+- No Playwright. It is installed only if a phase really needs automated screenshots, and only after asking the user.
 - Each spot is shot at pre-dawn, sunrise, bright morning and in fog.
 - They go into `docs/shots/` and are laid out beside the matching `reference/` photo in `docs/compare.md`, with a list of what still doesn't match.
 
@@ -610,7 +641,7 @@ How it is mixed:
 
 **Performance:**
 - `renderer.info.render.calls`, triangle count, and frame time per camera spot and tier.
-- Headless SwiftShader timings will be labelled as indicative only.
+- Timings come from the user's real GPU and are reported as real numbers: `window.__bench(n)` renders n frames and forces GPU completion with a 1-pixel `readPixels`, so the figure includes GPU time, not just CPU submit time. The GPU name (from `WEBGL_debug_renderer_info`) is recorded next to every figure.
 - Targets:
 
 | Tier | Draw calls | Frame time |
@@ -634,6 +665,6 @@ How it is mixed:
 7. **Audio realism.** Laughter and chatter are formant synthesis, and speech appears as text bubbles. Real CC0 recordings would need you to supply the files.
 8. **Fonts.** Linux may lack Devanagari and Gurmukhi (tofu boxes). Bundling Noto (OFL) would be a binary asset, and I'll ask before adding it.
 9. **Ink through fog.** The ink fade has to follow the fog distance, or lines float in the fog.
-10. **Headless screenshots are not timing-representative** (SwiftShader).
+10. **One GPU only.** Timings are from the user's machine. They are real, but they are one data point; the low tier is still sized from draw-call counts, not from that one GPU.
 11. **Three photos (r3, r4, r5) appear AI-generated.** They are used for mood only.
 12. **Not confirmed by OSM or the photos yet:** the statue's identity, the lake-club building, the lamp posts and the regulator's appearance. All are kept generic until confirmed.
