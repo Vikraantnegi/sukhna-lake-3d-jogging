@@ -22,6 +22,7 @@ import { createWeather } from './core/weather.js';
 import { createSound } from './core/sound.js';
 import { Q, TIERS, lower } from './core/quality.js';
 import { createBoat } from './core/boat.js';
+import { mulberry32 } from './core/util.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -38,6 +39,11 @@ import { createBoat } from './core/boat.js';
  * ------------------------------------------------------------------ */
 
 const params = new URLSearchParams(location.search);
+// director mode (dev only, tests/director): a scripted, recorded playback.  Everything random
+// is seeded before the world is built, and the director drives the frame loop itself at a
+// fixed 1/60 s step, so a shot list plays the same every time.
+const DIRECTOR = import.meta.env.DEV && params.has('director');
+if (DIRECTOR) Math.random = mulberry32(+(params.get('seed') || 2027));
 const canvas = document.getElementById('view');
 const TOUCH = isTouch();
 
@@ -234,8 +240,10 @@ function updateTime(dt, running) {
 updateTime(0, false);
 
 /* ------------------------------- pipeline ------------------------------- */
+// the director renders at a fixed size (2560 x 1440 for a recording), whatever the window
+let fixedSize = null;
 function resize() {
-  const w = window.innerWidth, h = window.innerHeight;
+  const w = fixedSize?.[0] ?? window.innerWidth, h = fixedSize?.[1] ?? window.innerHeight;
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   pipeline.setSize(w, h);
@@ -276,6 +284,7 @@ const clock = new THREE.Clock();
 let flatPanel = null;
 
 /** Everything a frame does except drawing it (the playtest fast-forwards with this). */
+let cameraHook = null; // the director (dev) places the camera after the rig does
 function tick(dt) {
   // playing whenever the card is away; pointer lock only steers the mouse (an embedded
   // browser may refuse it), and losing it (Esc) brings the pause card back
@@ -285,6 +294,7 @@ function tick(dt) {
   world.update(dt, camera.position, rig.mode === 'overview', jogger);
   updateTime(dt, playing);
   rig.update(dt, jogger, { bench: interact.benchView() });
+  cameraHook?.(dt);
   if (playing) interact.update(dt); else hud.setPrompt('');
   sound.update(dt, camera, playing);
   placeLights();
@@ -306,10 +316,21 @@ function frame() {
   flatPanel?.update(camera, dt);
   requestAnimationFrame(frame);
 }
-frame();
+if (!DIRECTOR) frame();
 
 if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
+}
+
+// the director (tests/director): scripted shots, recorded as video; dev only, ?director=<name>
+if (DIRECTOR) {
+  import('./dev/director.js').then(({ runDirector }) => runDirector({
+    THREE, world, jogger, collider, interact, boat, hud, rig, camera, tod, weather, sound, pipeline, perf, canvas, updateTime, actions,
+    tick,
+    render: () => { perf.begin(); pipeline.render(); perf.end(1 / 60); },
+    setSize: (w, h) => { fixedSize = [w, h]; resize(); },
+    setCameraHook: (fn) => { cameraHook = fn; },
+  })).catch((e) => { console.error('[director]', e); window.__director = { state: 'error', errors: [String(e?.stack || e)] }; });
 }
 
 // the playtest's API (tests/playtest): dev only, never in a production build

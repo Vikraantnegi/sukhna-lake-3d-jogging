@@ -1,0 +1,339 @@
+{
+  "name": "trailer-30s",
+  "about": "The overview at pre-dawn, the real sunrise, the crowd on the dam, boating at golden hour, rain and the steps with the lo-fi.",
+  "seed": 5,
+  "duration": 30,
+  "start": {
+    "time": "predawn",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 2250,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 3.0,
+      "do": "timeLapse",
+      "to": 7.43,
+      "over": 5.0
+    },
+    {
+      "at": 8.0,
+      "do": "place",
+      "s": 1640,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 8.02,
+      "do": "auto"
+    },
+    {
+      "at": 8.0,
+      "do": "rowers",
+      "which": "eight",
+      "near": {
+        "walk": [
+          1690,
+          104
+        ]
+      },
+      "lead": 40
+    },
+    {
+      "at": 10.4,
+      "do": "say",
+      "who": "player",
+      "text": "Good morning!",
+      "secs": 2.2
+    },
+    {
+      "at": 15.0,
+      "do": "time",
+      "value": "golden"
+    },
+    {
+      "at": 15.0,
+      "do": "boatAt",
+      "spot": {
+        "walk": [
+          1310,
+          70
+        ]
+      },
+      "face": "lake"
+    },
+    {
+      "at": 15.05,
+      "do": "pedal",
+      "path": [
+        {
+          "walk": [
+            1330,
+            150
+          ]
+        }
+      ],
+      "tol": 4
+    },
+    {
+      "at": 20.0,
+      "do": "place",
+      "face": "lake",
+      "spot": {
+        "flight": 1480,
+        "at": "seat",
+        "back": 3.2
+      },
+      "s": 1480
+    },
+    {
+      "at": 20.0,
+      "do": "key",
+      "key": "K"
+    },
+    {
+      "at": 20.2,
+      "do": "sitSteps",
+      "flight": 1480
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "overview",
+      "orbit": 2.6
+    },
+    {
+      "at": 3.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              2262,
+              3.2
+            ],
+            "h": 1.9
+          },
+          "look": {
+            "azFrom": {
+              "walk": [
+                2262,
+                3.2
+              ]
+            },
+            "az": 112,
+            "dist": 400,
+            "y": 12
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "walk": [
+              2259,
+              3.2
+            ],
+            "h": 2.1
+          },
+          "look": {
+            "azFrom": {
+              "walk": [
+                2259,
+                3.2
+              ]
+            },
+            "az": 113,
+            "dist": 400,
+            "y": 14
+          }
+        }
+      ]
+    },
+    {
+      "at": 8.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              1.6,
+              2.4,
+              6.5
+            ]
+          },
+          "look": {
+            "player": [
+              -0.6,
+              1.0,
+              -22
+            ]
+          }
+        },
+        {
+          "t": 7.0,
+          "pos": {
+            "player": [
+              2.0,
+              2.6,
+              6.0
+            ]
+          },
+          "look": {
+            "player": [
+              -0.8,
+              1.0,
+              -22
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 15.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "boat": [
+              2.6,
+              2.4,
+              7.0
+            ]
+          },
+          "look": {
+            "boat": [
+              -1.0,
+              1.4,
+              -40
+            ]
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "boat": [
+              3.4,
+              2.8,
+              6.0
+            ]
+          },
+          "look": {
+            "boat": [
+              -1.5,
+              1.4,
+              -40
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 20.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              1486.5,
+              9.5
+            ],
+            "h": 2.4
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              0
+            ]
+          }
+        },
+        {
+          "t": 2.6,
+          "pos": {
+            "walk": [
+              1485.8,
+              11.5
+            ],
+            "h": 2.4
+          },
+          "look": {
+            "player": [
+              0,
+              0.7,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 22.6,
+      "mode": "rig",
+      "blend": 2.0
+    },
+    {
+      "at": 26.6,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": "current",
+          "look": "current"
+        },
+        {
+          "t": 3.4,
+          "pos": {
+            "walk": [
+              1492,
+              28
+            ],
+            "y": 6
+          },
+          "look": {
+            "walk": [
+              1478,
+              -2.5
+            ],
+            "h": 2.2
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": 0.3,
+      "to": 2.9,
+      "text": "Sukhna Lake, Chandigarh"
+    },
+    {
+      "from": 4.4,
+      "to": 7.8,
+      "text": "the real winter sunrise, 07:19"
+    },
+    {
+      "from": 11.4,
+      "to": 14.8,
+      "text": "200 people on the dam"
+    },
+    {
+      "from": 23.6,
+      "to": 27.2,
+      "text": "built live in the browser"
+    }
+  ],
+  "endCard": {
+    "at": 27.6,
+    "text": "Sukhna · built live · kick.com/asumagg"
+  }
+}

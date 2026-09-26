@@ -1,0 +1,97 @@
+{
+  "name": "before-after",
+  "about": "4 s of the Phase 1 build's P orbit of its empty planet (commit 4c528c4, recorded first by record.mjs), a hard cut to 6 s of golden hour on the dam today.",
+  "seed": 10,
+  "duration": 10,
+  "clip": {
+    "frames": "/recordings/phase1-orbit.video",
+    "from": 0.5,
+    "until": 4.0
+  },
+  "start": {
+    "time": "golden",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 2275,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 3.5,
+      "do": "hold",
+      "keys": [
+        "KeyW"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 4.0,
+          "pos": {
+            "walk": [
+              2262,
+              2.6
+            ],
+            "h": 1.9
+          },
+          "look": {
+            "azFrom": {
+              "walk": [
+                2262,
+                2.6
+              ]
+            },
+            "az": 118,
+            "dist": 300,
+            "y": 10
+          }
+        },
+        {
+          "t": 10.0,
+          "pos": {
+            "walk": [
+              2256,
+              2.8
+            ],
+            "h": 2.0
+          },
+          "look": {
+            "azFrom": {
+              "walk": [
+                2256,
+                2.8
+              ]
+            },
+            "az": 119,
+            "dist": 300,
+            "y": 10
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": 0.3,
+      "to": 3.7,
+      "text": "Phase 1"
+    },
+    {
+      "from": 4.3,
+      "to": 7.6,
+      "text": "today"
+    }
+  ],
+  "endCard": {
+    "at": 8.0,
+    "text": "Sukhna · built live · kick.com/asumagg"
+  }
+}

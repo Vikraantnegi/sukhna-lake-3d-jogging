@@ -66,12 +66,41 @@ function localTracks(dir) {
   };
 }
 
+/**
+ * Dev-only: the director's recordings (tests/director).  The page streams its
+ * MediaRecorder output here in parts -- POST /__recording?name=x&part=n, part 0
+ * starting the file -- so a two-minute 1440p video never sits in memory.  Files go
+ * to recordings/ (git-ignored).  CORS is open so a second dev server (the
+ * before-after video's Phase 1 build, on another port) can save its clip too.
+ */
+function recordings(outDir) {
+  return {
+    name: 'recordings',
+    apply: 'serve',
+    configureServer(server) {
+      fs.mkdirSync(outDir, { recursive: true });
+      server.middlewares.use('/__recording', (req, res) => {
+        res.setHeader('access-control-allow-origin', '*');
+        if (req.method === 'OPTIONS') { res.setHeader('access-control-allow-methods', 'POST'); return res.end(); }
+        if (req.method !== 'POST') { res.statusCode = 405; return res.end('POST only'); }
+        const q = new URL(req.url, 'http://x').searchParams;
+        const name = (q.get('name') || 'recording').replace(/[^\w.-]/g, '_');
+        const file = path.join(outDir, name);
+        const out = fs.createWriteStream(file, { flags: q.get('part') === '0' ? 'w' : 'a' });
+        req.pipe(out);
+        out.on('finish', () => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ ok: true, file, bytes: fs.statSync(file).size })); });
+        out.on('error', (e) => { res.statusCode = 500; res.end(String(e)); });
+      });
+    },
+  };
+}
+
 const SHOT_DIR = path.resolve(process.cwd(), '.shots');
 
 export default defineConfig({
   /* Relative asset URLs, so a build runs from any subdirectory. */
   base: './',
-  plugins: [frameGrabber(SHOT_DIR), localTracks(path.resolve(process.cwd(), 'public', 'audio'))],
+  plugins: [frameGrabber(SHOT_DIR), localTracks(path.resolve(process.cwd(), 'public', 'audio')), recordings(path.resolve(process.cwd(), 'recordings'))],
   server: {
     port: 5178,
     strictPort: true,

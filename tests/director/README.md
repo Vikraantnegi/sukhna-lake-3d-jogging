@@ -1,0 +1,111 @@
+# The director: scripted shots, recorded as video
+
+Dev-only (like the playtest's `window.__test`): `src/dev/director.js` is imported only when
+`import.meta.env.DEV` and `?director=<name>` are both set, so a production build never has it.
+
+```bash
+npm run dev                                                   # the dev server on 5178 must be up
+node tests/director/record.mjs trailer-30s                    # record one (or several) shot lists
+node tests/director/record.mjs --all                          # every *.json here
+node tests/director/record.mjs full-tour --preview 10,40,90   # stills at those seconds, no video
+node tests/director/record.mjs boating --size 1080            # 1920 x 1080 instead of 2560 x 1440
+node tests/director/record.mjs --phase1                       # re-record the Phase 1 clip before-after plays
+```
+
+To watch one play in the browser: `http://127.0.0.1:5178/?director=phase7-steps&q=high&seed=7`
+(it plays once; add `&record=1` to record from there).
+
+Videos go to `recordings/` (git-ignored): `<name>.mp4` and a report, `<name>.json`.
+
+## How a video is made
+
+- **Deterministic.** `main.js` seeds `Math.random` before the world is built (`?seed=`, from
+  the list), and the director runs the game at a fixed 1/60 s step: one step, one rendered frame.
+  The same list gives the same video.
+- **Composited.** Each frame is drawn onto a 2D canvas (2560 x 1440) with what the recording
+  shows and the game's HUD never does: captions, the end card, speech bubbles, the `?stats`
+  readout (with the GPU's frame time from a timer query), the start card. The window shows that
+  canvas, so what you see is what is recorded.
+- **Encoded frame-exact.** The frames are encoded with WebCodecs (H.264 High, 4:2:0), each
+  stamped n/60 s, so the file is exactly 60 fps. If the page hitches (a cut to a new place
+  refills the trees and the crowd), the steps it owes are each still drawn and recorded. The
+  WebAudio master output is recorded next to it by MediaRecorder as AAC.
+- **One MP4.** `record.mjs` writes the two into one MP4 with its index at the front (the
+  `+faststart` layout), ready to upload to X. No ffmpeg needed.
+- **Checked.** `record.mjs` reads the file's own sample table back: the frame count against the
+  list's length, every frame's duration (a gap is a dropped frame, a short one a doubled frame),
+  the resolution, and the audio's length.
+
+Why not `canvas.captureStream(60)` into MediaRecorder (the first plan)? On this machine
+(Chrome 154, a 240 Hz display) it lost 1-5 % of the frames, one in about every 101, at 1440p
+and at 1080p alike, however the frames were fed to it. It is still there as a fallback:
+`&capture=mediarecorder` in the URL.
+
+## A shot list
+
+`tests/director/<name>.json`:
+
+```jsonc
+{
+  "name": "my-video",
+  "seed": 12,                              // Math.random's seed (crowd, birds, boats, bubbles)
+  "duration": 15,                          // seconds
+  "start": { "time": "golden", "weather": "clear" },   // time: a preset or hours; weather: clear | rain | fog
+  "stats": false,                          // show the ?stats readout
+  "events": [ { "at": 0, "do": "place", "s": 1200, "d": -1.6, "face": "east" } ],
+  "shots":  [ { "at": 0, "mode": "keys", "keys": [ ... ] } ],
+  "captions": [ { "from": 0.5, "to": 4, "text": "a caption" } ],
+  "endCard": { "at": 13, "text": "Sukhna · built live · kick.com/asumagg" },
+  "clip": { "frames": "/recordings/phase1-orbit.video", "from": 0.5, "until": 4 }   // optional: show recorded frames first
+}
+```
+
+### Events (`"do"`)
+
+| do | fields | |
+|---|---|---|
+| `time` | `value` (preset or hours) | jump to a time |
+| `timeLapse` | `to` (hours), `over` (s), `ease` | run the clock to a time |
+| `weather` | `value`, `instant` | clear / rain / fog (eased over ~3 s unless `instant`) |
+| `key` | `key` (E V T K P M H Esc) | press a key |
+| `place` | `s`, `d`, `face` or `spot` | put the jogger somewhere (`face`: lake / city / west / east / azimuth) |
+| `walkTo` | `to` or `path` (spots), `pace` (walk / jog) | walk there with W |
+| `auto` / `hold` / `release` | `keys` | auto-jog; hold or let go of keys |
+| `sitSteps` | `flight` (its s) | walk down that flight and sit on the lowest dry step |
+| `join` | `kind` (laugh / chat), `angle` | stand by a circle and join it |
+| `ticket`, `board` (`pace`), `dock` | | the boating steps |
+| `boatAt` | `spot`, `face` (lake / dam / berth) | put the boat (boarding one first if need be) |
+| `pedal` | `path` (spots), `fast` | pedal through spots |
+| `greet`, `five`, `chai` | | a greeting with a walker, a high five with a runner, chai |
+| `say` | `who` (player / nearest), `text`, `secs` | a speech bubble |
+| `rowers` | `which` (eight / scull0..2), `near` (spot), `lead` (m) | set a boat on its lane to pass a spot |
+| `outfit`, `card` | `value`; `show` / `pick` / `press` / `hide` | the start card, drawn in the recording |
+| `stats` | `on` | the readout on or off |
+
+### Shots
+
+`{ "at": seconds, "mode": "rig" | "keys" | "overview", "blend": seconds }`: `rig` is the
+game's own camera (the chase camera, the seated views); `overview` is P's orbit (`orbit`: its
+angle); `keys` interpolates `{ "t", "pos", "look" }` keyframes (eased `inOut`; per key `ease`).
+`blend` eases in from the previous shot's camera; without it, a hard cut.
+
+### Points and spots
+
+A camera point: `{ "walk": [s, d], "h": 1.6 }` (h over the surface there, or `"y"`),
+`{ "player": [right, up, forward] }`, `{ "boat": [right, up, forward] }`,
+`{ "spot": <spot>, "y": 3 }`, `{ "azFrom": <spot>, "az": 112, "dist": 400, "y": 12 }`,
+`{ "lake": [de, y, dn] }`, `[e, y, n]`, or `"current"` (the camera when the shot starts).
+
+A spot (where to stand or go): `{ "walk": [s, d] }`, `{ "flight": 820, "at": "seat", "back": 3 }`,
+`{ "flight": 820, "u": 6 }`, `{ "jetty": [along, across] }`, `{ "counter": true }`,
+`{ "freeBerth": 9 }` (9 m off the free berth furthest along the jetty), `[e, n]`.
+
+s runs along the walk from the east end (0) to the west end (2495.7); d is metres toward
+the lake from the centreline.
+
+## Adding a video
+
+1. Copy a list here as `<name>.json`; set its duration, events, shots, captions and end card.
+2. `node tests/director/record.mjs <name> --preview 2,8,14` and look at the stills in
+   `recordings/preview/`; adjust.
+3. `node tests/director/record.mjs <name>`: the video and its frame check.

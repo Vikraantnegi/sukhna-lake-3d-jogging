@@ -1,0 +1,147 @@
+{
+  "name": "details-lamps",
+  "about": "A time-lapse from golden hour to dusk from a fixed camera on the dam, the lamps coming on; a pan past people on the benches; K to rain, the lamps stay on.",
+  "seed": 3,
+  "duration": 12,
+  "start": {
+    "time": "golden",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 1200,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 0.3,
+      "do": "timeLapse",
+      "to": 17.35,
+      "over": 3.0
+    },
+    {
+      "at": 3.3,
+      "do": "timeLapse",
+      "to": 18.02,
+      "over": 3.4,
+      "ease": "linear"
+    },
+    {
+      "at": 9.3,
+      "do": "key",
+      "key": "K"
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              1259,
+              -3.0
+            ],
+            "h": 1.5
+          },
+          "look": {
+            "walk": [
+              1300,
+              -4.8
+            ],
+            "h": 3.4
+          }
+        },
+        {
+          "t": 6.8,
+          "pos": {
+            "walk": [
+              1260,
+              -3.0
+            ],
+            "h": 1.5
+          },
+          "look": {
+            "walk": [
+              1300,
+              -4.8
+            ],
+            "h": 3.2
+          }
+        }
+      ]
+    },
+    {
+      "at": 6.8,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              1260,
+              -3.0
+            ],
+            "h": 1.5
+          },
+          "look": {
+            "walk": [
+              1300,
+              -4.8
+            ],
+            "h": 3.2
+          }
+        },
+        {
+          "t": 2.7,
+          "pos": {
+            "walk": [
+              1278,
+              -2.7
+            ],
+            "h": 1.35
+          },
+          "look": {
+            "walk": [
+              1285,
+              -5.2
+            ],
+            "h": 1.0
+          }
+        },
+        {
+          "t": 5.2,
+          "pos": {
+            "walk": [
+              1291,
+              -2.7
+            ],
+            "h": 1.45
+          },
+          "look": {
+            "walk": [
+              1302,
+              -5.0
+            ],
+            "h": 2.2
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": 4.2,
+      "to": 8.2,
+      "text": "lamps come on at dusk"
+    }
+  ],
+  "endCard": {
+    "at": 10.2,
+    "text": "Sukhna · built live · kick.com/asumagg"
+  }
+}
