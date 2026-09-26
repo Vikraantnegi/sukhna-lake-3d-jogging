@@ -235,6 +235,10 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Measured at the end of Phase 2 (flat)** (RTX 4080 SUPER, ANGLE/D3D11, window 1900×1320, internal 2573×1787), `__bench(200)`: spawn 52 calls, 96k tris, 0.47 ms; mid-walk looking across the lake 69 calls, 109k tris, 0.28 ms; P overview 83 calls, 141k tris, 0.38 ms.
 - **Measured at the end of Phase 3** (same GPU, 1900×1320 window), `__bench(150)`: spawn 196 calls / 0.94 M tris / 0.55 ms; bend looking across the lake 168 / 0.95 M / 0.52 ms; mid-walk across 135 / 0.98 M / 0.56 ms; along the walk 159 / 0.83 M / 0.53 ms. Start-up world build ~0.7–0.8 s (shaping ~0.5 s).
 
+## Parked experiments
+
+- Compare the embankment (r2, r8) and swans (r7) against the reference photos and fix clear mismatches; optional, the user likes the current boats.
+
 ## Final summary (end of Phase 8)
 
 **What was built.** Sukhna Lake at its real shape and 1:1 scale, as a three.js cel-shaded jog:
