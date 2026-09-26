@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { spineAt, nearestS } from '../world/frame.js';
+import { spineAt } from '../world/frame.js';
 import { walkY, BENCHES, BENCH_SEAT, stepSeat as stairSeat } from '../world/dam.js';
 import { seatPose, stepSeat, applySeat } from './body.js';
 
@@ -47,13 +47,14 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
       const f = spineAt(b.s), be = f.e + f.ne * b.d, bn = f.n + f.nn * b.d;
       if (Math.hypot(be - e, bn - n) < 1.8 && !crowd.people.some((p) => p.bench === b)) return { kind: 'bench', label: 'sit on the bench', bench: b, be, bn, f };
     }
-    // a water step: anywhere on its landing or its flight
-    {
-      const w = nearestS(e, n), d = w.side * w.d;
-      for (const st of steps) {
-        const last = st.treads[st.treads.length - 1].d;
-        if (Math.abs(w.s - st.s) < st.width / 2 + 0.6 && d > st.landing.d0 - 1.2 && d < last + 0.5) {
-          // the lowest tread that is still dry (its top at least 12 cm over the lake)
+    // a water step: anywhere on its landing or its flight, measured in the flight's own
+    // straight frame (it runs straight out from its spine point, not along the curve)
+    for (const st of steps) {
+      const f = spineAt(st.s), de = e - f.e, dn = n - f.n;
+      const u = de * f.ne + dn * f.nn, v = -de * f.nn + dn * f.ne;
+      const last = st.treads[st.treads.length - 1].d1;
+      {
+        if (Math.abs(v) < st.width / 2 + 0.6 && u > st.landing.d0 - 1.2 && u < last + 0.5) {
           // the lowest tread that is dry and that you may stand on (world/dam.js stepSeat)
           const pick = stairSeat(st);
           if (pick) return { kind: 'steps', label: 'sit on the steps', st, seat: pick.seat, foot: pick.foot, f: pick.f };

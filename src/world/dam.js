@@ -38,10 +38,12 @@ export const DAM = { half: 4, parIn: 4.0, parOut: 5.2, parH: 0.45, verge: 6.5, c
 const STEP = 2;
 const SECTOR = 100;
 /** Where the stylised steps down to the water go (s, m).  Not in OSM: flagged generic. */
-// All three on the 2.5 m crest of the bund.  (s 2130 was dropped after the Phase 7 review:
-// the walk there is on the higher ground of the west end, ~6 m over the water, and its
-// flight came out as a 39-tread ladder with the shore band over its foot.)
-export const WATER_STEPS = [240, 820, 1480];
+// A flight about every 300 m (the user, after the jetty stair: "add these stairs multiple
+// times on the jogging path").  On the 2.5 m crest of the bund they follow the embankment
+// down into the water; where the walk is on the higher ground of the west end (5.8-6.3 m
+// over the water on a 1:1-1:1.5 bank) they are pier stairs like the jetty's, ending in a
+// stone landing just over the water.  The jetty's stair (s 2395) completes the set.
+export const WATER_STEPS = [240, 530, 820, 1150, 1480, 1790, 2090];
 /**
  * Filled by buildDam: every flight through the parapet (s), and the flight down to
  * the boat-club jetty -- a pier stair, since the walk there is 7.6 m over the water
@@ -365,7 +367,8 @@ function lampGlowMaterial() {
  */
 export function stepSeat(st) {
   const f = spineAt(st.s);
-  // the jetty's pier stair: sit on the tread above the deck, feet on the deck
+  // a pier stair (the jetty's, or one ending in a landing over the water): sit on the tread
+  // above the deck or landing, feet on it
   if (st.pier) return st.treads.length > 1 ? { seat: st.treads[st.treads.length - 2], foot: st.treads[st.treads.length - 1], f } : null;
   const ok = st.treads.filter((q) => q.y > 0.12 && shoreDist(f.e + f.ne * q.d, f.n + f.nn * q.d, 5) >= 0.55);
   const seat = ok[ok.length - 1];
@@ -576,7 +579,8 @@ function flightProfile(st) {
     const drop = y0 - st.to.y, count = Math.max(1, Math.round(drop / 0.16)), rise = drop / count;
     let d = d0;
     for (let q = 1; q <= count; q++) {
-      const run = q % 16 === 0 && q < count ? 1.2 : 0.32;
+      // a 1.2 m landing every sixteenth tread; a flight to the water ends in a 2.2 m landing
+      const run = q === count && st.toWater ? 2.2 : q % 16 === 0 && q < count ? 1.2 : 0.32;
       out.push({ d0: d, d1: d + run, top: y0 - q * rise });
       d += run;
     }
@@ -649,12 +653,23 @@ export function buildDam(scene, { ground }) {
     const k = idx(st.s), yW = walkY(st.s), toe = PROF.dToe[k];
     return { s: st.s, from: { d: -DAM.verge + 0.2, y: yW }, to: { d: -toe, y: yW - (toe - DAM.verge) * DAM.face }, width: 3, ref: st.ref };
   });
-  // a flight only where the walk is on the crest (≤ 3.2 m over the water) and the lake is there
-  const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s)) && walkY(s) <= 3.2).map((s) => ({
-    s, from: { d: DAM.parOut, y: walkY(s) }, to: { d: shoreOffset(s) + 0.6, y: -0.25 }, width: WATER_STEP_HALF * 2,
-    // a paved landing through the parapet, at walk level, between the cheek walls
-    landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 },
-  }));
+  // on the crest (≤ 3.2 m over the water, and a bank gentler than the stair) a flight follows
+  // the embankment down into the water; above it, a pier stair out to a landing 0.3 m over the water
+  const waterStairs = WATER_STEPS.filter((s) => Number.isFinite(shoreOffset(s))).map((s) => {
+    const y0 = walkY(s), dS = shoreOffset(s), steep = y0 / Math.max(0.5, dS - DAM.parOut) > 0.5;
+    const st = {
+      s, from: { d: DAM.parOut, y: y0 }, width: WATER_STEP_HALF * 2,
+      // a paved landing through the parapet, at walk level, between the cheek walls
+      landing: { d0: DAM.parIn - 0.05, d1: DAM.parOut + 0.05 },
+    };
+    if (y0 <= 3.2 && !steep) st.to = { d: dS + 0.6, y: -0.25 };
+    else {
+      Object.assign(st, { pier: true, toWater: true, to: { d: NaN, y: 0.3 } });
+      const prof = flightProfile(st);
+      st.to.d = prof[prof.length - 1].d1;
+    }
+    return st;
+  });
   // the pier stair down to the boat-club jetty (its s is OSM's boating node)
   const boating = data.landmarks.find((l) => l.id === 'boating');
   if (boating && Number.isFinite(shoreOffset(boating.s))) {
