@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { spineAt, nearestS, shoreDist } from '../world/frame.js';
+import { BOAT } from './boat.js';
 
 /* ------------------------------------------------------------------ *
  * Sound (plan §6, Phase 7): WebAudio, every sound generated in code --
@@ -18,15 +19,16 @@ import { spineAt, nearestS, shoreDist } from '../world/frame.js';
  *              laughter club, and chatter as you pass people (formant
  *              babble: synthesised speech isn't intelligible, so the words
  *              appear as speech bubbles)
- *   boating    water along the pedal boat's hull with its speed, a splash as
- *              each paddle of the wheel goes in (the ambience bus)
+ *   boating    water along the pedal boat's hull with its speed, a splash on
+ *              each pedal stroke (their own bus, never ducked), and the music
  *   circles    your claps and laughs with the laughter club, babble as the
  *              others take turns to talk
- *   music      while you sit (a bench or the water steps): a soft lo-fi
- *              loop generated live -- warm chords, keys, a little melody,
- *              a gentle swung beat and vinyl crackle, varied bar by bar so
- *              it never repeats audibly -- fading in as you sit and out as
- *              you stand, ducking the ambience (not the rain).  If the
+ *   music      while you sit (a bench or the water steps) or are out in a
+ *              boat: a soft lo-fi loop generated live -- warm chords, keys,
+ *              a little melody, a gentle swung beat and vinyl crackle,
+ *              varied bar by bar so it never repeats audibly -- fading in
+ *              as you sit or board and out as you stand or dock, ducking
+ *              the ambience (not the rain or the boat's water).  If the
  *              user has put tracks in public/audio/ (git-ignored, never
  *              built into dist/), those play instead.
  *
@@ -83,6 +85,7 @@ export function createSound({ world, jogger, tod, weather, interact, boat = null
     N.master.connect(N.muffle).connect(N.comp).connect(ctx.destination);
     N.amb = ctx.createGain(); N.amb.connect(N.master);   // ducked under the music
     N.rain = ctx.createGain(); N.rain.connect(N.master); // never ducked
+    N.boat = ctx.createGain(); N.boat.connect(N.master); // the pedal boat's own water: never ducked either
     N.music = ctx.createGain(); N.music.gain.value = 0;
     // the lo-fi colour: a gentle low-pass and a soft saturation
     N.musicTone = ctx.createBiquadFilter(); N.musicTone.type = 'lowpass'; N.musicTone.frequency.value = 5200;
@@ -106,7 +109,7 @@ export function createSound({ world, jogger, tod, weather, interact, boat = null
     B.rain = bed([['highpass', 1300, 0.7], ['lowpass', 8000, 0.7]], false, N.rain);
     B.rainWater = bed([['bandpass', 5200, 0.9]], true, N.rain);
     B.crackle = bed([['highpass', 2500, 0.7]], false, N.musicIn);
-    B.hull = bed([['bandpass', 420, 0.9], ['lowpass', 1100, 0.7]], true); // water along a pedal boat's hull
+    B.hull = bed([['bandpass', 420, 0.9], ['lowpass', 1100, 0.7]], true, N.boat); // water along a pedal boat's hull
     loadTracks();
   }
 
@@ -448,14 +451,16 @@ export function createSound({ world, jogger, tod, weather, interact, boat = null
     // the pedal boat: water rushing along the hull with the speed, a splash as each paddle goes in
     if (boat) {
       const v = boat.active ? Math.abs(boat.state.speed) : 0;
-      B.hull.g.gain.setTargetAtTime(boat.active ? 0.03 + 0.2 * clamp(v / 2.4, 0, 1) : 0, now, 0.3);
+      const k = clamp(v / BOAT.fast, 0, 1); // (0..1 of full speed)
+      B.hull.g.gain.setTargetAtTime(boat.active ? 0.03 + 0.22 * k : 0, now, 0.3);
+      B.hull.src.playbackRate.setTargetAtTime(0.9 + 0.35 * k, now, 0.4); // a brighter rush at speed
       if (boat.active) place(B.hull.pan, boat.e, 0.2, -boat.n);
       if (boat.splashes !== lastSplash) {
         lastSplash = boat.splashes;
         const fe = -Math.sin(boat.heading), fn = Math.cos(boat.heading);
-        const out = voice(boat.e - fe * 1.6, 0.2, boat.n - fn * 1.6, 0.6, 3);
-        noiseBurst(out, now, 0.1 + rand(0, 0.05), 'bandpass', rand(900, 1400), 0.9, 0.05 + 0.05 * clamp(v / 2.4, 0, 1));
-        noiseBurst(out, now + 0.02, 0.07, 'lowpass', 450, 0.7, 0.05);
+        const out = voice(boat.e - fe * 1.6, 0.2, boat.n - fn * 1.6, 0.6, 3, N.boat);
+        noiseBurst(out, now, 0.1 + rand(0, 0.05) + 0.05 * k, 'bandpass', rand(900, 1400), 0.9, 0.05 + 0.07 * k);
+        noiseBurst(out, now + 0.02, 0.07, 'lowpass', 450, 0.7, 0.04 + 0.03 * k);
       }
     }
     // in the laughter club's circle: your own claps between the laughs
@@ -501,8 +506,8 @@ export function createSound({ world, jogger, tod, weather, interact, boat = null
       if (chatted.size > 60) chatted.clear();
     }
 
-    // the music follows sitting
-    setMusic(!!interact.seated);
+    // the music follows sitting -- and boating: in from boarding, out as you dock
+    setMusic(!!interact.seated || boat?.phase === 'on');
     if (music.on && music.mode === 'gen') {
       // vinyl crackle: a few clicks
       timers.crackle -= dt;

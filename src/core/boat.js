@@ -33,7 +33,7 @@ import { LAYER, setLayers } from '../world/chunks.js';
 export const BOAT = {
   margin: 2.0, endMargin: 0.6, // metres inside the shoreline: the centre, and the bow and stern
   half: 0.7, radius: 0.75,     // the hull as a capsule: +/-0.7 m along the keel, 0.75 m round it
-  pedal: 1.5, fast: 2.4, back: 0.7, // m/s
+  pedal: 3.0, fast: 4.5, back: 1.2, // m/s
   turn: 0.55,                  // rad/s at pedalling speed
   dock: 6,                     // how near a free berth "E · dock" is offered
   drain: 7, rest: 5,           // stamina per second pedalling hard / easy
@@ -94,7 +94,7 @@ export function createBoatSim(world, decks = []) {
   const polys = (data.features.piers || []).map((p) => p.p);
   const launch = club?.launch;
   const caps = []; // this step's moving and moored hulls: [ax, ay, bx, by, r]
-  const s = { e: 0, n: 0, h: 0, ve: 0, vn: 0, yawRate: 0, speed: 0, distance: 0, time: 0, wheel: 0, bumps: 0, yielding: false, clear: 0 };
+  const s = { e: 0, n: 0, h: 0, ve: 0, vn: 0, yawRate: 0, speed: 0, distance: 0, time: 0, wheel: 0, legs: 0, bumps: 0, yielding: false, clear: 0 };
 
   function gatherCaps() {
     caps.length = 0;
@@ -134,8 +134,8 @@ export function createBoatSim(world, decks = []) {
     let fe = -Math.sin(s.h), fn = Math.cos(s.h);
     let vF = s.ve * fe + s.vn * fn, vL = s.ve * fn - s.vn * fe;
     const target = input.f > 0 ? (input.fast ? BOAT.fast : BOAT.pedal) * input.f : input.f < 0 ? -BOAT.back : 0;
-    // momentum: quick-ish to pick up under the pedals, a long coast off them
-    vF += (target - vF) * (1 - Math.exp(-(input.f ? 0.6 : 0.25) * dt));
+    // momentum: up to speed in about a second under the pedals, a long glide off them
+    vF += (target - vF) * (1 - Math.exp(-(input.f ? 1.25 : 0.25) * dt));
     vL *= Math.exp(-2.2 * dt);
     // the rudder: bites with way on (backwards, the other way round); a little at rest
     const auth = 0.35 + 0.65 * Math.min(1, Math.abs(vF) / BOAT.pedal);
@@ -183,6 +183,7 @@ export function createBoatSim(world, decks = []) {
     s.time += dt;
     s.speed = s.ve * -Math.sin(h1) + s.vn * Math.cos(h1);
     s.wheel += (s.speed * dt) / 0.3; // the paddle wheel's radius
+    s.legs += (s.speed * dt) / 0.6;  // the pedals, geared down from the wheel: ~0.8 strokes a second at 3 m/s
     s.clear = c1;
     return s;
   }
@@ -292,12 +293,12 @@ export function createBoat({ scene, world, collider }) {
       jogger.y = api.y + seat.rootY;
       jogger.heading = s.h;
       jogger.sitting = 1;
-      const ph = s.wheel;
+      const ph = s.legs, effort = 0.6 + 0.4 * Math.min(1, Math.abs(s.speed) / BOAT.fast); // (harder and faster with the speed)
       jogger.override = (pose) => {
         applySeat(pose, seat);
         // pedalling: the legs pump in turn with the wheel; the hands on the tiller
-        pose.hipL += 0.16 * Math.sin(ph); pose.hipR += 0.16 * Math.sin(ph + Math.PI);
-        pose.kneeL += 0.22 * Math.sin(ph); pose.kneeR += 0.22 * Math.sin(ph + Math.PI);
+        pose.hipL += 0.2 * effort * Math.sin(ph); pose.hipR += 0.2 * effort * Math.sin(ph + Math.PI);
+        pose.kneeL += 0.28 * effort * Math.sin(ph); pose.kneeR += 0.28 * effort * Math.sin(ph + Math.PI);
         pose.shoulderL = 0.8 + 0.15 * steer; pose.shoulderR = 0.8 - 0.15 * steer;
         pose.elbowL = pose.elbowR = 1.05; pose.armOutL = pose.armOutR = -0.06;
       };
@@ -337,14 +338,17 @@ export function createBoat({ scene, world, collider }) {
         api.place(jogger, st);
         if (world.rowing) world.rowing.player = { e: s.e, n: s.n };
         // the wake from the stern, and a splash each time a blade goes in
+        // the wake: foam more often and wider the faster you go
         foamT -= dt;
-        if (Math.abs(s.speed) > 0.3 && foamT <= 0) {
-          foamT = 0.3;
+        const v = Math.abs(s.speed);
+        if (v > 0.3 && foamT <= 0) {
+          foamT = 0.3 * THREE.MathUtils.clamp(1.5 / v, 0.4, 1);
           const fe = -Math.sin(s.h), fn = Math.cos(s.h);
-          world.rowing?.foam(s.e - fe * 1.7 * Math.sign(s.speed), s.n - fn * 1.7 * Math.sign(s.speed), 0.3 + 0.1 * Math.abs(s.speed));
+          world.rowing?.foam(s.e - fe * 1.7 * Math.sign(s.speed), s.n - fn * 1.7 * Math.sign(s.speed), 0.25 + 0.1 * v);
         }
-        const blade = Math.floor(s.wheel / (Math.PI / 3));
-        if (blade !== splashAt) { splashAt = blade; if (Math.abs(s.speed) > 0.15) api.splashes++; }
+        // a splash on each pedal stroke (twice a turn of the pedals), louder with the speed
+        const stroke = Math.floor(s.legs / Math.PI);
+        if (stroke !== splashAt) { splashAt = stroke; if (v > 0.15) api.splashes++; }
       }
       // the hull rides the water with a little bob and roll; the wheel turns
       group.position.set(s.e, api.y, -s.n);
@@ -354,7 +358,8 @@ export function createBoat({ scene, world, collider }) {
     },
     /** The chase camera (camera.js 'bench' view): behind the boat, the jogger and hull in frame. */
     view() {
-      return { yaw: s.h, pitch: -0.26, boom: 5.2, side: 0.15, lift: 0.3, drift: false, rate: 1.3, idle: 2.0 };
+      // the camera pulls back as the boat speeds up (up to ~2.5 m at full pelt), so it stays well in frame
+      return { yaw: s.h, pitch: -0.26, boom: 5.2, extraBoom: 0.55 * Math.abs(s.speed), side: 0.15, lift: 0.3, drift: false, rate: 1.3, idle: 2.0 };
     },
   };
   return api;

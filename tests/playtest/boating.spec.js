@@ -1,7 +1,8 @@
 // 10. Boating: a ticket at the shack by the Boating gateway, down the jetty stair with W, E at a
-// moored swan, a loop out past the dam (always BOAT.margin inside the water, the boat and the
-// jogger in frame), no getting off mid-lake (and Esc only pauses), docking at a free berth,
-// and back up the stair to the walk.  Then: the counter shuts in rain (open in fog), and a
+// moored swan (the lo-fi fading in), a loop out past the dam at 3 m/s and 4.5 with Shift, the
+// long glide off the pedals (always BOAT.margin inside the water, the boat and the jogger in
+// frame), no getting off mid-lake (and Esc only pauses), docking at a free berth (the music
+// fading out), and back up the stair to the walk.  Then: the counter shuts in rain (open in fog), and a
 // swan needs a ticket.
 import { test, expect } from '@playwright/test';
 import { openGame, T, reporter, checks } from './helpers.js';
@@ -75,6 +76,13 @@ test('boating', async ({ page }) => {
   const lows = await api.bodyLows();
   c.ok(lows.pelvis.y > 1.03, `seated in the swan the hips are at ${lows.pelvis.y} (seat top 1.05 + bob)`);
   await rep.shot(page, 'boarding');
+  // the lo-fi fades in as you board (the audio clock is real time: wait ~3 s), ducking the
+  // ambience but not the boat's own water or the rain
+  await page.waitForTimeout(3300);
+  let m = await api.music();
+  h = await api.getHud();
+  c.ok(m.gain > 0.35 && h.sound === 'Music', `boarding: the music didn't fade in (gain ${m.gain}, card "${h.sound}")`);
+  c.ok(m.buses.amb < 0.7 && m.buses.boat > 0.95 && m.buses.rain > 0.95, `boarding: the ducking is wrong ${JSON.stringify(m.buses)}`);
   // V does nothing in a boat
   await page.keyboard.press('KeyV');
   await step(0.2);
@@ -82,15 +90,26 @@ test('boating', async ({ page }) => {
   c.ok(!p.auto && p.state === 'boating', `V in the boat: auto ${p.auto}, ${p.state}`);
 
   /* ---- 4. a loop out past the dam ---- */
-  // pedal straight out of the berth first, then the waypoints
+  // pedal straight out of the berth: up to speed in about a second, 3 m/s
   await page.keyboard.down('KeyW');
-  await step(4);
+  await step(1);
+  const after1 = (await api.boat()).speed;
+  await step(3);
   await page.keyboard.up('KeyW');
+  const cruise = (await api.boat()).speed;
+  c.ok(after1 >= 1.9, `after 1 s of pedalling: ${after1} m/s (want ~2/3 of 3.0)`);
+  c.ok(Math.abs(cruise - 3.0) < 0.1, `pedalling speed ${cruise} m/s (want 3.0)`);
   const legs = [];
-  for (const [s, d] of [[jetty.s, jetty.d1 + 25], [2150, 60], [1850, 55], [1700, 55]]) {
+  // the second leg with Shift: 4.5 m/s, on stamina
+  for (const [s, d, fast] of [[jetty.s, jetty.d1 + 25, false], [2150, 60, true], [1850, 55, false], [1700, 55, false]]) {
     const [e, n] = await P(s, d);
-    legs.push({ s, d, ...(await api.driveTo(e, n, { tol: 8 })) });
+    legs.push({ s, d, fast, ...(await api.driveTo(e, n, { tol: 8, fast })) });
   }
+  const hard = legs.find((l) => l.fast);
+  c.ok(hard.maxSpeed > 4.3 && hard.maxSpeed <= 4.55, `pedalling hard reached ${hard.maxSpeed} m/s (want 4.5)`);
+  c.ok(hard.minStamina < 90, `pedalling hard didn't drain stamina (lowest ${hard.minStamina})`);
+  // (the leg after the hard one starts at 4.5 and eases back: judge the one before it)
+  c.ok(legs[0].maxSpeed <= 3.05, `${legs[0].maxSpeed} m/s without Shift (want 3.0)`);
   for (const l of legs) {
     c.ok(l.arrived, `leg to s ${l.s} d ${l.d}: didn't arrive (${l.left} m short after ${l.t} s)`);
     c.ok(l.belowMargin === 0, `leg to s ${l.s}: ${l.belowMargin} samples closer than the margin to the shore (worst ${l.worstShore} m)`);
@@ -105,7 +124,11 @@ test('boating', async ({ page }) => {
   {
     const [e, n] = await P(1700, 10);
     await api.driveTo(e, n, { tol: 40, maxT: 30 });
-    await step(4); // coasting, the camera settling in behind
+    const v0 = (await api.boat()).speed;
+    await step(3); // the long glide off the pedals, the camera settling in behind
+    const v3 = (await api.boat()).speed;
+    c.ok(v0 > 2.5 && v3 > 0.4 * v0, `the glide: ${v0} m/s off the pedals, ${v3} m/s 3 s later (want a long glide)`);
+    await step(1);
     await api.setTime('golden'); // (the ride took the clock on past it)
     f = await api.boatInFrame();
     c.ok(f.inFrame, `mid-lake: the boat or the jogger is out of frame ${JSON.stringify(f)}`);
@@ -143,6 +166,9 @@ test('boating', async ({ page }) => {
   await rep.shot(page, 'docking');
   await step(1.2);
   p = await api.getPlayer(); b = await api.boat();
+  await page.waitForTimeout(2600); // the music fades out as you dock (real time)
+  m = await api.music();
+  c.ok(m.gain < 0.05 && (await api.getHud()).sound === 'Sound on', `docked: the music is still playing (gain ${m.gain}, card "${(await api.getHud()).sound}")`);
   const berths = await api.berths();
   c.ok(p.state !== 'boating' && b.phase === 'off' && !b.visible, `after docking: ${p.state}, boat ${b.phase}`);
   c.ok(berths.find((x) => x.i === free.i)?.moored, `berth ${free.i} is still empty after docking`);

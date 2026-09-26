@@ -93,6 +93,8 @@ export function createCameraRig(camera, { groundAt }) {
         rig.pitch += (wantPitch - rig.pitch) * (1 - Math.exp(-rate * dt));
       }
     } else rig.seated = false;
+    // a view may ask to stand further back than the boom (the boat, with its speed): eased, on top of the wheel's zoom
+    rig.extra = (rig.extra ?? 0) + ((bench?.extraBoom ?? 0) - (rig.extra ?? 0)) * (1 - Math.exp(-1.5 * dt));
 
     j.visible = !rig.isFirstPerson();
     // the look target: chest height, with a little of the stride's bob
@@ -106,7 +108,7 @@ export function createCameraRig(camera, { groundAt }) {
       rig.pos.copy(_eye);
     } else {
       const over = (bench?.side ?? 0.45) * Math.min(1, rig.boom / 3);
-      _eye.copy(_t).addScaledVector(fwd, -rig.boom).addScaledVector(right, over);
+      _eye.copy(_t).addScaledVector(fwd, -(rig.boom + rig.extra)).addScaledVector(right, over);
       // lag the boom a touch; snap on teleports
       if (first || snap) rig.pos.copy(_eye); else rig.pos.lerp(_eye, 1 - Math.exp(-14 * dt));
     }

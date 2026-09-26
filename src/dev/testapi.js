@@ -200,7 +200,7 @@ export function installTestApi(ctx) {
       return { active: movers.filter((p) => p.active).length, movers: movers.length, sinceSunrise: tod.sinceSunrise(ctx.data.sun.sunrise), hours: tod.state.hours, fog: weather.state.fog };
     },
     lamps() { return world.dam.lampLevel; },
-    music() { const g = sound.nodes?.music?.gain?.value ?? 0; return { enabled: sound.enabled, music: sound.music, gain: +g.toFixed(3), mode: sound.mode, ctx: sound.ctx?.state ?? 'none' }; },
+    music() { const N = sound.nodes || {}, g = N.music?.gain?.value ?? 0, bus = (k) => +(N[k]?.gain?.value ?? 0).toFixed(3); return { enabled: sound.enabled, music: sound.music, gain: +g.toFixed(3), mode: sound.mode, ctx: sound.ctx?.state ?? 'none', buses: { amb: bus('amb'), rain: bus('rain'), boat: bus('boat') } }; },
     camera() { return { mode: rig.mode, yaw: +azimuthForYaw(rig.yaw).toFixed(1), pitch: +THREE.MathUtils.radToDeg(rig.pitch).toFixed(1), boom: +rig.boom.toFixed(2), pos: camera.position.toArray().map((x) => +x.toFixed(2)) } },
     bench(n = 120) { return window.__bench(n); },
     renderOnce() { placeLights(); pipeline.render(); },
@@ -273,7 +273,7 @@ export function installTestApi(ctx) {
      */
     driveTo(e, n, { tol = 8, maxT = 400, fast = false, dt = 1 / 30 } = {}) {
       const keys = jogger.keys;
-      let t = 0, worst = Infinity, arrived = false, lastProgress = 0, best = Infinity, fails = 0, framed = 0, frames = 0;
+      let t = 0, worst = Infinity, arrived = false, lastProgress = 0, best = Infinity, fails = 0, framed = 0, frames = 0, maxSpeed = 0, minStamina = 100;
       const s = boat.state;
       while (t < maxT) {
         const de = e - s.e, dn = n - s.n, dist = Math.hypot(de, dn);
@@ -290,12 +290,13 @@ export function installTestApi(ctx) {
         t += dt;
         const sd = -shoreDist(s.e, s.n, 400);
         worst = Math.min(worst, sd);
+        maxSpeed = Math.max(maxSpeed, s.speed); minStamina = Math.min(minStamina, jogger.stamina);
         if (sd < BOAT.margin - 0.01) fails++;
         if (Math.round(t / dt) % 15 === 0) { frames++; const f = api.boatInFrame(); if (f.inFrame) framed++; }
       }
       for (const k of ['KeyW', 'KeyA', 'KeyD', 'ShiftLeft']) keys.delete(k);
       placeLights();
-      return { arrived, t: +t.toFixed(1), worstShore: +worst.toFixed(2), belowMargin: fails, bumps: s.bumps, left: +Math.hypot(e - s.e, n - s.n).toFixed(1), framed, frames };
+      return { arrived, t: +t.toFixed(1), worstShore: +worst.toFixed(2), belowMargin: fails, bumps: s.bumps, left: +Math.hypot(e - s.e, n - s.n).toFixed(1), framed, frames, maxSpeed: +maxSpeed.toFixed(2), minStamina: +minStamina.toFixed(1) };
     },
     /** Are the boat and the jogger in the camera's frame (hull centre, bow, stern, head)? */
     boatInFrame() {
