@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sukhna — a sunrise jog around Sukhna Lake</title>
+<meta name="description" content="A winter-morning jog around Sukhna Lake, Chandigarh, on a tiny cel-shaded planet: the dam promenade at real scale from OpenStreetMap, the Shivaliks from elevation data, and a real sunrise." />
+<meta name="theme-color" content="#6fa3f5" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #d6e3f2;
+    font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+    color: #3a3350;
+  }
+  #view { display: block; width: 100vw; height: 100vh; touch-action: none; }
+
+  /* ?stats=1 readout (core/perf.js) */
+  .stats {
+    position: fixed; right: 12px; top: 12px;
+    padding: 6px 10px; border-radius: 6px;
+    background: rgba(14,16,22,.58); color: #d9dce4;
+    font: 12px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+    white-space: pre; pointer-events: none;
+  }
+
+  /* Phase 1 dev note; the real hint bar arrives with the controls in Phase 4 */
+  .devnote {
+    position: fixed; left: 12px; bottom: 10px;
+    font-size: 12px; color: rgba(40,44,60,.7); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <canvas id="view"></canvas>
+  <div class="devnote">Sukhna · Phase 1 scaffold · drag to look · WASD move · P planet · O ink · G grade · R reset</div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>

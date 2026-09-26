@@ -9,8 +9,8 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each 
 | Phase | Status | Branch | Commit |
 |---|---|---|---|
 | 0 Plan | done | `claude/charming-hawking-lsp0mx` (merged, PR #1) | `f2ffc9a` |
-| 1 Scaffold + engine port | **in progress** | `phase-1-scaffold` | — |
-| 2 Real-data pipeline + `?flat=1` | next | — | — |
+| 1 Scaffold + engine port | **done**, pushed, awaiting merge | `phase-1-scaffold` | `bfc85db` (plan) + "Phase 1: scaffold and engine port" |
+| 2 Real-data pipeline + `?flat=1` | next | `phase-2-data` (to create from main after the merge) | — |
 | 3 Planet layout + self-checks | — | — | — |
 | 4 Jogger, camera, HUD, controls, touch | — | — | — |
 | 5 NPCs, interactions, rowing, birds | — | — | — |
@@ -21,6 +21,27 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each 
 **Notes for a fresh session:**
 - Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
 - `.ref/` is not in git. If it is missing, clone it with the command in the status line.
+- **State after Phase 1:**
+  - Vite 6.4 + three 0.180.0 (the only deps). `npm run build` passes.
+  - Ported with MIT headers: `core/toon.js`, `post.js`, `outline.js`, `util.js`, `sky.js`, `textures.js` (helpers, plus Latin/Devanagari/Gurmukhi font stacks), `palette.js` (structure; colours from plan §2), and `world/planet.js`. New: `core/perf.js`, `world/index.js`, `main.js` (dev viewer, not the jogger).
+  - `R = 320` is a **placeholder constant** in `src/world/planet.js`. Phase 2 replaces it with `(L_prom + L_join) / 2π` from the data.
+  - `world/index.js` holds two **DEBUG pieces** (an equator strip, and a post every 100 m) that prove the bake. Phase 3 deletes them.
+  - The sun is the reference's fixed `SUN_LOCAL` (in `main.js`). The real sun arrives in Phase 6.
+  - Deviations from the reference, all documented in file headers:
+    - `toon.js` drops the `flatShading` option, which r180 ignores with a warning; the look is unchanged.
+    - `post.js` re-syncs near/far every frame.
+    - The sky dome and clouds are rotated into the local surface frame. The reference only moved them, which breaks once you are a quarter-lap round.
+  - Known artifacts left for Phase 3: faint ink on the bare sphere's 8 m facet creases near the horizon, and grazing-angle scratches right at the horizon. Phase 3's ground meshes cover this band.
+  - Lesson: author long loop geometry pre-segmented (about 4 m). A single 2 km quad subdivides into slivers that the ink pass picks up.
+- **Dev hooks:**
+  - `window.__scene` exposes the scene objects.
+  - `window.__shot(name, W, H, {pos:[x,0,z], yaw, pitch} | {orbit, tilt, dist})` writes `.shots/<name>.jpg` and returns the draw calls.
+  - `window.__bench(n)` returns the GPU-synced ms per frame, draw calls and the GPU name.
+  - `?stats=1` shows the live readout.
+  - Keys: drag to look, WASD (Shift is faster), P planet view, O ink, G grade, R reset. yaw −π/2 looks east along the loop, π looks at the lake (+z).
+- **Measured at the end of Phase 1** (RTX 4080 SUPER, ANGLE/D3D11, window 1721×1320, internal 2448×1878 from the 4.6 MP budget), with `__bench(200)`:
+  - ground view: 16 calls, 42k tris, 0.34 ms/frame;
+  - planet view: 8 calls, 0.24 ms/frame.
 
 ## Working rules
 
