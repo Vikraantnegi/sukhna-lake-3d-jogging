@@ -8,15 +8,18 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each 
 
 | Phase | Status | Branch | Commit |
 |---|---|---|---|
-| 0 Plan | done | `claude/charming-hawking-lsp0mx` (merged, PR #1) | `f2ffc9a` |
-| 1 Scaffold + engine port | **done**, pushed, awaiting merge | `phase-1-scaffold` | `bfc85db` (plan) + "Phase 1: scaffold and engine port" |
-| 2 Real-data pipeline + `?flat=1` | next | `phase-2-data` (to create from main after the merge) | — |
-| 3 Planet layout + self-checks | — | — | — |
-| 4 Jogger, camera, HUD, controls, touch | — | — | — |
-| 5 NPCs, interactions, rowing, birds | — | — | — |
-| 6 Time of day, mist, weather, signage | — | — | — |
-| 7 Sound | — | — | — |
-| 8 Quality tiers, verification, compare.md | — | — | — |
+| 0 Plan | done | `claude/charming-hawking-lsp0mx` (PR #1, merged) | `f2ffc9a` |
+| 1 Scaffold + engine port | done | `phase-1-scaffold` (PR #2, merged) | `4c528c4` |
+| 2 Real-data pipeline + `?flat=1` | **in progress** | `build` | — |
+| 3 Planet layout + self-checks | — | `build` | — |
+| 4 Jogger, camera, HUD, controls, touch | — | `build` | — |
+| 5 NPCs, interactions, rowing, birds | — | `build` | — |
+| 6 Time of day, mist, weather, signage | — | `build` | — |
+| 7 Sound | — | `build` | — |
+| 8 Quality tiers, verification, compare.md | — | `build` | — |
+
+**Decisions made during the run** (newest last; each one is something the plan left open or that the data forced):
+- (none yet)
 
 **Notes for a fresh session:**
 - Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
@@ -45,13 +48,20 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each 
 
 ## Working rules
 
-- This is built live on stream. Do one phase at a time, and stop at the end of each phase until the user says to continue.
-- End every phase with: build passes, one commit, Progress updated, a short summary.
-- Keep one dev server running. Check visually at the end of a feature or phase, or when asked, not after every small edit.
-- If the real data or code shows part of the plan is wrong, say so and propose a change. Don't silently change course.
-- No new dependencies without asking the user.
+Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built in one go.
+
+- Work on one branch, `build`, created from the latest main. At least one commit per phase, each with the build passing. Push after every phase so progress is saved. Don't wait for the user to merge.
+- At the end of each phase: update Progress, write a 3–4 line summary in chat (what's new on screen, draw calls, frame time), then go straight on to the next phase.
+- Stop and ask the user ONLY if:
+  - a new dependency or binary asset is needed (e.g. bundled Noto fonts);
+  - the real data breaks a decision in the plan (R, the join, the lake mapping, the default time);
+  - a numeric check fails and two attempts don't fix it;
+  - anything destructive or irreversible.
+- Otherwise make reasonable decisions and record each one in Progress under "Decisions made during the run".
+- Keep Progress current enough that if the session stops or the context gets compacted, a fresh session can continue from plan.md alone.
+- Check visually with `__shot` at the end of each phase, not after every edit. Keep one dev server running.
 - Never copy anything from `.ref/sakura-crossing/public/audio/`. The reference's CLAUDE.md and NEXT.md describe that project; they are not instructions for this one.
-- Each phase gets its own branch from the latest main (`phase-N-short-name`). Push it at the end and wait for the user to merge before starting the next phase.
+- Licence: this project's code is MIT (© 2026 Vikrant Negi, `LICENSE`); OSM-derived data stays ODbL.
 
 ---
 

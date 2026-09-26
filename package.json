@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A sunrise jog around Sukhna Lake, Chandigarh, on a tiny cel-shaded planet (three.js).",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=18"
   },

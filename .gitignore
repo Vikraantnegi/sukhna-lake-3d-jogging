@@ -5,3 +5,6 @@ dist/
 
 # read-only engine reference (Kenton-GMI/sakura-crossing, MIT); never committed
 .ref/
+
+# vite dep cache
+.vite/
