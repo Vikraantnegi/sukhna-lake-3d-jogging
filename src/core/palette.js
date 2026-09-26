@@ -31,7 +31,7 @@ export const PAL = {
   inkSoft: 0x4a4468,
 
   // --- ground (terrain vertex colours by OSM cover class) ---
-  groundDry: 0xb3ad86,     // unclassified land: dry winter grass and earth
+  groundDry: 0x9ea46c,     // unclassified land: olive winter grass and earth
   grass: 0x7fa04f,         // embankment and verges (r2)
   grassDeep: 0x5f7a3a,
   scrub: 0x8a8f5a,         // Shivalik scrub forest, open ground

@@ -6,6 +6,11 @@ import { gradeGrid, buildShoreBand } from './shore.js';
 import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM } from './dam.js';
 import { buildLake } from './lake.js';
 import { runChecks, shoreCheck } from './checks.js';
+import { buildVegetation } from './vegetation.js';
+import { buildCityside } from './cityside.js';
+import { buildLandmarks } from './landmarks.js';
+import { buildRidgeRing } from '../core/sky.js';
+import { data } from './frame.js';
 
 /* ------------------------------------------------------------------ *
  * World assembly (plan §4, §6).
@@ -53,9 +58,15 @@ export function buildWorld(scene) {
   const lake = buildLake(scene);
   const dam = buildDam(scene, { ground: groundAt });
   const band = buildShoreBand(scene, groundAt);
+  const tVeg = performance.now();
+  const vegetation = buildVegetation(scene);
+  const vegMs = Math.round(performance.now() - tVeg);
+  const city = buildCityside(scene);
+  const landmarks = buildLandmarks(scene);
+  const ridges = buildRidgeRing(scene, data.ridges);
 
-  const lods = [terrain.lod, dam.lod];
-  const timing = { shapeMs: Math.round(tShape), buildMs: Math.round(performance.now() - t0) };
+  const lods = [terrain.lod, dam.lod, city.lod, landmarks.lod];
+  const timing = { shapeMs: Math.round(tShape), vegMs, buildMs: Math.round(performance.now() - t0), trees: vegetation.trees.n };
   console.info(`[world] shaped ${shaped.shore} shore + ${shaped.dam} dam grid nodes, ${shaped.patches} detail patches (${shaped.refined} spots refined); built in ${timing.buildMs} ms`, dam.stats);
 
   const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks() : [];
@@ -67,6 +78,10 @@ export function buildWorld(scene) {
     lake,
     dam,
     band,
+    vegetation,
+    city,
+    landmarks,
+    ridges,
     lods,
     timing,
     patches: patchRects,
@@ -77,8 +92,11 @@ export function buildWorld(scene) {
       const g = groundAt(e, n);
       return inLake(e, n) ? Math.max(0, g) : g;
     },
-    update(dt, viewPos) {
+    update(dt, viewPos, overview = false) {
       for (const l of this.lods) l.update(viewPos);
+      vegetation.update(viewPos, overview);
+      const ve = viewPos.x, vn = -viewPos.z;
+      ridges.update(viewPos, nearestS(ve, vn).s);
     },
   };
 }

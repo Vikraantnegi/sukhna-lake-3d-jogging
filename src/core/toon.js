@@ -29,8 +29,9 @@ const RAMPS = {
   // even on the shadow side
   soft: [180, 255],
   soft3: [172, 214, 255],
-  // Sukhna: real terrain in relief mode -- flat ground sits in the middle band
-  terrain: [118, 206, 255],
+  // Sukhna: real terrain in relief mode -- flat sunlit ground at full light,
+  // only slopes turned away from the sun drop (and take the cool tint)
+  terrain: [150, 246, 255],
 };
 
 const rampCache = new Map();

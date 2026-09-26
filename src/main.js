@@ -191,7 +191,7 @@ function frame() {
     applyCamera();
   }
   placeLights();
-  world.update(dt, camera.position);
+  world.update(dt, camera.position, overview);
   pipeline.render();
   perf.end(dt);
   flatPanel?.update(camera, dt);
@@ -240,7 +240,7 @@ if (import.meta.env?.DEV) {
       if (opts.h !== undefined) camera.position.y = world.heightAt(view.e, view.n) + opts.h;
     }
     placeLights();
-    world.update(0, camera.position);
+    world.update(0, camera.position, overview);
     if (opts.ink !== undefined) pipeline.enabled.ink = opts.ink;
     if (opts.grade !== undefined) pipeline.enabled.grade = opts.grade;
     pipeline.forceScale = opts.scale || 1;

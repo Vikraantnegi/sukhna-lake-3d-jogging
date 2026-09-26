@@ -97,3 +97,71 @@ export function buildSky(scene, radius = 30000) {
 
   return { dome, clouds, uniforms };
 }
+
+/* ------------------------------ Sukhna ------------------------------ */
+
+/**
+ * The far ridgeline ring (plan §3, §4): the ranges beyond the hill grid --
+ * Kasauli, Morni -- as one silhouette at their real azimuths and real
+ * distances (16-42 km), from the pipeline's ray-march.  The data holds a
+ * horizon profile from three points on the walk; the ring blends between
+ * them by where you are (the parallax over 2.5 km is several degrees for
+ * the nearer ridges).  Drawn in the far pass only, behind the real hill
+ * terrain, unlit and unfogged: its haze is painted in, top to bottom.
+ */
+export function buildRidgeRing(scene, ridges, { near = 0xa3adc0, haze = PAL.skyHaze } = {}) {
+  const N = 360;
+  const pos = new Float32Array((N + 1) * 2 * 3);
+  const col = new Float32Array((N + 1) * 2 * 3);
+  const idx = [];
+  for (let i = 0; i < N; i++) { const a = i * 2, b = a + 2; idx.push(a, a + 1, b, b, a + 1, b + 1); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  geo.setIndex(idx);
+  const mat = new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.frustumCulled = false;
+  mesh.renderOrder = -8;
+  mesh.name = 'ridgeRing';
+  setLayers(mesh, LAYER.FAR);
+  scene.add(mesh);
+  const cTop = new THREE.Color(near), cLow = new THREE.Color(haze);
+  const views = ridges.views;
+  let lastS = -1;
+
+  function rebuild(s) {
+    // blend the two nearest viewpoints by arc length
+    let i = 0;
+    while (i < views.length - 2 && s > views[i + 1].s) i++;
+    const a = views[i], b = views[i + 1];
+    const t = THREE.MathUtils.clamp((s - a.s) / (b.s - a.s), 0, 1);
+    for (let az = 0; az <= N; az++) {
+      const k = az % N;
+      const ang = THREE.MathUtils.lerp(a.angle[k], b.angle[k], t);
+      const km = THREE.MathUtils.clamp(THREE.MathUtils.lerp(a.km[k], b.km[k], t) || 30, 16, 42);
+      const d = km * 1000, r = THREE.MathUtils.degToRad(az);
+      const dx = Math.sin(r) * d, dz = -Math.cos(r) * d;
+      const top = d * Math.tan(THREE.MathUtils.degToRad(Math.max(ang, -0.5)));
+      const o = az * 6;
+      pos[o] = dx; pos[o + 1] = top + 4; pos[o + 2] = dz;
+      pos[o + 3] = dx; pos[o + 4] = -d * 0.06; pos[o + 5] = dz;
+      // nearer, higher ridges read darker; everything sinks into the haze below
+      const k2 = THREE.MathUtils.clamp((ang + 0.3) / 3.5, 0, 1) * THREE.MathUtils.clamp(1.25 - km / 45, 0.35, 1);
+      const c = cLow.clone().lerp(cTop, 0.35 + 0.55 * k2);
+      col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b;
+      col[o + 3] = cLow.r; col[o + 4] = cLow.g; col[o + 5] = cLow.b;
+    }
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.color.needsUpdate = true;
+  }
+
+  return {
+    mesh,
+    /** Follow the camera; re-blend the profile when s has moved 25 m. */
+    update(camPos, s) {
+      mesh.position.set(camPos.x, 0, camPos.z);
+      if (Math.abs(s - lastS) > 25) { rebuild(s); lastS = s; }
+    },
+  };
+}
