@@ -212,6 +212,66 @@ const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Eule
 const joint = () => new THREE.Matrix4();
 
 /** A rest pose: every angle zero.  Gait fills these fields (radians, metres). */
+/**
+ * A seated pose that fits the seat (plan §6; user review after Phase 7).
+ * Given the height of the seat surface and of the surface the feet rest on
+ * (both relative to the same datum), returns the root height and the joint
+ * angles: the hips sit on the seat (pelvis and thighs just clear of it), the
+ * thighs run forward over the edge, and the shins come down to the foot
+ * surface -- swinging forward when the drop is short (a step), or the
+ * thighs angle down when it is long (a bench) -- with the shoes flat and the
+ * hands resting on the knees.  `reach` is how far the ankles land in front
+ * of the hips.  The same numbers poseBody uses, so what is posed fits.
+ */
+export function seatPose(b, seatTop, footTop) {
+  const H = b.height, g = b.girth;
+  const legLen = H * b.legRatio, thigh = (legLen - 0.07) * 0.52, shin = (legLen - 0.07) * 0.48;
+  // P is the pelvis centre (legLen − 0.95·thigh over the root in the sit pose); the hip
+  // joints hang 3 cm under it.  The lowest of the pelvis (an ellipsoid 2 cm up, 0.06·H deep)
+  // and the thighs (rods 0.04·H·girth round the joint line) sits 1 cm over the seat.
+  const P = seatTop + 0.01 + Math.max(H * 0.06 - 0.02, 0.03 + H * 0.04 * g);
+  const hipY = P - 0.03;
+  const rootY = P - (legLen - thigh * 0.95);
+  // drop from the hip joint to the ankle joint (the sole is 7 cm under the ankle)
+  const D = hipY - (footTop + 0.07);
+  let phi = 0, beta = 0;
+  if (D <= shin) beta = Math.acos(Math.min(1, Math.max(0, D / shin)));
+  else phi = Math.asin(Math.min(0.9, (D - shin) / thigh));
+  const reach = thigh * Math.cos(phi) + shin * Math.sin(beta);
+  // hands on the knees: a two-link reach from the shoulder (~0.3 H over the hip) to the knee top
+  const ua = H * b.armRatio * 0.43, la = H * b.armRatio * 0.4 + 0.04;
+  const fwd = thigh * Math.cos(phi), down = H * 0.3 - 0.04 + thigh * Math.sin(phi) - 0.07;
+  const dist = Math.min(ua + la - 0.005, Math.hypot(fwd, down));
+  const elbow = Math.PI - Math.acos(Math.min(1, Math.max(-1, (ua * ua + la * la - dist * dist) / (2 * ua * la))));
+  const alpha = Math.acos(Math.min(1, Math.max(-1, (ua * ua + dist * dist - la * la) / (2 * ua * dist))));
+  const shoulder = Math.atan2(fwd, down) - alpha;
+  return { rootY, hipY, reach, hip: -phi, knee: -beta - phi, ankle: -beta, shoulder, elbow };
+}
+/**
+ * Seated on a step (the water steps): the hips on `seat` ({ d0, d1, y }), the
+ * feet on `foot` ({ d, y }), d measured along the flight.  Places the root so
+ * the ankles land on the lower tread, the hips kept on the seat; returns the
+ * pose, the root's d and how far in front of the root the seat's edge (with
+ * its 5 cm lip) is.
+ */
+export function stepSeat(b, seat, foot) {
+  const sp = seatPose(b, seat.y, foot.y);
+  const d = Math.min(seat.d1 - 0.06, Math.max(seat.d0 + 0.16, foot.d - sp.reach));
+  return { sp, d, front: seat.d1 + 0.05 - d };
+}
+/** Write a seatPose into a pose (sit = 1). */
+export function applySeat(pose, sp) {
+  pose.sit = 1;
+  pose.hipL = pose.hipR = sp.hip;
+  pose.kneeL = pose.kneeR = sp.knee;
+  pose.ankleL = pose.ankleR = sp.ankle;
+  pose.shoulderL = pose.shoulderR = sp.shoulder;
+  pose.elbowL = pose.elbowR = sp.elbow;
+  pose.armOutL = pose.armOutR = 0.02;
+  pose.lean = 0.04; pose.bounce = 0; pose.twist = 0; pose.sway = 0;
+  return pose;
+}
+
 export function restPose() {
   return {
     bounce: 0, lean: 0, twist: 0, sway: 0, headPitch: 0,

@@ -5,7 +5,8 @@ import { detectPatches, buildPatchGrids } from './patches.js';
 import { gradeGrid, buildShoreBand } from './shore.js';
 import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM, BENCHES } from './dam.js';
 import { buildLake } from './lake.js';
-import { runChecks, shoreCheck, waterMarginCheck, laneCheck } from './checks.js';
+import { runChecks, shoreCheck, waterMarginCheck, laneCheck, seatCheck } from './checks.js';
+import * as BODY from '../people/body.js';
 import { buildVegetation } from './vegetation.js';
 import { buildCityside } from './cityside.js';
 import { buildLandmarks } from './landmarks.js';
@@ -91,7 +92,22 @@ export function buildWorld(scene, { npcs = 200, birdCount = 175, simpleWater = f
     r.detail = `20 simulated min, ${r.detail}`;
     return r;
   };
-  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30)]) : [];
+  // every water step (lowest dry tread, feet on the next) for each outfit, and every NPC on a bench
+  const seatCases = () => {
+    const cases = [];
+    for (const st of dam.waterStairs) {
+      const dry = st.treads.filter((q) => q.y > 0.12), seat = dry[dry.length - 1];
+      const foot = st.treads[st.treads.indexOf(seat) + 1] || seat;
+      BODY.OUTFITS.forEach((o, i) => { const body = BODY.makeBody(o.row); cases.push({ name: `steps s${st.s} outfit ${i}`, body, seatTop: seat.y, footTop: foot.y, front: BODY.stepSeat(body, seat, foot).front }); });
+    }
+    for (const p of crowd.people.filter((q) => q.seat)) {
+      const g0 = walkY(p.bench.s);
+      cases.push({ name: `bench s${Math.round(p.bench.s)} #${p.id}`, body: p.body, seatTop: g0 + 0.48, footTop: g0, front: 0.21 });
+    }
+    BODY.OUTFITS.forEach((o, i) => cases.push({ name: `bench (jogger) outfit ${i}`, body: BODY.makeBody(o.row), seatTop: 0.48, footTop: 0, front: 0.21 }));
+    return cases;
+  };
+  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30), () => seatCheck(seatCases(), BODY)]) : [];
   window.__checks = checks;
 
   return {

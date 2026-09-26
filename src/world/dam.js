@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { cel } from '../core/toon.js';
 import { PAL } from '../core/palette.js';
-import { cobbleTex } from '../core/textures.js';
+import { cobbleTex, slabTex } from '../core/textures.js';
 import { rngKit } from '../core/util.js';
 import { data, L, spineAt, nearestS, rayToShore, shoreDist, inLake } from './frame.js';
 import { LodSet, LAYER, setLayers } from './chunks.js';
@@ -345,6 +345,8 @@ function lampGlowMaterial() {
   mat.userData.lampGlow = u.uLampGlow;
   return mat;
 }
+/** The bench seat's top, over the ground it stands on (the seat slab: 0.45 m centre, 6 cm thick). */
+export const BENCH_SEAT = 0.48;
 /** Red-brown wooden bench on a dark frame (photo r1), facing -z. */
 const BENCH = mergedParts([
   { geo: new THREE.BoxGeometry(1.8, 0.06, 0.42), color: PAL.benchWood, matrix: M4(0, 0.45, 0) },
@@ -515,10 +517,10 @@ function stairGeometry(steps) {
  * mapping (one repeat per 2 m along, per 0.45 m up a face, per 0.5 m across
  * a top).  Faces of BoxGeometry come in the order +x, -x, +y, -y, +z, -z.
  */
-function cobbleBox(w, h, d, matrix) {
+function cobbleBox(w, h, d, matrix, top = [2, 0.5]) {
   const g = new THREE.BoxGeometry(w, h, d);
   const uv = g.attributes.uv;
-  const scale = [[d / 2, h / 0.45], [d / 2, h / 0.45], [w / 2, d / 0.5], [w / 2, d / 0.5], [w / 2, h / 0.45], [w / 2, h / 0.45]];
+  const scale = [[d / 2, h / 0.45], [d / 2, h / 0.45], [w / top[0], d / top[1]], [w / top[0], d / top[1]], [w / 2, h / 0.45], [w / 2, h / 0.45]];
   for (let i = 0; i < uv.count; i++) { const [su, sv] = scale[Math.floor(i / 4)]; uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv); }
   const ng = g.toNonIndexed();
   ng.applyMatrix4(matrix);
@@ -550,14 +552,18 @@ function waterStairGeometry(stairs) {
     st.treads = [];
     // the landing, at walk level through the parapet gap
     const dl = (st.landing.d0 + st.landing.d1) / 2, rl = st.landing.d1 - st.landing.d0;
-    slabs.push({ geo: new THREE.BoxGeometry(st.width, 0.1, rl), color: PAL.cobbleLight, matrix: at(dl, y0 - 0.05) });
+    // (2 cm proud of the walk and the parapet's footing under it: no coplanar faces)
+    slabs.push(cobbleBox(st.width, 0.1, rl, at(dl, y0 - 0.03), [2, 1]));
     for (const side of [-1, 1]) stone.push(cobbleBox(wall, y0 + DAM.parH - base, rl, M4(f.e + f.ne * dl + f.te * (half + wall / 2) * side, (y0 + DAM.parH + base) / 2, -(f.n + f.nn * dl + f.tn * (half + wall / 2) * side), yaw)));
     for (let q = 0; q < count; q++) {
-      const top = y0 - q * rise, dm = d0 + (q + 0.5) * run;
+      // 3 cm over the slope at the tread's upper edge, so the grass never shows through
+      const top = y0 - q * rise + 0.03, dm = d0 + (q + 0.5) * run;
       // the block under the tread
       stone.push(cobbleBox(st.width, top - 0.07 - base, run, at(dm, (top - 0.07 + base) / 2)));
       // the tread: a pale slab with a 6 cm lip toward the water, alternate slabs a shade apart
-      slabs.push({ geo: new THREE.BoxGeometry(st.width + 0.06, 0.08, run + 0.06), color: q % 2 ? PAL.cobbleLight : 0xc4bfb1, matrix: at(dm + 0.03, top - 0.04) });
+      // the tread: a dressed-stone slab with a 5 cm lip toward the water; it stops short of
+      // the next tread's riser, so treads never overlap
+      slabs.push(cobbleBox(st.width, 0.08, run + 0.05, at(dm + 0.025, top - 0.04), [2, 1]));
       // stepped cheek walls, parapet height above the tread
       for (const side of [-1, 1]) {
         const off = (half + wall / 2) * side;
@@ -568,7 +574,9 @@ function waterStairGeometry(stairs) {
   }
   const stoneGeo = stone.length ? mergeGeometries(stone, false) : null;
   if (stoneGeo) { stoneGeo.computeVertexNormals(); stoneGeo.computeBoundingSphere(); }
-  return { stone: stoneGeo, slabs: slabs.length ? mergedParts(slabs) : null };
+  const slabGeo = slabs.length ? mergeGeometries(slabs, false) : null;
+  if (slabGeo) { slabGeo.computeVertexNormals(); slabGeo.computeBoundingSphere(); }
+  return { stone: stoneGeo, slabs: slabGeo };
 }
 
 /* ------------------------------- build ------------------------------- */
@@ -671,7 +679,8 @@ export function buildDam(scene, { ground }) {
     group.add(stairs);
   }
   const ws = waterStairGeometry(waterStairs);
-  for (const [geo, mat, name] of [[ws.stone, parapetMat, 'waterSteps.stone'], [ws.slabs, vcProps, 'waterSteps.treads']]) {
+  const slabMat = cel({ color: 0xffffff, map: slabTex() });
+  for (const [geo, mat, name] of [[ws.stone, parapetMat, 'waterSteps.stone'], [ws.slabs, slabMat, 'waterSteps.treads']]) {
     if (!geo) continue;
     const m = new THREE.Mesh(geo, mat);
     m.name = name;

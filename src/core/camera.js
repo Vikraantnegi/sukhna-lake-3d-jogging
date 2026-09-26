@@ -9,7 +9,10 @@ import { spineAt, LAKE_CENTRE } from '../world/frame.js';
  *                 stride; the mouse wheel shortens it from 5.5 m to 0,
  *                 where it becomes first person (the body hides)
  *   auto-jog (V)  the camera drifts slowly round toward the lake side
- *   bench         settles on the lake view while you sit
+ *   seated        (a bench or the water steps) over the shoulder: ~3 m
+ *                 behind, a little to one side and above the head, looking
+ *                 past the jogger to the lake, with a very slow drift; the
+ *                 mouse and wheel still work (it settles back when idle)
  *   overview (P)  an aerial orbit of the whole lake, ~1.1 km up
  *
  * The view never dips under the ground or the water.
@@ -72,28 +75,32 @@ export function createCameraRig(camera, { groundAt }) {
       rig.yaw += dy * (1 - Math.exp(-0.18 * dt));
       rig.pitch += (-0.1 - rig.pitch) * (1 - Math.exp(-0.3 * dt));
     }
-    // bench: settle on the lake view
+    // seated: frame once (the wheel may change it after), then settle with a slow drift
     if (bench) {
-      let dy = bench.yaw - rig.yaw;
-      dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-      rig.yaw += dy * (1 - Math.exp(-1.2 * dt));
-      rig.pitch += ((bench.pitch ?? -0.05) - rig.pitch) * (1 - Math.exp(-1.2 * dt));
-      // the bench keeps the boom at least 3.2 m; the steps ask for a close 2.2 m
-      if (bench.boom !== undefined) rig.boomTarget += (bench.boom - rig.boomTarget) * (1 - Math.exp(-1.5 * dt));
-      else rig.boomTarget = Math.max(rig.boomTarget, 3.2);
-    }
+      if (!rig.seated) { rig.seated = true; rig.seatT = 0; rig.boomTarget = bench.boom ?? Math.max(rig.boomTarget, 3.2); rig.lookIdle = 99; }
+      rig.seatT += dt;
+      if (rig.lookIdle > 2.5) {
+        const drift = bench.drift ? Math.sin(rig.seatT * 0.09) * 0.08 + Math.sin(rig.seatT * 0.031) * 0.05 : 0;
+        let dy = bench.yaw + drift - rig.yaw;
+        dy = Math.atan2(Math.sin(dy), Math.cos(dy));
+        rig.yaw += dy * (1 - Math.exp(-0.9 * dt));
+        const wantPitch = (bench.pitch ?? -0.05) + (bench.drift ? Math.sin(rig.seatT * 0.057) * 0.02 : 0);
+        rig.pitch += (wantPitch - rig.pitch) * (1 - Math.exp(-0.9 * dt));
+      }
+    } else rig.seated = false;
 
     j.visible = !rig.isFirstPerson();
     // the look target: chest height, with a little of the stride's bob
     const bob = j.gait.pose.bounce * 0.5;
-    _t.set(j.e, j.y + 1.45 + bob, -j.n);
+    // seated: aim a little above the head, so the jogger sits in the lower third
+    if (bench && bench.lift !== undefined) { j.eye(_t); _t.y += bench.lift; } else _t.set(j.e, j.y + 1.45 + bob, -j.n);
     const fwd = _v.set(-Math.sin(rig.yaw) * Math.cos(rig.pitch), Math.sin(rig.pitch), -Math.cos(rig.yaw) * Math.cos(rig.pitch));
     const right = new THREE.Vector3(Math.cos(rig.yaw), 0, -Math.sin(rig.yaw));
     if (rig.isFirstPerson()) {
       j.eye(_eye);
       rig.pos.copy(_eye);
     } else {
-      const over = 0.45 * Math.min(1, rig.boom / 3);
+      const over = (bench?.side ?? 0.45) * Math.min(1, rig.boom / 3);
       _eye.copy(_t).addScaledVector(fwd, -rig.boom).addScaledVector(right, over);
       // lag the boom a touch; snap on teleports
       if (first || snap) rig.pos.copy(_eye); else rig.pos.lerp(_eye, 1 - Math.exp(-14 * dt));

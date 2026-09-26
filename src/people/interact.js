@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { spineAt, nearestS } from '../world/frame.js';
-import { walkY, BENCHES } from '../world/dam.js';
+import { walkY, BENCHES, BENCH_SEAT } from '../world/dam.js';
+import { seatPose, stepSeat, applySeat } from './body.js';
 
 /* ------------------------------------------------------------------ *
  * E interactions (plan §6): short and non-blocking.
@@ -54,8 +55,8 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
         if (Math.abs(w.s - st.s) < st.width / 2 + 0.6 && d > st.landing.d0 - 1.2 && d < last + 0.5) {
           // the lowest tread that is still dry (its top at least 12 cm over the lake)
           const dry = st.treads.filter((tr) => tr.y > 0.12);
-          const seat = dry[dry.length - 1];
-          if (seat) return { kind: 'steps', label: 'sit on the steps', st, seat, f: spineAt(st.s) };
+          const seat = dry[dry.length - 1], foot = st.treads[st.treads.indexOf(seat) + 1] || seat;
+          if (seat) return { kind: 'steps', label: 'sit on the steps', st, seat, foot, f: spineAt(st.s) };
         }
       }
     }
@@ -113,7 +114,10 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
         busy = { kind: 'bench', until: Infinity, f: c.f };
         jogger.frozen = true;
         jogger.e = c.be; jogger.n = c.bn;
-        jogger.y = walkY(c.bench.s);
+        // hips on the seat, feet on the ground (seatPose fits the jogger's own proportions)
+        const ground = walkY(c.bench.s), sp = seatPose(jogger.body, ground + BENCH_SEAT, ground);
+        jogger.y = sp.rootY;
+        jogger.override = (pose) => applySeat(pose, sp);
         jogger.heading = Math.atan2(-c.f.ne, c.f.nn);
         jogger.sitting = 1;
         hud.flash('move to get up', 1400);
@@ -123,9 +127,12 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
         // seated on the tread: the hips just over it, the feet down the flight
         busy = { kind: 'steps', until: Infinity, f: c.f };
         jogger.frozen = true;
-        const back = 0.12; // sit toward the back of the tread
-        jogger.e = c.f.e + c.f.ne * (c.seat.d - back); jogger.n = c.f.n + c.f.nn * (c.seat.d - back);
-        jogger.y = c.seat.y - 0.4;
+        // the hips on this tread, the feet on the one below: place the root so the
+        // ankles land mid-way down the lower tread, keeping the hips on the seat
+        const { sp, d } = stepSeat(jogger.body, c.seat, c.foot);
+        jogger.e = c.f.e + c.f.ne * d; jogger.n = c.f.n + c.f.nn * d;
+        jogger.y = sp.rootY;
+        jogger.override = (pose) => applySeat(pose, sp);
         jogger.heading = Math.atan2(-c.f.ne, c.f.nn);
         jogger.sitting = 1;
         hud.flash('move to get up', 1400);
@@ -137,6 +144,8 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
 
   function end() {
     if (!busy) return;
+    // stand up where you sat, on the surface there
+    if (busy.kind === 'bench' || busy.kind === 'steps') jogger.y = jogger.collider.surfaceAt(jogger.e, jogger.n);
     jogger.frozen = false;
     jogger.override = null;
     if (busy.kind === 'chai') { jogger.stamina = 100; hud.flash('stamina refilled', 1200); }
@@ -158,9 +167,9 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
     say,
     /** The bench's lake view for the camera, while sitting. */
     benchView() {
-      if (busy?.kind === 'bench') return { yaw: Math.atan2(-busy.f.ne, busy.f.nn) };
-      // the steps: low and close, just over the water
-      if (busy?.kind === 'steps') return { yaw: Math.atan2(-busy.f.ne, busy.f.nn), pitch: -0.03, boom: 2.2 };
+      // over the shoulder: ~3 m behind, a little to one side and above the head, looking
+      // past the jogger to the lake (the jogger in the lower third), drifting slowly
+      if (busy?.kind === 'bench' || busy?.kind === 'steps') return { yaw: Math.atan2(-busy.f.ne, busy.f.nn), pitch: -0.1, boom: 3.0, side: 0.75, lift: 0.3, drift: true };
       return null;
     },
     /** Sitting on a bench or the water steps (the music plays). */

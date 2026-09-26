@@ -1,6 +1,7 @@
 /* Ported from sakura-crossing (https://github.com/Kenton-GMI/sakura-crossing),
  * src/core/post.js.  Copyright (c) 2026 Kenton Wang.  MIT License -- full text in
- * THIRD_PARTY_LICENSES.md.  Changes: an optional far pass (plan §4: the
+ * THIRD_PARTY_LICENSES.md.  Changes: the ink pass differentiates inverse depth
+ * (planes stay clean at grazing angles); an optional far pass (plan §4: the
  * world reaches 40 km, which one depth range cannot hold) drawn first into
  * the same target, then a depth clear, then the near pass; the ink pass
  * re-reads the near camera's near/far every render. */
@@ -82,9 +83,13 @@ const INK_SHADER = {
       float du = linearDepth( vUv + vec2( 0.0, t.y ) );
       float dd = linearDepth( vUv - vec2( 0.0, t.y ) );
 
-      // second difference of linear depth, normalised by distance
-      float sx = ( dl + dr - 2.0 * dc ) / dc;
-      float sy = ( du + dd - 2.0 * dc ) / dc;
+      // second difference of *inverse* depth, normalised: 1/z is exactly affine across
+      // any plane on screen, so a plane never inks however grazing the view (the
+      // lake from a seat on the water steps, 1.3 m up, used to take a dark band).
+      // Its sign is the opposite of linear depth's: negate so convex stays positive.
+      float wc = 1.0 / dc;
+      float sx = -( 1.0 / dl + 1.0 / dr - 2.0 * wc ) / wc;
+      float sy = -( 1.0 / du + 1.0 / dd - 2.0 * wc ) / wc;
 
       float convex  = max( 0.0,  sx ) + max( 0.0,  sy );
       float concave = max( 0.0, -sx ) + max( 0.0, -sy );

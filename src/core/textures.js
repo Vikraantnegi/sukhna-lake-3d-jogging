@@ -137,3 +137,29 @@ export const cobbleTex = () =>
       }
     }, { repeat: [1, 1] })
   );
+
+/**
+ * Dressed stone for the water-step treads (Phase 7 review): pale slabs in
+ * two or three tones, thin darker joints, a faint speckle.  One repeat is
+ * 2 m along a tread (u) by 1 m across (v); the joints fall every ~0.8 m.
+ */
+export const slabTex = () =>
+  cached('slabTex', () =>
+    make(256, 128, (c, w, h) => {
+      let seed = 11;
+      const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+      const tones = ['#cdc6b6', '#c4bdac', '#d4cebf'];
+      const cuts = [0, 0.38, 0.78, 1];
+      for (let i = 0; i < cuts.length - 1; i++) {
+        c.fillStyle = tones[i % tones.length];
+        c.fillRect(cuts[i] * w, 0, (cuts[i + 1] - cuts[i]) * w, h);
+      }
+      for (let i = 0; i < 900; i++) {
+        c.fillStyle = rnd() < 0.5 ? 'rgba(90,84,74,0.10)' : 'rgba(255,252,240,0.12)';
+        c.fillRect(rnd() * w, rnd() * h, 1.5, 1.5);
+      }
+      c.fillStyle = 'rgba(92,86,76,0.55)';
+      for (const x of cuts.slice(1, -1)) c.fillRect(x * w - 1, 0, 2, h);
+      c.fillRect(0, h / 2 - 1, w, 2);
+    }, { repeat: [1, 1] })
+  );

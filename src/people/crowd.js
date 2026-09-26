@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { cel } from '../core/toon.js';
 import { mulberry32 } from '../core/util.js';
-import { makeBody, poseBody, partGeometries, headwearGeometry, partColours, PARTS, P, restPose } from './body.js';
+import { makeBody, poseBody, partGeometries, headwearGeometry, partColours, PARTS, P, restPose, seatPose, applySeat } from './body.js';
 import { createGait } from './gait.js';
 import { TYPES, MOVERS, personRow } from './types.js';
 import { L, spineAt, nearestS } from '../world/frame.js';
 import { groundAt } from '../world/terrain.js';
-import { walkY, DAM, BENCHES } from '../world/dam.js';
+import { walkY, DAM, BENCHES, BENCH_SEAT } from '../world/dam.js';
 import { LAYER, setLayers } from '../world/chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -42,13 +42,39 @@ function alongDir(s, heading) {
   return -Math.sin(heading) * f.te + Math.cos(heading) * f.tn >= 0 ? 1 : -1;
 }
 
+/**
+ * Screen-door fade for instanced people: an `aFade` per instance (1 shown,
+ * 0 gone) and a 4x4 ordered dither that discards fragments below it.
+ * Chained after cel()'s own shader patch.
+ */
+function fadeable(mat) {
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, rr) => {
+    prev?.call(mat, sh, rr);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aFade;\nvarying float vFade;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvFade = aFade;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>
+varying float vFade;
+const float BAYER[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.);`)
+      .replace('#include <clipping_planes_fragment>', `#include <clipping_planes_fragment>
+if ( vFade < 0.999 ) {
+  ivec2 q = ivec2( mod( gl_FragCoord.xy, 4.0 ) );
+  if ( vFade <= ( BAYER[ q.x + q.y * 4 ] + 0.5 ) / 16.0 ) discard;
+}`);
+  };
+  mat.customProgramCacheKey = () => (prevKey ? prevKey.call(mat) : '') + '_fade';
+  return mat;
+}
+
 export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
   const rng = mulberry32(seed);
   const people = [];
 
   /* ------------------------------ pools ------------------------------ */
   const geos = partGeometries();
-  const mat = cel({ color: 0xffffff, bands: 3, flat: false });
+  const mat = fadeable(cel({ color: 0xffffff, bands: 3, flat: false, cache: false }));
   const group = new THREE.Group();
   group.name = 'crowd';
   const mkPool = (geo, name, cap) => {
@@ -128,6 +154,10 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
   for (const b of benchPick) {
     const [e, n, f] = at(b.s, b.d - 0.08);
     add('sitter', { mode: 'sit', act: 'sit', e, n, y: walkY(b.s), yaw: facingLake(f), bench: b });
+    // hips on the seat, feet on the ground, hands on the knees, fitted to this person
+    const p = people[people.length - 1], g0 = walkY(b.s);
+    p.seat = seatPose(p.body, g0 + BENCH_SEAT, g0);
+    p.y = p.seat.rootY;
   }
   // a photographer at the parapet by the bend's viewpoint, and the chai vendor
   const photoS = 2050;
@@ -139,8 +169,21 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
   }
 
   const cap = people.length;
+  // near the camera people dissolve (screen-door) rather than fill the view: one fade per
+  // instance slot, shared by every body-part pool (slot v is the same person in each)
+  const fade = new THREE.InstancedBufferAttribute(new Float32Array(cap).fill(1), 1);
+  fade.setUsage(THREE.DynamicDrawUsage);
+  for (const g of new Set(geos.filter(Boolean))) g.setAttribute('aFade', fade);
   const pools = PARTS.map((name, k) => (name === 'headwear' ? null : mkPool(geos[k], `crowd.${name}`, cap)));
-  const hwPools = Object.fromEntries(HW_KINDS.map((k) => [k, mkPool(headwearGeometry(k), `crowd.hw.${k}`, cap)]));
+  // headwear pools fill their own slots, so each gets its own geometry copy and fade
+  const hwFade = {};
+  const hwPools = Object.fromEntries(HW_KINDS.map((k) => {
+    const g = headwearGeometry(k).clone();
+    hwFade[k] = new THREE.InstancedBufferAttribute(new Float32Array(cap).fill(1), 1);
+    hwFade[k].setUsage(THREE.DynamicDrawUsage);
+    g.setAttribute('aFade', hwFade[k]);
+    return [k, mkPool(g, `crowd.hw.${k}`, cap)];
+  }));
 
   /* --------------------------- props: mats, tripod, dogs --------------------------- */
   const props = new THREE.Group();
@@ -310,7 +353,7 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         p.laughing = burst;
         break;
       }
-      case 'sit': pose.sit = 1; pose.shoulderL = pose.shoulderR = 0.3; pose.elbowL = pose.elbowR = 0.7; pose.headPitch = 0.1 * w(0.2); break;
+      case 'sit': applySeat(pose, p.seat); pose.headPitch = 0.1 * w(0.2); break;
       case 'photo': pose.shoulderL = pose.shoulderR = 1.25; pose.elbowL = pose.elbowR = 1.7; pose.lean = 0.12; break;
       case 'vend': pose.shoulderR = 0.7 + 0.35 * w(4); pose.elbowR = 1.2; pose.shoulderL = 0.5; pose.elbowL = 1.2; break;
       default: break;
@@ -340,6 +383,8 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         p.poseAge = 0;
       }
       p.poseAge++;
+      const near = Math.hypot(dx, p.y + 1.1 - camPos.y, dz);
+      const f = THREE.MathUtils.smoothstep(near, 0.8, 1.7);
       _root.compose(_v.set(p.e, p.y, -p.n), _q.setFromAxisAngle(UP, p.yaw), _s.set(1, 1, 1));
       for (let k = 0; k < PARTS.length; k++) {
         if (k === P.headwear) {
@@ -347,6 +392,7 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
           if (!hwPools[kind]) continue;
           _m.fromArray(p.pose, k * 16).premultiply(_root);
           hwPools[kind].setMatrixAt(hwCount[kind], _m);
+          hwFade[kind].array[hwCount[kind]] = f;
           hwPools[kind].setColorAt(hwCount[kind]++, _c.set(p.cols[k]));
           continue;
         }
@@ -354,8 +400,11 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         pools[k].setMatrixAt(v, _m);
         pools[k].setColorAt(v, _c.set(p.cols[k]));
       }
+      fade.array[v] = f;
       v++;
     }
+    fade.needsUpdate = true;
+    for (const k of HW_KINDS) hwFade[k].needsUpdate = true;
     for (const m of pools) if (m) { m.count = v; m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
     for (const k of HW_KINDS) { const m = hwPools[k]; m.count = hwCount[k]; m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; }
     return v;

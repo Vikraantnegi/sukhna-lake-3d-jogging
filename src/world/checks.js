@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import { data, L, spineAt, shoreDist, inLake, nearestS } from './frame.js';
 import { groundAt, groundGrid } from './terrain.js';
 import { walkY, damHeight, shoreOffset, DAM, WATER_STEPS } from './dam.js';
@@ -106,6 +107,43 @@ export function laneCheck(lanes, margin = 30) {
     }
   }
   return { name: 'laneCheck', ok: bad === 0, samples: n, bad, worst: +fmt(worst), detail: `${lanes.length} lanes, ${n} samples; ${bad} closer than ${margin} m to any shore or island (closest ${fmt(worst)} m)` };
+}
+
+/**
+ * seatCheck (user review after Phase 7): nobody sinks into what they sit on.
+ * Poses a body with seatPose/poseBody and transforms every vertex of every
+ * part: anything over the seat (up to its front edge, `front` m ahead of
+ * the root) must be on or above the seat; anything beyond the edge on or
+ * above the surface the feet rest on (thighs may run on over a bench's edge,
+ * shins may not cut through a step's lip).
+ * `cases`: [{ name, body, seatTop, footTop, front }]; tolerance 1 cm.
+ */
+export function seatCheck(cases, { seatPose, applySeat, poseBody, partGeometries, restPose, PARTS }) {
+  const geos = partGeometries();
+  const out = PARTS.map(() => new THREE.Matrix4());
+  const v = new THREE.Vector3();
+  let worst = Infinity, where = '', bad = 0;
+  for (const c of cases) {
+    const sp = seatPose(c.body, c.seatTop, c.footTop);
+    poseBody(c.body, applySeat(restPose(), sp), out);
+    let caseBad = false;
+    PARTS.forEach((name, k) => {
+      const g = geos[k];
+      if (!g || name === 'headwear') return;
+      const m = out[k], pos = g.attributes.position;
+      if (Math.abs(m.determinant()) < 1e-12) return; // a part this body doesn't have
+      let margin = Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(m);
+        const floor = -v.z <= c.front ? c.seatTop : c.footTop; // the root faces −z
+        margin = Math.min(margin, v.y + sp.rootY - floor);
+      }
+      if (margin < worst) { worst = margin; where = `${c.name} ${name}`; }
+      if (margin < -0.01) caseBad = true;
+    });
+    if (caseBad) bad++;
+  }
+  return { name: 'seatCheck', ok: bad === 0, cases: cases.length, bad, worst: +fmt(worst), detail: `${cases.length} seats (water steps × outfits, bench sitters); ${bad} with a body part more than 1 cm into its seat or step (closest ${fmt(worst)} m: ${where})` };
 }
 
 export function runChecks(extra = []) {

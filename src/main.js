@@ -279,14 +279,16 @@ if (import.meta.env?.DEV) {
       if (wasOverview) rig.setOverview(false);
       if (opts.s !== undefined) { const f = spineAt(opts.s), d = opts.d || 0; jogger.e = f.e + f.ne * d; jogger.n = f.n + f.nn * d; }
       if (opts.e !== undefined) { jogger.e = opts.e; jogger.n = opts.n; }
-      jogger.y = collider.surfaceAt(jogger.e, jogger.n);
+      // no position given: shoot the jogger where they are (seated, say), untouched
+      const moved = opts.s !== undefined || opts.e !== undefined;
+      if (moved) jogger.y = collider.surfaceAt(jogger.e, jogger.n);
       if (opts.az !== undefined) rig.yaw = yawForAzimuth(opts.az);
       if (opts.pitch !== undefined) rig.pitch = THREE.MathUtils.degToRad(opts.pitch);
-      jogger.heading = opts.heading !== undefined ? yawForAzimuth(opts.heading) : rig.yaw;
+      if (moved || opts.heading !== undefined) jogger.heading = opts.heading !== undefined ? yawForAzimuth(opts.heading) : rig.yaw;
       if (opts.boom !== undefined) rig.boom = rig.boomTarget = opts.boom;
       if (opts.first) rig.boom = rig.boomTarget = 0;
       jogger.update(0, rig.yaw);
-      rig.update(0.016, jogger, { snap: true });
+      rig.update(0.016, jogger, { snap: true, bench: moved ? null : interact.benchView() });
       if (opts.h !== undefined) camera.position.y = groundAt(camera.position.x, -camera.position.z) + opts.h;
       if (opts.hideJogger) jogger.visible = false;
     }
