@@ -6,6 +6,25 @@
 <title>Sukhna — a sunrise jog around Sukhna Lake</title>
 <meta name="description" content="A winter-morning jog along the dam at Sukhna Lake, Chandigarh, at its real shape and scale: the promenade and shore from OpenStreetMap, the Shivalik hills from elevation data, a real sunrise, in a cel-shaded anime style." />
 <meta name="theme-color" content="#6fa3f5" />
+<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<!-- link previews (X, WhatsApp, Slack…): absolute URLs, since X won't resolve relative ones -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Sukhna" />
+<meta property="og:title" content="Sukhna — a sunrise jog around Sukhna Lake" />
+<meta property="og:description" content="Jog the dam at Sukhna Lake, Chandigarh, at its real shape and scale, as the real winter sun comes up. Free, in your browser." />
+<meta property="og:url" content="https://sukhna-lake-3d-jogging.vercel.app/" />
+<meta property="og:image" content="https://sukhna-lake-3d-jogging.vercel.app/og-image.jpg" />
+<meta property="og:image:type" content="image/jpeg" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="A jogger on the dam promenade at Sukhna Lake at golden hour, the low sun over the water and palms along the walk, in a cel-shaded style." />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="Sukhna — a sunrise jog around Sukhna Lake" />
+<meta name="twitter:description" content="Jog the dam at Sukhna Lake, Chandigarh, at its real shape and scale, as the real winter sun comes up. Free, in your browser." />
+<meta name="twitter:image" content="https://sukhna-lake-3d-jogging.vercel.app/og-image.jpg" />
+<meta name="twitter:image:alt" content="A jogger on the dam promenade at Sukhna Lake at golden hour, the low sun over the water and palms along the walk, in a cel-shaded style." />
 <style>
   *, *::before, *::after { box-sizing: border-box; }
   html, body {
@@ -152,7 +171,9 @@
   .credits { font-size: 10.5px; color: #8a8e9a; }
 
   /* ---------- touch ---------- */
-  .touch { position: fixed; inset: 0; pointer-events: none; }
+  .touch { position: fixed; inset: 0; pointer-events: none; transition: opacity .45s ease, visibility .45s ease; }
+  /* not over the start / pause card: on a phone the stick and buttons covered its credits */
+  body:has(.overlay:not(.hidden)) .touch { opacity: 0; visibility: hidden; }
   .stick { position: absolute; left: 22px; bottom: 56px; width: 130px; height: 130px; border-radius: 50%; background: rgba(14,16,22,.28); border: 1px solid rgba(255,255,255,.3); pointer-events: auto; touch-action: none; }
   .knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(255,255,255,.7); }
   .tbuttons { position: absolute; right: 14px; bottom: 56px; display: grid; grid-template-columns: repeat(4, 44px); gap: 8px; pointer-events: auto; }
