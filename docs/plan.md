@@ -19,7 +19,12 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each 
 | 8 Quality tiers, verification, compare.md | — | `build` | — |
 
 **Decisions made during the run** (newest last; each one is something the plan left open or that the data forced):
-- (none yet)
+- **Phase 2: R ≈ 403 m, not 320 (the user chose this).** OSM maps the promenade as one paved pedestrian way, `way/1024118089`, 2 490.9 m from the Garden of Silence and regulator bridge (east) to the boat club and viewpoint (west). The bund itself is about 2 065 m of that; the last 426 m runs north along the west shore to the jetty, boat rental and entrance plaza. The loop is the whole walk, 1:1. Consequences:
+  - C ≈ 2 531 m, and a lap takes about 14 min at jog pace.
+  - Crowd density per 100 m stays as planned: the high and medium NPC and bird limits rise by about 25% (NPCs 200 / 125 / 50, birds 175 / 100 / 35); the low tier keeps its limits.
+  - The §4 distortion table gains an R = 403 column; 95% of the lake band now sits inside 10% compression.
+  - The rowing lane at z = +55 is about 2 510 m (a 9.1 min lap).
+- **Phase 2: the working tree is LF.** `.gitattributes` sets `* text=auto eol=lf`, because `core.autocrlf=true` checked files out with CRLF and broke multi-line edits in the pipeline scripts. The repo contents are unchanged.
 
 **Notes for a fresh session:**
 - Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
@@ -76,7 +81,7 @@ Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built
 
 ### Decisions already made with the user
 
-- **Radius: R ≈ 320 m, 1:1 along the promenade.**
+- **Radius: R ≈ 403 m, 1:1 along the promenade.** (Originally R ≈ 320; changed in Phase 2 when OSM measured the promenade at 2 491 m. See "Decisions made during the run".)
   - The final value is R = (L_prom + L_join) / 2π, where L_prom is the promenade length measured from OSM.
   - Everything repeated along the loop is instanced and sector-chunked.
   - On the low tier, dressing and NPC density are thinned. The planet does not shrink.
@@ -287,9 +292,9 @@ The scripts are plain Node 18 `.mjs` files with **no new dependencies**:
 
 ## 4. Planet sizing and mapping
 
-**Radius:** R = (L_prom + L_join) / 2π. If L_prom is about 2.0 km, then R is about 325 m and the circumference C is about 2.04 km.
+**Radius:** R = (L_prom + L_join) / 2π. OSM measures L_prom = 2 490.9 m (`way/1024118089`, the paved pedestrian walk from the Garden of Silence bridge to the boat club), so with L_join = 40 m, **R ≈ 402.8 m and C ≈ 2 531 m**. The exact figures are in `scripts/sukhna/report.md`.
 
-- A lap at jog speed (3.0 m/s) takes about 11 minutes.
+- A lap at jog speed (3.0 m/s) takes about 14 minutes.
 - **x maps 1:1 to arc length along the real promenade.** Landmarks sit in real order at their real distances. Scale factor s_x = 1.000.
 - The report prints the exact figure.
 
@@ -308,7 +313,7 @@ The scripts are plain Node 18 `.mjs` files with **no new dependencies**:
 | +4 … ~+12 | Stone-pitched embankment down to the water. `LEVEL` is +3.0 m, so the parapet top sits about 3 m above the water. |
 | +12 … ~+190 | **The lake.** It is a ring band all the way round, broken only by the join headland (which ends at z ≈ +45). |
 | ~+190 … +330 | Far shore, forest, then the **DEM hill field**: the Shivalik front, compressed in z and exaggerated vertically so its tops clear the horizon. |
-| > +330 … pole (+503) | Bare forest and hill field. Nothing important goes here. |
+| > +330 … pole (+633) | Bare forest and hill field. Nothing important goes here. |
 
 **Mapping from real coordinates to (x, z):** a curvilinear frame (s, d) around the promenade spine.
 
@@ -322,19 +327,21 @@ The scripts are plain Node 18 `.mjs` files with **no new dependencies**:
 
 **How much of the lake fits in the low-distortion band** (lake band z = 18…190):
 
-| | R = 320 | R = 240 |
-|---|---|---|
-| Circumference C | 2 011 m | 1 508 m |
-| z inside 5% compression | ≤ 102 m | ≤ 76 m |
-| z inside 10% compression | ≤ 144 m | ≤ 108 m |
-| Lake area inside 5% | **51%** | 37% |
-| Lake area inside 10% | **75%** | 57% |
-| x-squeeze at the far shore (z = 190) | 0.83 | 0.70 |
-| Water horizon from the promenade (eye 5.6 m above water) | 60 m | 52 m |
-| Tops of 15 m far-shore trees visible to | 158 m | 137 m |
-| Tops of 60 m hills visible to | 256 m | 222 m |
+| | **R = 403 (chosen)** | R = 320 (original) | R = 240 |
+|---|---|---|---|
+| Circumference C | 2 531 m | 2 011 m | 1 508 m |
+| z inside 5% compression | ≤ 128 m | ≤ 102 m | ≤ 76 m |
+| z inside 10% compression | ≤ 182 m | ≤ 144 m | ≤ 108 m |
+| Lake area inside 5% | **65%** | 51% | 37% |
+| Lake area inside 10% | **95%** | 75% | 57% |
+| x-squeeze at the far shore (z = 190) | 0.89 | 0.83 | 0.70 |
+| Water horizon from the promenade (eye 5.6 m above water) | 67 m | 60 m | 52 m |
+| Tops of 15 m far-shore trees visible to | 177 m | 158 m | 137 m |
+| Tops of 60 m hills visible to | 287 m | 256 m | 222 m |
 
-So at R = 320:
+(Lake-area percentages use the plan's band model, z = 18…190. The report recomputes them from the mapped shoreline.)
+
+So at R = 403:
 - All near-shore action sits under 2% compression: the rowing lane at z = 55, the jetty, the reeds and the birds.
 - The far shore sits just over the curve, so tree tops and hills peek above the bent water. That is the "planet curve toward the horizon" look.
 - The real Shivaliks (5–25 km away) are ridgeline rings in `sky.js`. They sit at their true azimuths, so they are on the correct side relative to the sun.
@@ -349,7 +356,7 @@ So at R = 320:
 - It rows a constant-latitude lane at z = +55. That lane sits outside the headland tip and within 2% compression.
 - It uses the train's own trick: the hull is baked once, then rotated about the planet's polar Z axis each frame.
 - The oars sit on `planetRigid` hubs with inner pivots, swinging at 22 strokes per minute.
-- Its speed is 4.6 m/s. The lane is 2 000 m, so a lap takes about 7.2 minutes. Because that is faster than a jog, it passes you regularly.
+- Its speed is 4.6 m/s. The lane is about 2 510 m, so a lap takes about 9.1 minutes. Because that is faster than a jog, it passes you regularly.
 - Its wake is instanced V-shaped foam quads that fade out.
 - Single sculls take lanes at z = 30–90 at varied speeds.
 - Pedal boats are runtime objects, re-seated each frame in the same way as the reference's `ebike.js`. They stay inside a box off the jetty and only appear after 08:30.
@@ -524,8 +531,8 @@ The golf course, green belt and modernist blocks sit on the city side at their O
 
 | Tier | Maximum NPCs |
 |---|---|
-| High | 160 |
-| Med | 100 |
+| High | 200 |
+| Med | 125 |
 | Low | 50 |
 
 **Water check:** `npcWaterCheck()` in `world/checks.js` runs automatically in dev and prints its result.
@@ -544,8 +551,8 @@ The golf course, green belt and modernist blocks sit on the city side at their O
 
 | Tier | Birds |
 |---|---|
-| High | 140 |
-| Med | 80 |
+| High | 175 |
+| Med | 100 |
 | Low | 35 |
 
 - Egrets and cormorants on posts and at the water's edge.
@@ -623,8 +630,8 @@ How it is mixed:
 
 | | Pixel budget | Shadows | Water | Dressing | NPCs | Birds |
 |---|---|---|---|---|---|---|
-| High | 4.6 MP | 2048 | shader | 100% | 160 | 140 |
-| Med | 2.8 MP | 1024 | shader | 75% | 100 | 80 |
+| High | 4.6 MP | 2048 | shader | 100% | 200 | 175 |
+| Med | 2.8 MP | 1024 | shader | 75% | 125 | 100 |
 | Low | 1.3 MP | 1024 at a 40 m range | flat layers | 45% | 50 | 35 |
 
 - A simple fallback drops one tier if frame time stays above 22 ms for 5 s.

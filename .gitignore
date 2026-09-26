@@ -8,3 +8,6 @@ dist/
 
 # vite dep cache
 .vite/
+
+# pipeline debug renders
+scripts/sukhna/debug/
