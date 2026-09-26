@@ -117,6 +117,8 @@ export function buildBirds(scene, { count = 175 } = {}) {
 
   return {
     group, birds, count: n,
+    /** For the sound (core/sound.js): the parakeet pass and the resting flocks. */
+    parakeets: pk, flocks,
     update(dt, player) {
       t += dt;
       const pe = player ? player.e : 1e9, pn = player ? player.n : 1e9;

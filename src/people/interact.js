@@ -125,6 +125,8 @@ export function createInteractions({ crowd, jogger, hud, camera, world }) {
 
   return {
     activate,
+    /** A speech bubble over someone ('player', a person, or anything with e, n, y), after `delay` s. */
+    say,
     /** The bench's lake view for the camera, while sitting. */
     benchView() { return busy?.kind === 'bench' ? { yaw: Math.atan2(-busy.f.ne, busy.f.nn) } : null; },
     update() {

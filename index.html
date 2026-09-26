@@ -27,7 +27,7 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     transition: opacity .4s ease;
   }
-  .hintbar.off, .jog.off { opacity: 0; }
+  .hintbar.off, .jog.off, .cond.off { opacity: 0; }
 
   /* ---------- jog HUD (top left) ---------- */
   .jog {
@@ -39,15 +39,38 @@
   .jog i { display: block; font-style: normal; color: #9aa0ad; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
   .jog b { font: 600 17px/1.2 ui-monospace, 'Cascadia Mono', Consolas, monospace; }
   .jog small { color: #9aa0ad; margin-left: 2px; }
-  .jog-clock { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
-  .jog-clock b { font-size: 15px; }
-  .jog-clock span { color: #c9ccd6; font-size: 11px; }
   .jog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
   .stamina { margin-top: 8px; }
   .stamina span { display: block; height: 6px; margin-top: 3px; background: rgba(255,255,255,.14); border-radius: 3px; overflow: hidden; }
   .stamina em { display: block; height: 100%; width: 100%; background: #7fd18a; transition: width .25s linear, background .3s; }
   .stamina em.low { background: #f08a4e; }
   .jog-mode { margin-top: 6px; color: #f2c230; font-size: 11px; min-height: 13px; }
+
+  /* ---------- conditions (top right): T time, K weather, M sound ---------- */
+  .cond {
+    position: absolute; right: 14px; top: 12px;
+    padding: 9px 12px 9px; display: grid; gap: 5px;
+    background: rgba(14,16,22,.5); border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
+    color: #e8eaf0; font-size: 12px; transition: opacity .4s ease;
+  }
+  .cond-row { display: flex; align-items: baseline; gap: 8px; }
+  .cond kbd {
+    display: inline-block; min-width: 18px; padding: 0 4px; text-align: center;
+    border: 1px solid rgba(255,255,255,.28); border-radius: 4px; color: #9aa0ad;
+    font: 600 10px/16px ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  }
+  .cond b { font: 600 15px/1.2 ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+  .cond span { color: #c9ccd6; font-size: 11.5px; }
+  .cond.muted [data-c="sound"] { color: #8a8e9a; }
+
+  /* ---------- the next-morning fade ---------- */
+  .fade { position: fixed; inset: 0; background: #07080c; opacity: 0; pointer-events: none; transition: opacity 1.2s ease; z-index: 20; display: grid; place-items: center; }
+  .fade.on { opacity: 1; }
+  .fade-card { text-align: center; color: #e8eaf0; opacity: 0; transform: translateY(6px); transition: opacity .6s ease, transform .6s ease; }
+  .fade.card .fade-card { opacity: 1; transform: none; }
+  .fade-card i { display: block; font-style: normal; color: #9aa0ad; font-size: 12px; letter-spacing: .14em; text-transform: uppercase; }
+  .fade-card b { display: block; margin: 6px 0 4px; font: 600 34px/1.1 ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+  .fade-card span { color: #c9ccd6; font-size: 13px; }
 
   /* ---------- prompt, toast, speech bubble ---------- */
   .prompt, .toast {
@@ -76,7 +99,7 @@
   }
   .coords { right: 12px; bottom: 40px; opacity: 0; }
   .coords.on { opacity: 1; }
-  .stats { right: 12px; top: 12px; }
+  .stats { left: 12px; bottom: 40px; }
 
   /* ---------- start / pause card ---------- */
   .overlay {
@@ -148,6 +171,8 @@
     .card h1 { font-size: 36px; }
     .jog { min-width: 0; left: 8px; top: 8px; padding: 7px 9px; }
     .jog b { font-size: 14px; }
+    .cond { right: 8px; top: 8px; padding: 7px 9px; gap: 3px; }
+    .cond b { font-size: 13px; }
     .hintbar { font-size: 10.5px; }
   }
 </style>

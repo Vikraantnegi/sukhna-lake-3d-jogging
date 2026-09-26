@@ -315,6 +315,36 @@ const LAMP = mergedParts([
   { geo: new THREE.CylinderGeometry(0.2, 0.14, 0.42, 6), color: 0xf1ead6, matrix: M4(0, 4.3, -0.62) },
   { geo: new THREE.ConeGeometry(0.26, 0.2, 6), color: PAL.lampPole, matrix: M4(0, 4.6, -0.62) },
 ]);
+// the lantern glass glows (aGlow = 1 on its vertices: the only pale part of the lamp)
+{
+  const c = LAMP.attributes.color, glow = new Float32Array(c.count);
+  for (let i = 0; i < c.count; i++) glow[i] = c.getX(i) > 0.7 ? 1 : 0;
+  LAMP.setAttribute('aGlow', new THREE.BufferAttribute(glow, 1));
+}
+/**
+ * Lamps glow by time of day and weather (core/tod.js drives `uLampGlow`):
+ * the lantern vertices add a warm emissive term, chained after cel()'s own
+ * shader patch.  No extra draw calls: the lamps are one instanced mesh per
+ * sector already.
+ */
+function lampGlowMaterial() {
+  const mat = cel({ color: 0xffffff, vertexColors: true, flat: false, cache: false });
+  const u = { uLampGlow: { value: 0 }, uLampColor: { value: new THREE.Color(0xffc56e) } };
+  const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey;
+  mat.onBeforeCompile = (sh, rr) => {
+    prev?.call(mat, sh, rr);
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uLampGlow;\nuniform vec3 uLampColor;\nvarying float vGlow;')
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += uLampColor * ( uLampGlow * vGlow * 1.6 );');
+  };
+  mat.customProgramCacheKey = () => (prevKey ? prevKey.call(mat) : '') + '_lampGlow';
+  mat.userData.lampGlow = u.uLampGlow;
+  return mat;
+}
 /** Red-brown wooden bench on a dark frame (photo r1), facing -z. */
 const BENCH = mergedParts([
   { geo: new THREE.BoxGeometry(1.8, 0.06, 0.42), color: PAL.benchWood, matrix: M4(0, 0.45, 0) },
@@ -498,6 +528,7 @@ export function buildDam(scene, { ground }) {
   const vc = cel({ color: 0xffffff, vertexColors: true, relief: true, bands: 'terrain', flat: false });
   const vcProps = cel({ color: 0xffffff, vertexColors: true, flat: false });
   const parapetMat = cel({ color: 0xffffff, map: cobbleTex() });
+  const lampMat = lampGlowMaterial();
   const palmMat = cel({ color: 0xffffff, vertexColors: true, flat: false, side: THREE.DoubleSide });
   const stats = { sectors: 0, parapet: 0, lamps: 0, benches: 0, palms: 0, reeds: 0 };
   const rng = rngKit(2027);
@@ -558,7 +589,7 @@ export function buildDam(scene, { ground }) {
       for (let q = 0; q < 3; q++) reeds.push(placeAt(s + rng.range(-2, 2), dS + rng.range(0.3, 2.2), -0.25, rng.range(0, 6.28), rng.range(0.8, 1.3)));
     }
     stats.lamps += lamps.length; stats.benches += benches.length; stats.palms += palms.length; stats.reeds += reeds.length;
-    add(instanced(LAMP, vcProps, lamps, 'lamps'));
+    add(instanced(LAMP, lampMat, lamps, 'lamps'));
     add(instanced(BENCH, vcProps, benches, 'benches'));
     add(instanced(BIN, vcProps, bins, 'bins'));
     add(instanced(MARKER, vcProps, markers, 'markers'));
@@ -589,5 +620,9 @@ export function buildDam(scene, { ground }) {
   }
 
   scene.add(group);
-  return { group, lod, stats, cityStairs, waterStairs };
+  return {
+    group, lod, stats, cityStairs, waterStairs,
+    /** 0..1: how brightly the lanterns glow (time of day and weather). */
+    setLamps(v) { lampMat.userData.lampGlow.value = v; },
+  };
 }

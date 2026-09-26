@@ -8,13 +8,16 @@ import { OUTFITS } from '../people/body.js';
 /* ------------------------------------------------------------------ *
  * The HUD (plan §6).
  *
- *   jog HUD (top left)  distance, pace, time, lengths, stamina, clock
+ *   jog HUD (top left)  distance, pace, time, lengths, stamina
+ *   conditions (top right)  the clock and time of day (T), weather (K), sound (M)
  *   hint bar (bottom)   exactly the line the brief asks for
  *   prompt, toast       E interactions and short messages
  *   start / pause card  title, outfit, controls, credits
  *   coordinates (C)     dev readout, off the hint bar
  *
- * H hides the hint bar and the jog HUD together.
+ *   next-morning fade  black, a short card, and back at pre-dawn
+ *
+ * H hides the hint bar and both HUD cards together.
  * ------------------------------------------------------------------ */
 
 export const HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide';
@@ -37,7 +40,6 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   // ---------------------------- jog HUD ----------------------------
   const jog = el('div', 'jog', root);
   jog.innerHTML = `
-    <div class="jog-row jog-clock"><b data-k="clock">06:55</b><span data-k="preset">pre-dawn</span></div>
     <div class="jog-grid">
       <div><i>distance</i><b data-k="dist">0.00</b><small>km</small></div>
       <div><i>pace</i><b data-k="pace">--:--</b><small>/km</small></div>
@@ -47,7 +49,21 @@ export function createHud({ outfit = 0, touch = false } = {}) {
     <div class="stamina"><i>stamina</i><span><em data-k="stam"></em></span></div>
     <div class="jog-mode" data-k="mode"></div>`;
   const q = (k) => jog.querySelector(`[data-k="${k}"]`);
-  const refs = { clock: q('clock'), preset: q('preset'), dist: q('dist'), pace: q('pace'), time: q('time'), len: q('len'), stam: q('stam'), mode: q('mode') };
+  const refs = { dist: q('dist'), pace: q('pace'), time: q('time'), len: q('len'), stam: q('stam'), mode: q('mode') };
+
+  // ---------------------------- conditions ----------------------------
+  const cond = el('div', 'cond', root);
+  cond.innerHTML = `
+    <div class="cond-row"><kbd>T</kbd><b data-c="clock">06:55</b><span data-c="preset">pre-dawn</span></div>
+    <div class="cond-row"><kbd>K</kbd><span data-c="weather">Clear</span></div>
+    <div class="cond-row"><kbd>M</kbd><span data-c="sound">Sound on</span></div>`;
+  const cq = (k) => cond.querySelector(`[data-c="${k}"]`);
+  const cref = { clock: cq('clock'), preset: cq('preset'), weather: cq('weather'), sound: cq('sound') };
+  const put = (node, text) => { if (node.textContent !== text) node.textContent = text; };
+
+  // ---------------------------- next-morning fade ----------------------------
+  const fade = el('div', 'fade', root);
+  fade.innerHTML = '<div class="fade-card"><i>Next morning</i><b>06:55</b><span>pre-dawn · 15 January</span></div>';
 
   // ---------------------------- hint bar ----------------------------
   const hint = el('div', 'hintbar', root, HINT);
@@ -94,7 +110,20 @@ export function createHud({ outfit = 0, touch = false } = {}) {
       refs.stam.classList.toggle('low', j.stamina < 30);
       refs.mode.textContent = j.auto ? 'auto-jog' : j.sprinting ? 'running' : j.speed > 2.2 ? 'jogging' : j.speed > 0.3 ? 'walking' : '';
     },
-    setClock(clock, preset) { refs.clock.textContent = clock; refs.preset.textContent = preset; },
+    setClock(clock, preset) { put(cref.clock, clock); put(cref.preset, preset); },
+    setWeather(kind) { put(cref.weather, kind === 'rain' ? 'Rain' : kind === 'fog' ? 'Fog' : 'Clear'); },
+    setSound(on) { put(cref.sound, on ? 'Sound on' : 'Sound off'); cond.classList.toggle('muted', !on); },
+    /**
+     * Fade to black, show the next-morning card, call `atBlack` (reset the clock
+     * there), then fade back in and call `done`.
+     */
+    nextMorning(atBlack, done) {
+      fade.classList.add('on');
+      setTimeout(() => { atBlack?.(); fade.classList.add('card'); }, 1300);
+      setTimeout(() => { fade.classList.remove('card'); }, 3600);
+      setTimeout(() => { fade.classList.remove('on'); }, 4000);
+      setTimeout(() => done?.(), 5300);
+    },
     setPrompt(text) { prompt.textContent = text; prompt.classList.toggle('on', !!text); },
     flash(text, ms = 1800) {
       toast.textContent = text;
@@ -108,7 +137,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
       bubble.classList.toggle('on', !!text);
       if (text) { bubble.style.left = `${x}px`; bubble.style.top = `${y}px`; }
     },
-    setHidden(h) { api.hidden = h; jog.classList.toggle('off', h); hint.classList.toggle('off', h); },
+    setHidden(h) { api.hidden = h; for (const n of [jog, cond, hint]) n.classList.toggle('off', h); },
     toggleHidden() { api.setHidden(!api.hidden); return api.hidden; },
     setCoords(text) { coords.textContent = text; coords.classList.toggle('on', !!text); },
     setPaused(paused) {

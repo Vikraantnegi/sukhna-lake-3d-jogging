@@ -71,7 +71,9 @@ for (const l of [sun, fill, bounce, hemi]) { l.layers.enableAll(); scene.add(l);
 scene.add(sun.target, fill.target, bounce.target);
 
 // the clock: opens at civil dawn (plan §0); ?t=predawn|sunrise|golden|bright overrides
-const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: data.sun.presets, start: data.sun.presets[params.get('t')] ? params.get('t') : 'predawn' });
+// the four morning presets plus the real sunset (17:45 on 15 Jan)
+const PRESET_HOURS = { ...data.sun.presets, sunset: data.sun.sunset };
+const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'predawn' });
 const weather = createWeather(scene);
 if (['rain', 'fog'].includes(params.get('w'))) weather.set(params.get('w'), true);
 
@@ -106,9 +108,10 @@ const actions = {
   E: () => interact.activate(),
   V: () => { const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off'); },
   T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); },
-  K: () => { const w = weather.cycle(); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
+  K: () => { const w = weather.cycle(); hud.setWeather(w); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
   P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
-  M: () => world.toggleSound?.(hud) ?? hud.flash('sound: coming in Phase 7'),
+  // the on/off preference only, until core/sound.js arrives in Phase 7
+  M: () => { soundOn = !soundOn; try { localStorage.setItem('sukhna-sound', soundOn ? '1' : '0'); } catch { /* optional */ } hud.setSound(soundOn); hud.flash(soundOn ? 'sound on (audio arrives in Phase 7)' : 'sound off'); },
   H: () => hud.toggleHidden(),
 };
 let coordsOn = false;
@@ -162,27 +165,39 @@ function placeLights() {
 }
 
 /* ------------------------------ time of day ------------------------------ */
-const LOOK_TARGETS = { sky, sun, fill, bounce, hemi, scene, renderer, pipeline, lake: world.lake, mist: world.mist, ridges: world.ridges };
-const SUNRISE = data.sun.sunrise;
+const LOOK_TARGETS = { sky, sun, fill, bounce, hemi, scene, renderer, pipeline, lake: world.lake, mist: world.mist, ridges: world.ridges, lamps: world.dam.setLamps };
+const SUNRISE = data.sun.sunrise, SUNSET = data.sun.sunset;
+let looping = false;
+hud.setWeather(weather.state.kind);
+let soundOn = true;
+try { soundOn = localStorage.getItem('sukhna-sound') !== '0'; } catch { /* optional */ }
+hud.setSound(soundOn);
 let density = -1, bundled = null;
 /** How many people are out (plan §6): 0.3 pre-dawn, peak from sunrise −10 to +70 min, thinning after; fog x0.45. */
-function crowdDensity(min, fog) {
+function crowdDensity(min, fog, evening) {
+  // the evening walk is busy too (from ~16:00 to dusk)
+  if (evening) return 0.9 * (1 - 0.55 * fog);
   const k = min < -30 ? 0.3 : min < -10 ? THREE.MathUtils.lerp(0.3, 1, (min + 30) / 20) : min < 70 ? 1 : min < 160 ? THREE.MathUtils.lerp(1, 0.55, (min - 70) / 90) : 0.55;
   return k * (1 - 0.55 * fog);
 }
 function updateTime(dt, running) {
-  tod.state.running = running;
+  tod.state.running = running && !looping;
   weather.update(dt, camera.position);
+  // the loop (plan: Decisions): past the morning window, or half an hour after sunset,
+  // fade to black and start the next morning at pre-dawn
+  if (running && !looping && tod.pastWindow(SUNSET)) {
+    looping = true;
+    hud.nextMorning(() => { tod.set('predawn'); hud.flash('06:55 · pre-dawn'); }, () => { looping = false; });
+  }
   if (tod.update(dt, weather.state)) {
     applyLook(tod.look, tod.state, LOOK_TARGETS);
-    const w = weather.state.kind;
-    hud.setClock(tod.clock(), tod.label() + (w === 'clear' ? '' : ` · ${w === 'fog' ? 'fog' : 'rain'}`));
-    const dns = crowdDensity(tod.sinceSunrise(SUNRISE), weather.state.fog);
+    hud.setClock(tod.clock(), tod.label());
+    const dns = crowdDensity(tod.sinceSunrise(SUNRISE), weather.state.fog, tod.state.hours > 12);
     if (Math.abs(dns - density) > 0.02) { density = dns; world.crowd.setDensity(dns); }
     const b = weather.state.fog > 0.5;
     if (b !== bundled) { bundled = b; world.crowd.setBundled(b); }
     // pedal boats go out after 08:30 (and not in fog or rain)
-    world.rowing.showPedal = tod.state.hours >= 8.5 && weather.state.kind === 'clear';
+    world.rowing.showPedal = tod.state.hours >= 8.5 && tod.state.hours < 17.25 && weather.state.kind === 'clear';
   }
 }
 updateTime(0, false);

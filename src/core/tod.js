@@ -23,7 +23,12 @@ export const PRESETS = [
   { key: 'sunrise', label: 'sunrise' },
   { key: 'golden', label: 'golden hour' },
   { key: 'bright', label: 'bright morning' },
+  // the real sunset on 15 Jan (17:45, core/sun.js); the keyframes are by elevation, so dusk
+  // simply runs the dawn palette the other way, with the sun in the WSW
+  { key: 'sunset', label: 'sunset' },
 ];
+/** The loop (plan: Decisions): past the bright-morning window, or half an hour after sunset, the next morning starts. */
+export const LOOP = { morningEnd: 10.5, afterSunset: 0.5 };
 
 // colours as hex, amounts 0..1; `fog` is FogExp2 density (per metre)
 const KEYS = [
@@ -110,6 +115,10 @@ export function createTod({ date, lat, lon, presets, start = 'predawn', rate = 4
     state.fillDir.copy(azimuthDir(p.azimuth + 180, 22));
     state.bounceDir.copy(azimuthDir(p.azimuth + 150, -25));
     lookAt(p.elevation, look);
+    const evening = state.hours > 12;
+    if (evening) look.mist *= 0.25; // dawn mist over the lake; dusk is drier
+    // lamps: on before sunrise, fading out by 3° of sun; on again from 3° at dusk
+    look.lamps = 1 - THREE.MathUtils.smoothstep(p.elevation, -3, 3);
 
     // weather on top
     const r = weather?.rain ?? 0, f = weather?.fog ?? 0;
@@ -142,6 +151,8 @@ export function createTod({ date, lat, lon, presets, start = 'predawn', rate = 4
       look.mist *= 1 - f; // the fog *is* the mist now
     }
     look.fogAmt = f;
+    // and on in rain and fog, whatever the time
+    look.lamps = Math.max(look.lamps, 0.85 * r, f);
     return look;
   }
 
@@ -153,7 +164,13 @@ export function createTod({ date, lat, lon, presets, start = 'predawn', rate = 4
     /** What the HUD calls this part of the morning. */
     label() {
       const el = state.sun.elevation;
+      if (state.hours > 12) return el < -3 ? 'dusk' : el < 1.5 ? 'sunset' : el < 9 ? 'evening' : 'afternoon';
       return el < -3 ? 'pre-dawn' : el < 1.5 ? 'sunrise' : el < 9 ? 'golden hour' : 'bright morning';
+    },
+    /** True once the clock has run past the end of the morning or of dusk: time for the next morning. */
+    pastWindow(sunset) {
+      const h = state.hours;
+      return (h >= LOOP.morningEnd && h < 12) || h >= sunset + LOOP.afterSunset;
     },
     /** T: the next preset after the current time (wrapping round to pre-dawn). */
     next() {
@@ -219,6 +236,7 @@ export function applyLook(look, st, t) {
     i.uFadeEnd.value = THREE.MathUtils.lerp(98, 55, f);
     pipeline.skipFar = f > 0.97;
   }
+  t.lamps?.(look.lamps);
   lake?.set({ body: look.water, sky: look.waterSky, sunDir: st.sunDir, sunCol: look.sun, glitter: look.glitter * THREE.MathUtils.smoothstep(st.sun.elevation, -1.5, 0.5), ripple: look.ripple || 0 });
   mist?.set(look.mist, _c.copy(look.fogCol).lerp(_cb.set(0xffffff), 0.35));
   ridges?.setColors(look.ridge.getHex(), look.ridgeHaze.getHex());
