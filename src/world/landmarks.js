@@ -257,11 +257,16 @@ function buildPlaza(p) {
 }
 
 const SWANS = [PAL.boatBlue, PAL.boatSky, PAL.boatYellow, PAL.boatRed, PAL.boatOrange];
-/** A pedal boat as a swan (r7): hull, seat well, neck and head.  Local +x is the bow. */
+/** Where the rider sits in a swan (local, bow +x): the seat's top and front edge, the deck the feet rest on. */
+export const SWAN_SEAT = { top: 1.05, front: -0.2, x: -0.47, deck: 0.8 };
+/** A pedal boat as a swan (r7): hull, a bench seat with a back, neck and head.  Local +x is the bow. */
 export function swanParts(color) {
   const q = new Parts();
   q.add(new THREE.IcosahedronGeometry(1, 1), color, M4(0, 0.35, 0, 0, 1.45, 0.45, 0.8));
-  q.box(1.2, 0.2, 0.9, 0xf4f0e6, -0.2, 0.62, 0);
+  // the seat stands on the hull's top (0.8): a bench 0.25 m up, with a low back (low enough
+  // that the chase camera behind the boat still sees the rider's back)
+  q.box(0.55, 0.3, 1.0, 0xf4f0e6, SWAN_SEAT.x, SWAN_SEAT.top - 0.15, 0);
+  q.box(0.08, 0.2, 1.0, 0xf4f0e6, SWAN_SEAT.x - 0.3, SWAN_SEAT.top + 0.06, 0, 0, 0, 0.15);
   q.add(new THREE.CylinderGeometry(0.12, 0.2, 1.3, 6), 0xfbfaf6, M4(1.05, 1.05, 0, 0, 1, 1, 1, 0, -0.35));
   q.add(new THREE.IcosahedronGeometry(0.24, 1), 0xfbfaf6, M4(1.3, 1.7, 0, 0, 1.3, 1, 1));
   q.add(new THREE.ConeGeometry(0.08, 0.28, 5), 0xf08a2e, M4(1.6, 1.68, 0, 0, 1, 1, 1, 0, -Math.PI / 2));
@@ -287,17 +292,20 @@ function buildBoatClub(p, instMat) {
     const e = f.e + f.ne * d + f.te * 3 * side, n = f.n + f.nn * d + f.tn * 3 * side;
     p.cyl(0.18, 0.18, 3.2, 0x6b5a48, e, deckY - 1.8, -n, 6);
   }
-  // the row of swans moored along both sides, bows out
-  const swans = [];
+  // the berths: swans moored side by side along both edges, sterns to the deck and bows
+  // out (they used to lie nose to tail along the jetty, overlapping); about one in eight
+  // is empty, a place to bring a boat back to
+  const berths = [];
   const rng = rngKit(7);
   for (let d = d0 + 5; d < d1 - 1; d += 2.1) {
     for (const side of [-1, 1]) {
-      if (rng.chance(0.12)) continue;
+      const empty = rng.chance(0.12);
       const e = f.e + f.ne * d + f.te * (3.2 + 1.5) * side, n = f.n + f.nn * d + f.tn * (3.2 + 1.5) * side;
       if (!inLake(e, n)) continue;
-      swans.push({ e, n, yaw: yaw + (side > 0 ? 0 : Math.PI), color: SWANS[Math.floor(rng.next() * SWANS.length)] });
+      berths.push({ i: berths.length, d, side, e, n, yaw: yawToward(f.te * side, f.tn * side), color: empty ? null : SWANS[Math.floor(rng.next() * SWANS.length)] });
     }
   }
+  const swans = berths;
   // the pink launch at the end of the jetty
   const le = f.e + f.ne * (d1 + 5), ln = f.n + f.nn * (d1 + 5);
   p.add(new THREE.IcosahedronGeometry(1, 1), PAL.launchPink, M4(le, 0.35, -ln, yaw + Math.PI / 2, 4.2, 0.7, 1.4));
@@ -306,15 +314,54 @@ function buildBoatClub(p, instMat) {
 
   const swanGeo = swanParts(0xffffff);
   const inst = new THREE.InstancedMesh(swanGeo, instMat, swans.length);
-  const col = new THREE.Color();
-  swans.forEach((w, i) => {
-    inst.setMatrixAt(i, M4(w.e, 0.02, -w.n, w.yaw + Math.PI / 2));
-    inst.setColorAt(i, col.set(w.color));
-  });
+  const col = new THREE.Color(), gone = new THREE.Matrix4().makeScale(0, 0, 0);
+  // every slot drawn once for the bounds, then the empty ones hidden
+  swans.forEach((w, i) => { inst.setMatrixAt(i, M4(w.e, 0.02, -w.n, w.yaw + Math.PI / 2)); inst.setColorAt(i, col.set(w.color ?? 0xffffff)); });
   inst.computeBoundingSphere();
+  swans.forEach((w, i) => { if (!w.color) inst.setMatrixAt(i, gone); });
   inst.castShadow = true;
   inst.name = 'swanBoats';
-  return { swans: inst, jetty: { s, d0, d1, deckY }, launch: [le, ln] };
+  /** Moor a swan of this colour at berth i (bow out, or `yaw` if it came in the other way round), or empty it (null). */
+  const setBerth = (i, color, yaw) => {
+    const w = berths[i];
+    w.color = color;
+    if (yaw !== undefined) w.yaw = yaw;
+    inst.setMatrixAt(i, color ? M4(w.e, 0.02, -w.n, w.yaw + Math.PI / 2) : gone);
+    if (color) inst.setColorAt(i, col.set(color));
+    inst.instanceMatrix.needsUpdate = true;
+    if (inst.instanceColor) inst.instanceColor.needsUpdate = true;
+  };
+  const shack = buildShack(p, s);
+  return { swans: inst, jetty: { s, d0, d1, deckY }, launch: { e: le, n: ln, ue: f.ne, un: f.nn, half: 4.2, w: 1.4 }, berths, setBerth, shack };
+}
+
+/**
+ * The boat-ticket shack (generic, stylised): on the walk against the parapet, just east
+ * of the Boating gateway, its window and counter facing the walk.  The board over the
+ * window is lettered in world/signs.js.  Returns where it is, its footprint (for the
+ * collider and the crowd) and the spot at the counter.
+ */
+function buildShack(p, sGate) {
+  const s = sGate - 4.0, f = spineAt(s), y = walkY(s), yaw = yawToward(f.ne, f.nn);
+  const dC = DAM.parIn - 0.75, hu = 1.2, hv = 0.7; // centre 0.75 m in from the parapet; 2.4 x 1.4 m
+  const ce = f.e + f.ne * dC, cn = f.n + f.nn * dC;
+  const [x, z] = [ce, -cn];
+  const cream = 0xf1e7d0, blue = 0x2f8fcf, dark = 0x2e3440;
+  // walls, with the window cut as a dark recess on the walk side (local +z faces the walk)
+  p.box(2.4, 0.95, 1.4, cream, x, y + 0.475, z, yaw);                // below the counter
+  const [bx, bz] = at(ce, cn, yaw, 0, 0.25);
+  p.box(2.4, 1.35, 0.9, cream, bx, y + 1.625, bz, yaw);               // the back half, full height
+  for (const r of [-1.05, 1.05]) { const [px, pz] = at(ce, cn, yaw, r, -0.45); p.box(0.3, 1.35, 0.5, cream, px, y + 1.625, pz, yaw); }
+  const [wx, wz] = at(ce, cn, yaw, 0, -0.22);
+  p.box(1.8, 1.0, 0.05, dark, wx, y + 1.5, wz, yaw);                   // the window's shadowy inside
+  const [kx, kz] = at(ce, cn, yaw, 0, -0.78);
+  p.box(2.2, 0.07, 0.36, 0x8a4a32, kx, y + 0.98, kz, yaw);            // the counter ledge
+  p.box(2.4, 0.18, 1.4, blue, x, y + 2.39, z, yaw);                    // the lintel band
+  p.box(2.8, 0.12, 1.9, 0xf4f2ec, x, y + 2.54, z, yaw);                // the roof slab, overhanging
+  // a striped awning over the window
+  for (let i = 0; i < 6; i++) { const [ax, az] = at(ce, cn, yaw, (i - 2.5) * 0.4, -0.95); p.box(0.4, 0.05, 0.55, i % 2 ? blue : 0xf4f0e6, ax, y + 2.2, az, yaw, 0.35); }
+  const [qe, qn] = [f.e + f.ne * (dC - hv - 0.55), f.n + f.nn * (dC - hv - 0.55)];
+  return { s, d: dC, e: ce, n: cn, y, yaw, ue: f.te, un: f.tn, hu, hv, counter: [qe, qn] };
 }
 
 function buildPiers(p) {

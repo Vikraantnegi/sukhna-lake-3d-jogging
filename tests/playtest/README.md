@@ -3,7 +3,7 @@
 A bot that plays the game in real Chrome on the real GPU and asserts what it finds.
 
 ```bash
-npm run playtest              # every scenario (~10 min, most of it stairs and sit)
+npm run playtest              # all eleven scenarios (~10 min, most of it stairs and sit)
 npm run playtest -- stairs    # the files whose name matches "stairs"
 ```
 
@@ -26,7 +26,10 @@ production builds (`dist/` has no `__test`). The main calls:
 - `advance(seconds, { dt, every })`: runs the game's `tick(dt)` without drawing, so
   minutes of play take seconds; returns `getPlayer()` samples
 - `getPlayer()`: position, s / d, height above the surface, speed, pace, lengths,
-  state (walking / jogging / running / sitting / in-group / chai / idle), on water
+  state (walking / jogging / running / sitting / boating / in-group / chai / idle), on water
+- boating: `boat()`, `berths()`, `jetty()`, `onJetty()`, `boatInFrame()`, and
+  `driveTo(e, n)`, an autopilot that pedals and steers with the real keys (W, A/D, Shift)
+- circles: `circles()` (members, whether you've joined, the club's laugh), `bubble()`
 - `nearestInteractable()`, `getHud()`, `runChecks()`, `consoleErrors()`
 - probes for the specs: `footProbe()` (the rendered surface under the feet),
   `bodyLows()` (the lowest vertex of each body part), `joggerInFrame()`, `crowdNearCamera(r)`,
@@ -45,3 +48,5 @@ production builds (`dist/` has no `__test`). The main calls:
 | `boundaries` | water, dam edge, buildings, world edge are all blocked |
 | `ui` | start card, P overview and back, H, M, Esc pause and resume |
 | `perf` | draw calls and frame time at the three worst views per tier |
+| `boating` | ticket at the shack → down the jetty stair → E at a swan → a loop past the dam (always ≥ 2 m inside the water, boat and jogger in frame) → E mid-lake refused, Esc only pauses → dock at a free berth → back up the stair; the counter shut in rain, open in fog; no swan without a ticket |
+| `groups` | join the laughter club (a gap opens, on the ring, facing the middle), stay 30 s (still laughing, bubbles), Esc leaves and a second Esc pauses, W leaves; a chatting circle takes turns to talk and you nod along |

@@ -18,6 +18,10 @@ import { buildBirds } from './birds.js';
 import { buildMist } from './mist.js';
 import { buildSigns } from './signs.js';
 import { Q } from '../core/quality.js';
+import { createBoatSim, BOAT } from '../core/boat.js';
+import { createCollider } from './collide.js';
+import { mulberry32 } from '../core/util.js';
+import { LAKE_CENTRE as LAKE_MID } from './frame.js';
 
 /* ------------------------------------------------------------------ *
  * World assembly (plan §4, §6).
@@ -72,7 +76,7 @@ export function buildWorld(scene, { npcs = Q.npcs, birdCount = Q.birds, simpleWa
   const landmarks = buildLandmarks(scene);
   const ridges = buildRidgeRing(scene, data.ridges);
   const tLife = performance.now();
-  const crowd = buildCrowd(scene, { landmarks, dam }, { max: npcs });
+  const crowd = buildCrowd(scene, { landmarks, dam, vegetation }, { max: npcs });
   const rowing = buildRowing(scene, { landmarks });
   const birds = buildBirds(scene, { count: birdCount });
   const lifeMs = Math.round(performance.now() - tLife);
@@ -107,7 +111,41 @@ export function buildWorld(scene, { npcs = Q.npcs, birdCount = Q.birds, simpleWa
     BODY.OUTFITS.forEach((o, i) => cases.push({ name: `bench (jogger) outfit ${i}`, body: BODY.makeBody(o.row), seatTop: 0.48, footTop: 0, front: 0.21 }));
     return cases;
   };
-  const checkSet = () => runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30), () => seatCheck(seatCases(), BODY)]);
+  // boatWaterCheck: the player's pedal boat, driven at random (and straight at the shore) from
+  // every berth and from open water, never has its centre closer than BOAT.margin to the shore
+  const boatWaterCheck = () => {
+    const sim = createBoatSim({ landmarks, rowing: null }, createCollider({ landmarks, dam }).decks);
+    const rng = mulberry32(5), berths = landmarks.club?.berths || [], st = sim.state;
+    let n = 0, bad = 0, worst = Infinity, bumps = 0, dist = 0;
+    const run = (e, n0, h, secs, pick) => {
+      Object.assign(st, { e, n: n0, h, ve: 0, vn: 0, yawRate: 0, bumps: 0, distance: 0 });
+      let input = pick(), next = 2 + rng() * 5;
+      for (let t = 0; t < secs; t += 0.1) {
+        if (t >= next) { input = pick(); next = t + 2 + rng() * 6; }
+        sim.step(input, 0.1);
+        const sd = -shoreDist(st.e, st.n, 400);
+        n++;
+        if (sd < BOAT.margin - 0.01) bad++;
+        worst = Math.min(worst, sd);
+      }
+      bumps += st.bumps; dist += st.distance;
+    };
+    const wander = () => ({ f: rng() < 0.8 ? 1 : rng() < 0.5 ? 0 : -1, s: rng() < 0.4 ? 0 : rng() < 0.5 ? -1 : 1, fast: rng() < 0.3 });
+    for (let k = 0; k < 12 && berths.length; k++) {
+      const b = berths[Math.floor(rng() * berths.length)], was = b.color;
+      b.color = null; // (the boat is the one taken from this berth)
+      run(b.e, b.n, b.yaw, 180, wander);
+      b.color = was;
+    }
+    // from open water: wander, and drive flat out at the nearest shore
+    for (let k = 0; k < 16; k++) {
+      let e, nn;
+      do { e = LAKE_MID[0] + (rng() - 0.5) * 2400; nn = LAKE_MID[1] + (rng() - 0.5) * 1400; } while (shoreDist(e, nn, 400) > -(BOAT.margin + 3));
+      run(e, nn, rng() * Math.PI * 2, 90, k % 2 ? wander : () => ({ f: 1, s: 0, fast: true }));
+    }
+    return { name: 'boatWaterCheck', ok: bad === 0 && n > 0, samples: n, bad, worst: +worst.toFixed(2), detail: `${n} boat positions over ${(dist / 1000).toFixed(1)} km (28 runs, ${bumps} soft bumps); ${bad} closer than ${BOAT.margin} m to the shore (closest ${worst.toFixed(2)} m)` };
+  };
+  const checkSet = () => runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30), () => seatCheck(seatCases(), BODY), boatWaterCheck]);
   const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? checkSet() : [];
   window.__checks = checks;
 

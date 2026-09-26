@@ -18,6 +18,10 @@ import { spineAt, nearestS, shoreDist } from '../world/frame.js';
  *              laughter club, and chatter as you pass people (formant
  *              babble: synthesised speech isn't intelligible, so the words
  *              appear as speech bubbles)
+ *   boating    water along the pedal boat's hull with its speed, a splash as
+ *              each paddle of the wheel goes in (the ambience bus)
+ *   circles    your claps and laughs with the laughter club, babble as the
+ *              others take turns to talk
  *   music      while you sit (a bench or the water steps): a soft lo-fi
  *              loop generated live -- warm chords, keys, a little melody,
  *              a gentle swung beat and vinyl crackle, varied bar by bar so
@@ -51,7 +55,7 @@ const LOOPS = [
 ];
 const PENTA = [62, 64, 66, 69, 71, 74, 76, 78, 81]; // D major pentatonic, for the melody
 
-export function createSound({ world, jogger, tod, weather, interact, onChange }) {
+export function createSound({ world, jogger, tod, weather, interact, boat = null, onChange }) {
   let ctx = null;
   let enabled = true;
   try { enabled = localStorage.getItem('sukhna-sound') !== '0'; } catch { /* optional */ }
@@ -60,9 +64,9 @@ export function createSound({ world, jogger, tod, weather, interact, onChange })
   const B = {}; // beds
   let t = 0;
   let music = { want: false, on: false, mode: 'gen', tracks: [], el: null, idx: 0, sched: null };
-  const timers = { bird: 1, horn: rand(15, 30), chat: 0.5, lap: 0, crackle: 0 };
+  const timers = { bird: 1, horn: rand(15, 30), chat: 0.5, lap: 0, crackle: 0, clap: 0 };
   const chatted = new Set();
-  let lastPhase = 0, stepCount = 0, lastCatch = 0, flockPrev = [];
+  let lastPhase = 0, stepCount = 0, lastCatch = 0, flockPrev = [], lastSplash = 0;
   const _v = new THREE.Vector3(), _f = new THREE.Vector3();
 
   /* ------------------------------ setup ------------------------------ */
@@ -102,6 +106,7 @@ export function createSound({ world, jogger, tod, weather, interact, onChange })
     B.rain = bed([['highpass', 1300, 0.7], ['lowpass', 8000, 0.7]], false, N.rain);
     B.rainWater = bed([['bandpass', 5200, 0.9]], true, N.rain);
     B.crackle = bed([['highpass', 2500, 0.7]], false, N.musicIn);
+    B.hull = bed([['bandpass', 420, 0.9], ['lowpass', 1100, 0.7]], true); // water along a pedal boat's hull
     loadTracks();
   }
 
@@ -364,8 +369,9 @@ export function createSound({ world, jogger, tod, weather, interact, onChange })
     const rain = weather.state.rain;
 
     // water: distance to the real shoreline, panned toward it, lapping in slow swells
+    // (in a boat the water laps at the hull wherever you are)
     const sd = Math.max(0, shoreDist(ce, cn, 120));
-    const near = clamp(1 - sd / 70, 0.04, 1);
+    const near = Math.max(clamp(1 - sd / 70, 0.04, 1), boat?.active ? 0.3 : 0);
     const swell = Math.pow(Math.max(0, Math.sin(t * 1.05 + 1.8 * Math.sin(t * 0.23))), 1.5);
     B.water.g.gain.setTargetAtTime(0.5 * near * (0.35 + 0.65 * swell), now, 0.08);
     place(B.water.pan, ce + f.ne * (sd + 2), 0, -(cn + f.nn * (sd + 2)));
@@ -439,6 +445,29 @@ export function createSound({ world, jogger, tod, weather, interact, onChange })
       }
     }
 
+    // the pedal boat: water rushing along the hull with the speed, a splash as each paddle goes in
+    if (boat) {
+      const v = boat.active ? Math.abs(boat.state.speed) : 0;
+      B.hull.g.gain.setTargetAtTime(boat.active ? 0.03 + 0.2 * clamp(v / 2.4, 0, 1) : 0, now, 0.3);
+      if (boat.active) place(B.hull.pan, boat.e, 0.2, -boat.n);
+      if (boat.splashes !== lastSplash) {
+        lastSplash = boat.splashes;
+        const fe = -Math.sin(boat.heading), fn = Math.cos(boat.heading);
+        const out = voice(boat.e - fe * 1.6, 0.2, boat.n - fn * 1.6, 0.6, 3);
+        noiseBurst(out, now, 0.1 + rand(0, 0.05), 'bandpass', rand(900, 1400), 0.9, 0.05 + 0.05 * clamp(v / 2.4, 0, 1));
+        noiseBurst(out, now + 0.02, 0.07, 'lowpass', 450, 0.7, 0.05);
+      }
+    }
+    // in the laughter club's circle: your own claps between the laughs
+    if (interact.group?.kind === 'laugh' && !world.crowd.laughBurst()) {
+      timers.clap -= dt;
+      if (timers.clap <= 0) {
+        timers.clap = 0.36;
+        const out = voice(jogger.e, jogger.y + 1.2, jogger.n, 0.4, 2);
+        noiseBurst(out, now, 0.035, 'highpass', 1600, 0.8, 0.16, 0.002);
+      }
+    }
+
     // a scooter horn from the city side, now and then
     timers.horn -= dt;
     if (timers.horn <= 0) {
@@ -499,6 +528,13 @@ export function createSound({ world, jogger, tod, weather, interact, onChange })
       return enabled;
     },
     update,
+    /** Someone in your circle speaks (interact.js hooks.onTalk): babble, or your laugh with the club. */
+    talk(who, kind) {
+      if (!ctx || ctx.state !== 'running' || !enabled) return;
+      const p = who === 'player' ? { e: jogger.e, y: jogger.y, n: jogger.n } : who;
+      if (kind === 'laugh') laugh(p.e, p.y + 1.6, p.n);
+      else babble(p.e, p.y + 1.55, p.n, rand(1.2, 2.0), who === 'player' ? rand(150, 190) : rand(120, 230));
+    },
     get ctx() { return ctx; },
     /** Dev: the node graph (for an analyser in the console). */
     get nodes() { return N; },

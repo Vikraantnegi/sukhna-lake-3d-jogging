@@ -11,8 +11,9 @@ import { DAM, GAPS } from './dam.js';
  *   move        try a step and slide along whatever blocks it
  *
  * Blocked: the water (half a metre short of the real edge), the parapet
- * (except at the three steps down to the water), and every OSM building
- * footprint (a 100 m spatial hash of oriented boxes, 0.35 m margin).
+ * (except at the three steps down to the water), every OSM building
+ * footprint (a 100 m spatial hash of oriented boxes, 0.35 m margin), and the
+ * boat-ticket shack on the walk.
  * ------------------------------------------------------------------ */
 
 export function createCollider(world) {
@@ -92,12 +93,21 @@ export function createCollider(world) {
     return false;
   };
 
+  // the boat-ticket shack on the walk (landmarks.js), with a jogger's margin
+  const shack = world.landmarks?.club?.shack;
+  const inShack = (e, n) => {
+    if (!shack) return false;
+    const de = e - shack.e, dn = n - shack.n;
+    return Math.abs(de * shack.ue + dn * shack.un) < shack.hu + 0.3 && Math.abs(-de * shack.un + dn * shack.ue) < shack.hv + 0.3;
+  };
+
   /** Is (e, n) somewhere you may stand? */
   // the edge of the world: 20 m inside the detailed terrain (the playtest ran off it)
   const [ex0, ey0, ex1, ey1] = NEAR.rect;
   function free(e, n) {
     if (e < ex0 + 20 || e > ex1 - 20 || n < ey0 + 20 || n > ey1 - 20) return false;
     if (deckAt(e, n)) return true;
+    if (inShack(e, n)) return false;
     if (shoreDist(e, n, 5) < 0.5) return false;
     const ns = nearestS(e, n);
     if (ns.side > 0 && ns.s > 0.5 && ns.s < L - 0.5) {

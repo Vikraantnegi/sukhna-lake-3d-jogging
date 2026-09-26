@@ -4,9 +4,9 @@ import { mulberry32 } from '../core/util.js';
 import { makeBody, poseBody, partGeometries, headwearGeometry, partColours, PARTS, P, restPose, seatPose, applySeat } from './body.js';
 import { createGait } from './gait.js';
 import { TYPES, MOVERS, personRow } from './types.js';
-import { L, spineAt, nearestS } from '../world/frame.js';
+import { L, data, spineAt, nearestS, inLake } from '../world/frame.js';
 import { groundAt } from '../world/terrain.js';
-import { walkY, DAM, BENCHES, BENCH_SEAT } from '../world/dam.js';
+import { walkY, DAM, BENCHES, BENCH_SEAT, inFootprint } from '../world/dam.js';
 import { LAYER, setLayers } from '../world/chunks.js';
 
 /* ------------------------------------------------------------------ *
@@ -20,7 +20,10 @@ import { LAYER, setLayers } from '../world/chunks.js';
  * or the garden end, so nobody piles up.  Pairs (students, old couples)
  * move as one.  Stationary groups keep their anchor: stretchers at the
  * parapet, the yoga group on the grass, the laughter club in a circle,
- * people on benches, a photographer at a viewpoint, the chai vendor.
+ * people on benches, a photographer at a viewpoint, the chai vendor, and
+ * a couple of chatting circles in the park.  The circles (the laughter
+ * club and the chatters) open a gap for the player to join and close it
+ * again after (joinCircle / leaveCircle, used by people/interact.js).
  *
  * Drawing: one InstancedMesh per body part (and per headwear shape), with
  * a colour per instance -- about 25 draw calls for the whole crowd.
@@ -107,7 +110,10 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
   // movers, weighted by type
   const weights = MOVERS.map((t) => TYPES[t].weight || 1), wsum = weights.reduce((a, b) => a + b, 0);
   const pickType = () => { let r = rng() * wsum; for (let i = 0; i < MOVERS.length; i++) { r -= weights[i]; if (r <= 0) return MOVERS[i]; } return MOVERS[0]; };
-  const nStationary = 36;
+  // standing circles in the park beyond the dam's toe (people chatting after their walk);
+  // on the lowest tier the crowd is small, so only the laughter club stands in a circle
+  const CHATS = max >= 100 ? [{ s: 830, d: -(DAM.verge + 16), n: 4, r: 1.25 }, { s: 1330, d: -(DAM.verge + 15), n: 5, r: 1.4 }] : [];
+  const nStationary = 36 + CHATS.reduce((a, c) => a + c.n, 0);
   let movers = 0;
   while (people.length < max - nStationary) {
     const type = pickType(), T = TYPES[type];
@@ -167,6 +173,55 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     const ns = nearestS(kiosk[0], kiosk[1]), f = spineAt(ns.s);
     add('vendor', { mode: 'stand', act: 'vend', e: kiosk[0], n: kiosk[1], y: groundAt(kiosk[0], kiosk[1]), yaw: facingLake(f) });
   }
+
+  // --- standing circles: the laughter club and the chatting groups ---
+  // Each keeps its members' angles round a centre; when the player joins, they shuffle
+  // round to open an even gap (interact.js walks the jogger into it), and close it again after.
+  const circles = [];
+  const circle = (kind, ce, cn, r, members) => {
+    const c = { kind, ce, cn, r, members, player: null };
+    members.forEach((p) => { p.circle = c; p.ang0 = p.ang = p.angT = Math.atan2(p.n - cn, p.e - ce); });
+    circles.push(c);
+    return c;
+  };
+  circle('laugh', lcBase[0], lcBase[1], 3.4, people.filter((p) => p.act === 'laugh'));
+  // a clear patch of grass for each: no tree trunk within the circle or just outside it (the
+  // tree belt behind the dam is dense), no building, dry ground -- searched along the walk
+  const trees = world.vegetation?.trees;
+  const treeNear = (e, n, r) => {
+    if (!trees) return false;
+    const x = e, z = -n;
+    for (let cx = Math.floor((x - r) / 100); cx <= Math.floor((x + r) / 100); cx++) for (let cz = Math.floor((z - r) / 100); cz <= Math.floor((z + r) / 100); cz++) {
+      for (const k of trees.grid.get(cx + ',' + cz) || []) if (Math.hypot(trees.x[k] - x, trees.z[k] - z) < r) return true;
+    }
+    return false;
+  };
+  const building = (e, n, r) => data.features.buildings.some((b) => Math.hypot(b.c[0] - e, b.c[1] - n) < Math.hypot(b.l, b.w) / 2 + r);
+  const clearSpot = (g) => {
+    for (let k = 0; k < 40; k++) for (const dd of [0, -4, -8, 4]) {
+      const s = g.s + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 8, [e, n] = at(s, g.d + dd);
+      if (!treeNear(e, n, g.r + 2.2) && !building(e, n, g.r + 4) && !inLake(e, n) && !inFootprint(e, n)) return [e, n];
+    }
+    return at(g.s, g.d);
+  };
+  for (const g of CHATS) {
+    const [ce, cn] = clearSpot(g), a0 = rng() * Math.PI * 2, members = [];
+    for (let i = 0; i < g.n; i++) {
+      const a = a0 + (i / g.n) * Math.PI * 2 + (rng() - 0.5) * 0.3;
+      const e = ce + Math.cos(a) * g.r, n = cn + Math.sin(a) * g.r;
+      members.push(add('chat', { mode: 'stand', act: 'chat', e, n, y: groundAt(e, n), yaw: yawOf(ce - e, cn - n) }));
+    }
+    circle('chat', ce, cn, g.r, members);
+  }
+  /** Stand a circle member at its current angle, facing the centre. */
+  const placeInCircle = (p) => {
+    const c = p.circle;
+    p.e = c.ce + Math.cos(p.ang) * c.r; p.n = c.cn + Math.sin(p.ang) * c.r;
+    p.y = groundAt(p.e, p.n);
+    p.yaw = yawOf(c.ce - p.e, c.cn - p.n);
+  };
+  // the laughter club laughs together: one clock for the circle (and for the player in it)
+  const laughBurst = (t, p = null) => ((t + (p ? (p.phase % 1) * 0.6 : 0)) % 14) < 3.2;
 
   const cap = people.length;
   // near the camera people dissolve (screen-door) rather than fill the view: one fade per
@@ -258,6 +313,7 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     for (const st of world.dam?.cityStairs || []) list.push({ s: st.s, d: -DAM.half + 0.3 });
     return list;
   };
+  const shack = world.landmarks?.club?.shack;
   let density = 1, keep = 1; // keep: the run-time quality fallback thins the crowd
   let clock = 0;
   const player = { e: 0, n: 0, s: 0, d: 0, speed: 0 };
@@ -304,16 +360,18 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     for (const p of people) {
       if (p.mode !== 'walk') continue;
       const f = spineAt(p.s);
-      p.e = f.e + f.ne * p.d; p.n = f.n + f.nn * p.d; p.y = walkY(p.s);
+      // the lake-side lanes bend in round the boat-ticket shack
+      const d = shack ? Math.min(p.d, 3.3 - 1.3 * (1 - THREE.MathUtils.smoothstep(Math.abs(p.s - shack.s), shack.hu + 0.4, shack.hu + 6))) : p.d;
+      p.e = f.e + f.ne * d; p.n = f.n + f.nn * d; p.y = walkY(p.s);
       p.yaw = yawOf(f.te * p.dir, f.tn * p.dir);
       if (p.dog) {
-        const df = spineAt(p.s + p.dir * 1.5), dd = p.d + 0.45;
+        const df = spineAt(p.s + p.dir * 1.5), dd = d + 0.45;
         p.dog.position.set(df.e + df.ne * dd, walkY(p.s), -(df.n + df.nn * dd));
         p.dog.rotation.y = p.yaw;
         const ph = clock * 9;
         p.dog.legs.forEach((leg, k) => { leg.rotation.x = Math.sin(ph + (k % 2 ? Math.PI : 0) + (k > 1 ? Math.PI / 2 : 0)) * 0.5; });
         // the lead: from about the walker's right hand to the collar
-        const o = p.dogIdx * 6, hf = spineAt(p.s + p.dir * 0.35), hd = p.d + 0.25; // the dog walks on the lake side
+        const o = p.dogIdx * 6, hf = spineAt(p.s + p.dir * 0.35), hd = d + 0.25; // the dog walks on the lake side
         leadPos[o] = hf.e + hf.ne * hd; leadPos[o + 1] = p.y + p.body.height * 0.52; leadPos[o + 2] = -(hf.n + hf.nn * hd);
         leadPos[o + 3] = p.dog.position.x; leadPos[o + 4] = p.dog.position.y + 0.58; leadPos[o + 5] = p.dog.position.z;
         p.dog.visible = p.active;
@@ -347,10 +405,18 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         break;
       }
       case 'laugh': {
-        const burst = ((t + p.phase * 0.2) % 14) < 3.2; // the whole circle laughs together, every 14 s
+        const burst = laughBurst(t, p); // the whole circle laughs together, every 14 s
         if (burst) { pose.shoulderL = pose.shoulderR = -2.6 + 0.3 * w(9); pose.lean = -0.15; pose.bounce = 0.03 * Math.abs(w(12)); }
         else { pose.shoulderL = pose.shoulderR = 0.9; pose.elbowL = pose.elbowR = 1.3 + 0.35 * Math.max(0, w(8)); pose.armOutL = pose.armOutR = -0.1; }
         p.laughing = burst;
+        break;
+      }
+      case 'chat': {
+        // talking with the hands while it's your turn (interact.js hands out the turns),
+        // nodding along otherwise, the weight shifting from foot to foot
+        if (p.talking > 0) { pose.shoulderL = 0.55 + 0.3 * w(4.6); pose.elbowL = 1.35 + 0.3 * w(3.9); pose.shoulderR = 0.35 + 0.2 * w(3.1); pose.elbowR = 1.1; pose.headPitch = 0.05 * w(5); }
+        else { pose.shoulderL = pose.shoulderR = 0.12; pose.elbowL = pose.elbowR = 0.5; pose.armOutL = pose.armOutR = -0.05; pose.headPitch = 0.1 * Math.max(0, w(1.6)); }
+        pose.lean = 0.03 * w(0.35);
         break;
       }
       case 'sit': applySeat(pose, p.seat); pose.headPitch = 0.1 * w(0.2); break;
@@ -447,6 +513,16 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
       }
       simMovers(dt);
       leadsDirty();
+      // circles: members shuffle round (at a slow step) to their places, making or closing a gap
+      for (const c of circles) for (const p of c.members) {
+        if (p.talking > 0) p.talking -= dt;
+        let da = p.angT - p.ang;
+        da = Math.atan2(Math.sin(da), Math.cos(da));
+        if (Math.abs(da) < 1e-4) continue;
+        const step = (0.45 / c.r) * dt;
+        p.ang += THREE.MathUtils.clamp(da, -step, step);
+        placeInCircle(p);
+      }
       for (const p of people) {
         if (p.mode !== 'walk' || !p.active) continue;
         p.gait.update(dt, p.speed);
@@ -470,6 +546,38 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
         if (Math.abs(dd) < 1.2) push += (dd >= 0 ? -1 : 1) * (1.4 - Math.abs(dd)) * (1 - ahead / 10);
       }
       return THREE.MathUtils.clamp(push * 1.6, -2.4, 2.4);
+    },
+    /** The standing circles (the laughter club, the chatting groups). */
+    circles,
+    get clock() { return clock; },
+    /** Is the laughter club mid-laugh at game time t (the circle's own clock)? */
+    laughBurst: (t = clock) => laughBurst(t),
+    /** The nearest circle whose edge is within r m of (e, n), or null. */
+    circleNear(e, n, r = 4) {
+      let best = null, bd = Infinity;
+      for (const c of circles) {
+        const d = Math.hypot(e - c.ce, n - c.cn) - c.r;
+        if (d < r && d < bd && c.members.some((p) => p.active)) { best = c; bd = d; }
+      }
+      return best;
+    },
+    /**
+     * The player joins circle c from (e, n): everyone shuffles round to leave an even gap
+     * where the player is, and the player's place in it comes back ({ e, n, yaw, ang }).
+     */
+    joinCircle(c, e, n) {
+      const ap = Math.atan2(n - c.cn, e - c.ce), N = c.members.length + 1, TAU = Math.PI * 2;
+      const rel = (a) => ((a - ap) % TAU + TAU) % TAU;
+      [...c.members].sort((a, b) => rel(a.ang0) - rel(b.ang0)).forEach((p, k) => { p.angT = ap + ((k + 1) / N) * TAU; });
+      c.player = { ang: ap };
+      const pe = c.ce + Math.cos(ap) * c.r, pn = c.cn + Math.sin(ap) * c.r;
+      return { e: pe, n: pn, yaw: yawOf(c.ce - pe, c.cn - pn), ang: ap };
+    },
+    /** The player leaves: the circle closes up again. */
+    leaveCircle(c) {
+      if (!c) return;
+      for (const p of c.members) p.angT = p.ang0;
+      c.player = null;
     },
     /** People within r metres of (e, n), nearest first. */
     near(e, n, r = 3) {

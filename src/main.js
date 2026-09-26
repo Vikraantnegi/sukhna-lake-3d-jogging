@@ -21,6 +21,7 @@ import { createTod, applyLook } from './core/tod.js';
 import { createWeather } from './core/weather.js';
 import { createSound } from './core/sound.js';
 import { Q, TIERS, lower } from './core/quality.js';
+import { createBoat } from './core/boat.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -103,14 +104,20 @@ rig.yaw = SPAWN.heading;
 const hud = createHud({ outfit, touch: TOUCH });
 
 jogger.avoid = world.crowd.avoid;
-const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world });
+// the pedal boat you can take out from the jetty (core/boat.js)
+const boat = createBoat({ scene, world, collider });
+const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world, boat, weather });
 
 /* -------------------------------- actions -------------------------------- */
 /* One table for keys and touch buttons.  T, K and M are wired by the time
  * of day (Phase 6), weather (Phase 6) and sound (Phase 7). */
 const actions = {
   E: () => interact.activate(),
-  V: () => { const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off'); },
+  V: () => {
+    // (no auto-jog in a boat, or standing in a circle)
+    if (interact.state === 'boat' || interact.state === 'group') { hud.flash(interact.state === 'boat' ? 'no auto-jog in a boat' : 'leave the group first'); return; }
+    const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off');
+  },
   T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); },
   K: () => { const w = weather.cycle(); hud.setWeather(w); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
   P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
@@ -126,9 +133,13 @@ window.addEventListener('keydown', (e) => {
   if (actions[k] && hud.started) actions[k]();
   if (e.code === 'KeyC') coordsOn = !coordsOn;
   // Esc pauses and resumes when the pointer isn't locked (with a lock, the browser's own
-  // Esc releases it and pointerlockchange brings up the pause card)
-  if (e.code === 'Escape' && hud.started && !locked()) hud.setPaused(!hud.paused);
-  if (e.code === 'KeyR') { jogger.e = SPAWN.e; jogger.n = SPAWN.n; jogger.heading = SPAWN.heading; jogger.auto = false; rig.yaw = SPAWN.heading; }
+  // Esc releases it and pointerlockchange brings up the pause card).  In a circle, the
+  // first Esc leaves it and the next one pauses; in a boat, Esc only ever pauses.
+  if (e.code === 'Escape' && hud.started && !locked() && performance.now() - leftGroupAt > 250) {
+    if (!hud.paused && interact.leaveGroup()) { leftGroupAt = performance.now(); hud.flash('left the group · Esc again to pause'); }
+    else hud.setPaused(!hud.paused);
+  }
+  if (e.code === 'KeyR') { interact.cancel(); jogger.e = SPAWN.e; jogger.n = SPAWN.n; jogger.y = collider.surfaceAt(SPAWN.e, SPAWN.n); jogger.heading = SPAWN.heading; jogger.auto = false; rig.yaw = SPAWN.heading; }
   if (e.code === 'KeyO') pipeline.enabled.ink = !pipeline.enabled.ink;
   if (e.code === 'KeyG') pipeline.enabled.grade = !pipeline.enabled.grade;
 });
@@ -140,11 +151,18 @@ for (const ev of ['keydown', 'keyup', 'pointerdown']) window.addEventListener(ev
 
 /* ----------------------------- mouse and touch ----------------------------- */
 const locked = () => document.pointerLockElement === canvas;
+let leftGroupAt = -1e9;
 // pointer lock may be refused (embedded browsers): the game runs without it, so swallow the rejection
 // ?nolock (the playtest): never take the pointer, so a scripted run can't capture the user's mouse
 const lockPointer = () => { if (params.has('nolock')) return; try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* refused */ } };
 canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { lockPointer(); hud.setPaused(false); } });
-document.addEventListener('pointerlockchange', () => { if (!TOUCH) hud.setPaused(!locked()); });
+document.addEventListener('pointerlockchange', () => {
+  if (TOUCH) return;
+  // with the pointer locked, Esc arrives as the lock's release: in a circle it leaves the
+  // circle (the game goes on; a click locks the mouse again, the next Esc pauses)
+  if (!locked() && hud.started && !hud.paused && interact.leaveGroup()) { leftGroupAt = performance.now(); hud.flash('left the group · Esc again to pause'); return; }
+  hud.setPaused(!locked());
+});
 document.addEventListener('mousemove', (e) => { if (locked()) rig.look(e.movementX * 0.0022, e.movementY * 0.0022); });
 // Drag to look whenever the pointer is not locked (before Start, in the
 // overview's absence, or in an embedded browser that refuses pointer lock).
@@ -182,8 +200,9 @@ const LOOK_TARGETS = { sky, sun, fill, bounce, hemi, scene, renderer, pipeline, 
 const SUNRISE = data.sun.sunrise, SUNSET = data.sun.sunset;
 let looping = false;
 hud.setWeather(weather.state.kind);
-const sound = createSound({ world, jogger, tod, weather, interact, onChange: () => hud.setSound(sound.enabled, sound.music) });
+const sound = createSound({ world, jogger, tod, weather, interact, boat, onChange: () => hud.setSound(sound.enabled, sound.music) });
 hud.setSound(sound.enabled, false);
+interact.hooks.onTalk = (who, kind) => sound.talk(who, kind);
 let density = -1, bundled = null;
 /** How many people are out (plan §6): 0.3 pre-dawn, peak from sunrise −10 to +70 min, thinning after; fog x0.45. */
 function crowdDensity(min, fog, evening) {
@@ -261,6 +280,7 @@ function tick(dt) {
   // playing whenever the card is away; pointer lock only steers the mouse (an embedded
   // browser may refuse it), and losing it (Esc) brings the pause card back
   const playing = hud.started && !hud.paused;
+  boat.update(playing ? dt : 0, jogger.keys, jogger); // (moves the seated jogger with it)
   jogger.update(playing ? dt : 0, rig.yaw);
   world.update(dt, camera.position, rig.mode === 'overview', jogger);
   updateTime(dt, playing);
@@ -268,7 +288,7 @@ function tick(dt) {
   if (playing) interact.update(dt); else hud.setPrompt('');
   sound.update(dt, camera, playing);
   placeLights();
-  hud.setRun(jogger);
+  hud.setRun(jogger, boat.active ? boat : null);
   if (coordsOn) {
     const w = jogger.where();
     hud.setCoords(`E ${jogger.e.toFixed(1)}  N ${jogger.n.toFixed(1)}  y ${jogger.y.toFixed(2)}\ns ${w.s.toFixed(1)} m  d ${(w.side * w.d).toFixed(1)} m  heading ${azimuthForYaw(jogger.heading).toFixed(0)}°\n__shot('x', 1600, 900, { s: ${w.s.toFixed(0)}, d: ${(w.side * w.d).toFixed(1)}, az: ${azimuthForYaw(rig.yaw).toFixed(0)}, pitch: ${THREE.MathUtils.radToDeg(rig.pitch).toFixed(0)} })`);
@@ -295,12 +315,12 @@ if (params.has('flat')) {
 // the playtest's API (tests/playtest): dev only, never in a production build
 if (import.meta.env.DEV) {
   import('./dev/testapi.js').then(({ installTestApi }) => installTestApi({
-    THREE, world, jogger, collider, interact, hud, rig, camera, tod, weather, sound, pipeline, data, perf, sun, SPAWN,
+    THREE, world, jogger, collider, interact, boat, hud, rig, camera, tod, weather, sound, pipeline, data, perf, sun, SPAWN,
     tick, updateTime, placeLights, actions,
   }));
 }
 
-window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, tod, weather, sound, updateTime, watchFrameTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, boat, tod, weather, sound, updateTime, watchFrameTime, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({

@@ -13,6 +13,9 @@ import { spineAt, LAKE_CENTRE } from '../world/frame.js';
  *                 behind, a little to one side and above the head, looking
  *                 past the jogger to the lake, with a very slow drift; the
  *                 mouse and wheel still work (it settles back when idle)
+ *   boating       the same view as a chase camera: behind the pedal boat,
+ *                 following its heading (core/boat.js view())
+ *   in a circle   behind the jogger, outside the circle, looking across it
  *   overview (P)  an aerial orbit of the whole lake, ~1.1 km up
  *
  * The view never dips under the ground or the water.
@@ -79,13 +82,15 @@ export function createCameraRig(camera, { groundAt }) {
     if (bench) {
       if (!rig.seated) { rig.seated = true; rig.seatT = 0; rig.boomTarget = bench.boom ?? Math.max(rig.boomTarget, 3.2); rig.lookIdle = 99; }
       rig.seatT += dt;
-      if (rig.lookIdle > 2.5) {
+      // (a boat's chase view follows its heading faster, and sooner after the mouse lets go)
+      const rate = bench.rate ?? 0.9;
+      if (rig.lookIdle > (bench.idle ?? 2.5)) {
         const drift = bench.drift ? Math.sin(rig.seatT * 0.09) * 0.08 + Math.sin(rig.seatT * 0.031) * 0.05 : 0;
         let dy = bench.yaw + drift - rig.yaw;
         dy = Math.atan2(Math.sin(dy), Math.cos(dy));
-        rig.yaw += dy * (1 - Math.exp(-0.9 * dt));
+        rig.yaw += dy * (1 - Math.exp(-rate * dt));
         const wantPitch = (bench.pitch ?? -0.05) + (bench.drift ? Math.sin(rig.seatT * 0.057) * 0.02 : 0);
-        rig.pitch += (wantPitch - rig.pitch) * (1 - Math.exp(-0.9 * dt));
+        rig.pitch += (wantPitch - rig.pitch) * (1 - Math.exp(-rate * dt));
       }
     } else rig.seated = false;
 
