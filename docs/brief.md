@@ -90,3 +90,23 @@ Scripts in `scripts/sukhna/` produce one compact data file:
 - Port `__shot`. Take screenshots from fixed camera spots at pre-dawn, sunrise, bright morning and in fog, placed next to the matching `reference/` photos in `docs/compare.md`, with a list of what still doesn't match.
 - Run the numeric checks (the lake leak check, NPCs off the water), report frame time and draw calls, and run the production build.
 - At the very end: what was built, the file list, which parts are based on real data or photos and which are stylised or invented, known limitations, and ideas for a next pass.
+
+---
+
+# ADDENDUM (2026-09-26, after Phase 2): flat world
+
+Stop here. I'm changing a core decision, so please re-plan before continuing.
+
+New direction: drop the tiny-planet loop. Build Sukhna FLAT, at its real shape and 1:1 scale, so the dam curves exactly as it does in reality and you can see across the lake to the real far shore and the Shivaliks.
+
+What changes:
+- Use the real ENU coordinates directly. No equator mapping, no harmonic straightening, no join, and skip the sphere bake for the world.
+- The promenade runs end to end (boat club → Garden of Silence). V auto-jog turns around at each end, and the HUD counts lengths instead of laps.
+- P becomes an aerial overview of the whole lake (the hint label can stay "P planet", or change it to "P overview" if that reads better; tell me which you pick).
+- The rowing eight and sculls row lanes on the real lake instead of circling the planet.
+- The Shivaliks become real DEM terrain beyond the far shore, with ridgelines only for the far distance.
+- Performance: replace horizon culling with distance culling and LOD. Build the far shore and hills at low detail, and use morning haze and fog to limit how far the detail needs to go. Keep the draw-call targets.
+
+Keep everything else: the look, the jogger, NPCs, time of day, weather, sound, controls, the quality tiers, and the real sun.
+
+Update docs/plan.md for this: the sections affected, a new phase list from here, what from Phase 2 can be reused, and the risks. Record it under Decisions. Then STOP and show me the updated plan before building anything.

@@ -1,8 +1,8 @@
 # Sukhna: a sunrise jog around Sukhna Lake (plan)
 
-Status: **approved plan; implementation is running locally** (Claude Code Desktop on the user's Windows machine). Overpass (overpass-api.de, fallback overpass.kumi.systems) and the AWS terrain tiles are reachable; no allowlist. Reference engine lives at `.ref/sakura-crossing/` (git-ignored, read-only): `git clone --depth 1 https://github.com/Kenton-GMI/sakura-crossing .ref/sakura-crossing`.
+Status: **re-planned after Phase 2: the world is now FLAT, at Sukhna's real shape and 1:1 scale** (the user's decision; see Decisions). Waiting for the user's approval of this plan before building. Implementation runs locally (Claude Code Desktop on the user's Windows machine). Overpass (overpass-api.de, fallback overpass.kumi.systems) and the AWS terrain tiles are reachable; no allowlist. Reference engine lives at `.ref/sakura-crossing/` (git-ignored, read-only): `git clone --depth 1 https://github.com/Kenton-GMI/sakura-crossing .ref/sakura-crossing`.
 
-Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each new phase starts by re-reading both, then Progress and Working rules below.
+Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-world addendum at its end) + this file. Where they disagree, the Decisions below win. Each new phase starts by re-reading both, then Progress and Working rules.
 
 ## Progress
 
@@ -10,56 +10,59 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim) + this file. Each 
 |---|---|---|---|
 | 0 Plan | done | `claude/charming-hawking-lsp0mx` (PR #1, merged) | `f2ffc9a` |
 | 1 Scaffold + engine port | done | `phase-1-scaffold` (PR #2, merged) | `4c528c4` |
-| 2 Real-data pipeline + `?flat=1` | **in progress** | `build` | — |
-| 3 Planet layout + self-checks | — | `build` | — |
+| 2 (planet version) | **superseded**, kept in history | `build` | `27ca69a` |
+| 2 Flat real-data pipeline + flat scaffold | **next (awaiting plan approval)** | `build` | — |
+| 3 World layout, LOD and self-checks | — | `build` | — |
 | 4 Jogger, camera, HUD, controls, touch | — | `build` | — |
 | 5 NPCs, interactions, rowing, birds | — | `build` | — |
-| 6 Time of day, mist, weather, signage | — | `build` | — |
+| 6 Time of day, haze, mist, weather, signage | — | `build` | — |
 | 7 Sound | — | `build` | — |
 | 8 Quality tiers, verification, compare.md | — | `build` | — |
 
-**Decisions made during the run** (newest last; each one is something the plan left open or that the data forced):
-- **Phase 2: R ≈ 403 m, not 320 (the user chose this).** OSM maps the promenade as one paved pedestrian way, `way/1024118089`, 2 490.9 m from the Garden of Silence and regulator bridge (east) to the boat club and viewpoint (west). The bund itself is about 2 065 m of that; the last 426 m runs north along the west shore to the jetty, boat rental and entrance plaza. The loop is the whole walk, 1:1. Consequences:
-  - C ≈ 2 531 m, and a lap takes about 14 min at jog pace.
-  - Crowd density per 100 m stays as planned: the high and medium NPC and bird limits rise by about 25% (NPCs 200 / 125 / 50, birds 175 / 100 / 35); the low tier keeps its limits.
-  - The §4 distortion table gains an R = 403 column; 95% of the lake band now sits inside 10% compression.
-  - The rowing lane at z = +55 is about 2 510 m (a 9.1 min lap).
+**Decisions made during the run** (newest last; each one is something the plan left open, the data forced, or the user changed):
+- ~~**Phase 2: R ≈ 403 m, not 320.**~~ *Superseded by the flat world below.* (OSM measured the promenade at 2 494.9 m, which with a 40 m join gave R ≈ 403; the user chose the full walk, 1:1, and raised the high/medium NPC and bird limits by about 25%. Those limits stay: the walk is the same length.)
 - **Phase 2: the working tree is LF.** `.gitattributes` sets `* text=auto eol=lf`, because `core.autocrlf=true` checked files out with CRLF and broke multi-line edits in the pipeline scripts. The repo contents are unchanged.
+- ~~**Phase 2: harmonic straightening map, and the join on real land.**~~ *Superseded before approval.* The plan's normal-projection mapping folds (the dam is concave toward the lake, so its normals cross 600–1 000 m out, short of the far shore); a harmonic map fixed it (1.12 M triangles, 0 inverted). Kept in `27ca69a` for history only.
+- **Re-plan (user, after Phase 2): drop the tiny planet; build Sukhna flat, at its real shape and 1:1 scale.** Real ENU coordinates are used directly: no equator mapping, no straightening, no join, no sphere bake. The promenade runs end to end (boat club ↔ Garden of Silence); V auto-jog turns round at each end and the HUD counts lengths, not laps. The rowing boats row lanes on the real lake. The Shivaliks are real DEM terrain beyond the far shore, with ridgeline rings only for the far distance. Horizon culling is replaced by distance culling and LOD, with morning haze and fog limiting how far detail has to go. The draw-call targets stay. Everything else stays: the look, the jogger, NPCs, time of day, weather, sound, controls, quality tiers, the real sun.
+- **Re-plan: P becomes "P overview".** An aerial orbit of the whole lake. The hint bar now reads `WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide` (the user allowed either label; "planet" no longer describes anything).
+- **Re-plan: pre-dawn preset is 06:55**, which is civil dawn and 24 min before the computed sunrise (07:19). The brief's "HUD ≈ 06:55" and "about 25 minutes before sunrise" both hold.
+- **Re-plan: sun values come from `src/core/sun.js`**, not the plan's estimates: 15 Jan 2027, civil dawn 06:55, sunrise **07:19 at azimuth 114.1°**, 07:45 at elevation 4.0°, 09:15 at 19.9°, sunset 17:45. (The plan had said 07:21 and 115°.)
+- **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
+
+**What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
+
+| Keep as-is | Reuse with changes | Delete |
+|---|---|---|
+| `fetch-osm.mjs`, `overpass.ql`, the raw OSM (`raw/osm-…-2026-09-26.json`) | `config.mjs`: drop `MAP`, `LATTICE`, `L_JOIN`; add terrain grids and LOD distances | `lib/straighten.mjs` (harmonic map, compression, inverse, fold check) |
+| `lib/png.mjs`, `lib/terrarium.mjs`, `lib/pngenc.mjs` | `fetch-terrain.mjs`: add z12 tiles for the hill grid | planet-space cover and DEM lattices |
+| `lib/geo.mjs` (ENU projector with exact inverse, polylines, `simplify`/`simplifyRing`, `stitchRings`, `pointInRing`) | `build-data.mjs`: keep the promenade selection and orientation, origin, lake rings, cover classes, landmarks, steps, measures, sun presets and the ridgeline ray-march; write ENU instead of (x, z) | `src/data/sukhna.flat.json` (planet-vs-real debug) |
+| `src/core/sun.js` (NOAA, verified) | the report: real measures and checks, no distortion tables | runtime `src/world/planet.js` (the bake), `R` |
+| raw Terrarium tiles (z11, z13) | | |
+
+**Real measurements already established** (from Phase 2, `scripts/sukhna/report.md` in `27ca69a`):
+- Promenade (`way/1024118089`, paved, pedestrian): **2 494.9 m** end to end. The bund is 2 073 m (east end → the west bend where the downstream footways meet the walk); the west-shore stretch to the boat club is 422 m.
+- Lake (`relation/8421510`): 1.363 km², perimeter 8.51 km, extent 2 209 × 1 305 m (E × N), longest span 2 266 m, 4 islands. Water level from the DEM median: **353.2 m**.
+- Landmarks (s from the east end): Buddha statue (`node/3649893943`) s ≈ 16, Garden of Silence (`way/360443301`) s ≈ 31, regulator and footbridge just past the east end, Chandigarh Golf Club s ≈ 1 644 (240 m off), viewpoint at the bend s ≈ 2 056, Sukhna Lake viewpoint s ≈ 2 390, boating s ≈ 2 395, entrance plaza (derived from the west-end amenities) s ≈ 2 417, lake-club tennis courts north of the west end.
+- Six real stairs, all down the **downstream (city) face** to parking: s ≈ 304, 612, 917, 1 225 (Stair n°3), 1 524 (Stair n°2), 1 898 (Stair n°1). OSM maps no steps to the water.
+- DEM: the city side around the golf course is about 3 m below the lake; the Kansal foothills about 4 km NE reach ~84 m above it; the Kasauli ridge about 30 km NE reaches ~1 830 m ASL.
 
 **Notes for a fresh session:**
 - Dev server: `npm run dev` → http://127.0.0.1:5178 (config in `.claude/launch.json`, name `dev`). Keep one running; check with the Browser pane's server list before starting another.
 - `.ref/` is not in git. If it is missing, clone it with the command in the status line.
-- **State after Phase 1:**
-  - Vite 6.4 + three 0.180.0 (the only deps). `npm run build` passes.
-  - Ported with MIT headers: `core/toon.js`, `post.js`, `outline.js`, `util.js`, `sky.js`, `textures.js` (helpers, plus Latin/Devanagari/Gurmukhi font stacks), `palette.js` (structure; colours from plan §2), and `world/planet.js`. New: `core/perf.js`, `world/index.js`, `main.js` (dev viewer, not the jogger).
-  - `R = 320` is a **placeholder constant** in `src/world/planet.js`. Phase 2 replaces it with `(L_prom + L_join) / 2π` from the data.
-  - `world/index.js` holds two **DEBUG pieces** (an equator strip, and a post every 100 m) that prove the bake. Phase 3 deletes them.
-  - The sun is the reference's fixed `SUN_LOCAL` (in `main.js`). The real sun arrives in Phase 6.
-  - Deviations from the reference, all documented in file headers:
-    - `toon.js` drops the `flatShading` option, which r180 ignores with a warning; the look is unchanged.
-    - `post.js` re-syncs near/far every frame.
-    - The sky dome and clouds are rotated into the local surface frame. The reference only moved them, which breaks once you are a quarter-lap round.
-  - Known artifacts left for Phase 3: faint ink on the bare sphere's 8 m facet creases near the horizon, and grazing-angle scratches right at the horizon. Phase 3's ground meshes cover this band.
-  - Lesson: author long loop geometry pre-segmented (about 4 m). A single 2 km quad subdivides into slivers that the ink pass picks up.
-- **Dev hooks:**
-  - `window.__scene` exposes the scene objects.
-  - `window.__shot(name, W, H, {pos:[x,0,z], yaw, pitch} | {orbit, tilt, dist})` writes `.shots/<name>.jpg` and returns the draw calls.
-  - `window.__bench(n)` returns the GPU-synced ms per frame, draw calls and the GPU name.
-  - `?stats=1` shows the live readout.
-  - Keys: drag to look, WASD (Shift is faster), P planet view, O ink, G grade, R reset. yaw −π/2 looks east along the loop, π looks at the lake (+z).
-- **Measured at the end of Phase 1** (RTX 4080 SUPER, ANGLE/D3D11, window 1721×1320, internal 2448×1878 from the 4.6 MP budget), with `__bench(200)`:
-  - ground view: 16 calls, 42k tris, 0.34 ms/frame;
-  - planet view: 8 calls, 0.24 ms/frame.
+- **State of the runtime (still Phase 1's):** Vite 6.4 + three 0.180.0 (the only deps). Ported with MIT headers: `core/toon.js`, `post.js`, `outline.js`, `util.js`, `sky.js`, `textures.js`, `palette.js`, `world/planet.js`; new `core/perf.js`, `core/sun.js`, `world/index.js`, `main.js` (dev viewer). The planet bake, `R = 320` and the debug equator are still in the runtime; **Phase 2 (flat) removes them**.
+- Deviations from the reference, documented in file headers: `toon.js` drops the `flatShading` option (r180 ignores it); `post.js` re-syncs near/far every frame; the sky dome was rotated into the planet's surface frame (in the flat world it only follows the camera again).
+- **Dev hooks:** `window.__scene`; `window.__shot(name, W, H, opts)` writes `.shots/<name>.jpg` and returns draw calls; `window.__bench(n)` gives GPU-synced ms per frame, draw calls and the GPU name; `?stats=1` shows a live readout. Keys: drag to look, WASD, P, O ink, G grade, R reset.
+- **Measured at the end of Phase 1** (RTX 4080 SUPER, ANGLE/D3D11, window 1721×1320, internal 2448×1878): ground view 16 calls, 0.34 ms; planet view 8 calls, 0.24 ms.
 
 ## Working rules
 
-Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built in one go.
+Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built in one go, **once this re-plan is approved**.
 
 - Work on one branch, `build`, created from the latest main. At least one commit per phase, each with the build passing. Push after every phase so progress is saved. Don't wait for the user to merge.
 - At the end of each phase: update Progress, write a 3–4 line summary in chat (what's new on screen, draw calls, frame time), then go straight on to the next phase.
 - Stop and ask the user ONLY if:
   - a new dependency or binary asset is needed (e.g. bundled Noto fonts);
-  - the real data breaks a decision in the plan (R, the join, the lake mapping, the default time);
+  - the real data breaks a decision in the plan (the world extent, the lake, the default time);
   - a numeric check fails and two attempts don't fix it;
   - anything destructive or irreversible.
 - Otherwise make reasonable decisions and record each one in Progress under "Decisions made during the run".
@@ -72,25 +75,22 @@ Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built
 
 ## 0. Context
 
-- **The repo is almost empty.** `main` holds only `reference/`, which contains 9 photos.
 - **The engine comes from [Kenton-GMI/sakura-crossing](https://github.com/Kenton-GMI/sakura-crossing).**
   - Licence: MIT, © 2026 Kenton Wang.
   - Size: about 56k lines, three `^0.180.0` plus Vite 6, Node ≥ 18.
   - Its MIT code may be ported with attribution. Its `public/audio/` track is not MIT and must never be copied.
-- **Scaffold:** set up exactly as the reference is. That means Vite plus three only, `npm run dev` and `npm run build`, `base: './'`, and the dev `__shot` plugin.
+- **Scaffold:** Vite plus three only, `npm run dev` and `npm run build`, `base: './'`, and the dev `__shot` plugin (done in Phase 1).
 
 ### Decisions already made with the user
 
-- **Radius: R ≈ 403 m, 1:1 along the promenade.** (Originally R ≈ 320; changed in Phase 2 when OSM measured the promenade at 2 491 m. See "Decisions made during the run".)
-  - The final value is R = (L_prom + L_join) / 2π, where L_prom is the promenade length measured from OSM.
-  - Everything repeated along the loop is instanced and sector-chunked.
-  - On the low tier, dressing and NPC density are thinned. The planet does not shrink.
+- **The world is flat, at Sukhna's real shape, 1:1.** Real ENU metres, the dam curving exactly as it does, the real far shore and the Shivaliks visible across the lake. (Replaces the tiny planet: no R, no loop, no join.)
+  - Everything repeated along the walk is instanced and chunked by distance; far things are low-detail and hidden in haze.
+  - On the low tier, dressing and NPC density are thinned and draw distances shortened.
 - **Default time: a winter date with the real clock.**
-  - The date is 15 January.
-  - The session opens about 25 minutes before the real sunrise, so the HUD clock reads about 06:55.
-  - Real sunrise is 07:21 IST, at azimuth 115° (ESE). Civil dawn is at 06:55.
+  - The date is 15 January (2027, one constant in `scripts/sukhna/config.mjs` and the data).
+  - The session opens at 06:55 (civil dawn), 24 min before the real sunrise at 07:19, azimuth 114.1° (ESE).
   - The brief's "5:45 AM" is dropped, because in winter the sun is at −20° at that time.
-- **OSM data:** fetched from Overpass directly (overpass-api.de; fallback mirror overpass.kumi.systems). Both are reachable from the local machine.
+- **OSM data:** fetched from Overpass directly (overpass-api.de; fallback mirror overpass.kumi.systems).
 
 ---
 
@@ -100,81 +100,45 @@ All paths are in `.ref/sakura-crossing/src/`.
 
 | Area | Files | What matters for Sukhna |
 |---|---|---|
-| **Planet** | `world/planet.js` | See the planet notes below the table. |
-| **Height** | `world/index.js:773` `heightAt(x,z,fromY)`; `street.js` `groundY`, `TERRAIN_DROP = 0.015`; `hills.js` `fieldAt` / `hillAt` / `hillMeshY` | Ground height = street height + hill height, then `min` over cuts, then `max` over platforms. The hill field is a 1.5 m triangular lattice (`NODES`), and it is the same surface for walking and for drawing. |
-| **Hills** | `world/hills.js` | `SUMMITS` → `keepAt` masks → a slope-limiter pass → a roughness pass → trail benching. `hillSafety(world)` must report worst-built = 0.00. A DEM plugs in at pass 1 (`:1615`). |
-| **Perched lake** | `world/lakeform.js`, `world/lake.js` | See the lake notes below the table. |
-| **Dam** | `world/lakeroad.js` | The dam lives in the height field (`DAMS`, `damAt`). `buildDam` adds riprap (520 merged stones), kerbs, a spillway, an intake and a gauge. Reusable pieces: `groundRail`, `hillLine`, `finger`. |
-| **Lakeside** | `world/kohan.js` | `timberDeck` (pier and jetty with a platform), `boardwalk`, `makeBoat`, lamps, benches, a boat station and a pedal boat. |
-| **Loop rule** | `world/railway.js:29-38`, `canal.js:42-46` | "The structure runs the whole way round; the dressing appears only where the district is." |
-| **Train** | `world/train.js:376-430` | Baked once on the rail, then turned each frame by `T(C)·Rz(−x/R)·T(−C)`. Wheels sit on a `planetRigid` hub and spin on inner pivots. |
-| **Look** | `core/toon.js` | `MeshToonMaterial` patched through `onBeforeCompile`: the ramp bands are tinted violet, `uShadowTint` 0x6c5f8c, and materials are cached. |
-| | `core/post.js` | A HalfFloat target plus a depth texture. The ink pass is the second difference of linearised depth (it fades over 40–98 m). Then a grade pass (split-tone, lift, saturation, vignette, sRGB), then FXAA. It supersamples to a pixel budget of 4.6 MP. |
-| | `core/outline.js` | Inverted-hull outline for hero props, one extra draw call each. |
-| | `core/palette.js` | `PAL` is one fixed look. |
-| | `core/sky.js` | A gradient dome and 22 static clouds. `buildDistantHills` exists but is never called. There is no sun disc. |
-| **Canvas2D signage** | `core/textures.js` | `make`, `cached`, `fitText`, `centered`, all private. The font stack is Japanese only. |
-| **Utilities** | `core/util.js` | `bake(parts)` merges per material bucket, plus `trs`, `rngKit`, `shadowify` and `sstep`. There is no instancing helper; instancing is done inline. |
-| **Player** | `core/player.js` | First person only, on the flat plane. Axis-aligned box collision against `world.colliders`, with x speed divided by `cos(z/R)`. `applyCamera` works from `basisAt`. Walk 2.55 m/s, run 5.1 m/s, look sensitivity 0.0022. |
-| **HUD** | `core/hud.js` | Start card, prompt, toast, hint (`H` fades only the hint), coordinates (`C`). |
-| **Audio** | `core/audio.js` | An mp3 playlist on an `HTMLAudioElement`, with no WebAudio. |
-| **Main loop** | `main.js` | Sets up the lights, and `seatLight` re-seats them in the player's tangent frame each frame. Handles the P orbit, `__scene`, and `__shot`. |
-| **Parametric vehicles** | `world/vehicles.js` | A kind is a row in `SPEC`. `makeVehicle` derives every part; `panel` draws between two points; `emit` bakes per material. |
-| **Trees and particles** | `world/trees.js`, `world/petals.js` | Districts return tree spots, and each species is merged into one trunk mesh plus instanced canopies. Petals are instanced quads with `depthWrite: false`. |
-| **Dev screenshots** | `vite.config.js` `frameGrabber` | `POST /__shot` writes `.shots/<name>.jpg`. `window.__shot(name,W,H,{pos,yaw,pitch,orbit,…})`. Because the browser pane does not composite, animation has to be stepped by hand. |
-
-**Planet notes (`world/planet.js`):**
-- The world is built flat, then bent onto the sphere once by `bakeToPlanet(root, {maxEdge:4})`. `R` drives `CIRCUMFERENCE`, `CENTER=(0,−R,0)` and `horizonFor(h)`.
-- The mapping is equirectangular: `x`→longitude (`x/R`, wrapped) and `z`→latitude (`z/R`). The loop is at z = 0.
-- Helpers: `positionAt`, `basisAt`, `frameAt`, `flatAt`, `wrapX`, `wrapDelta`.
-- `subdivideLongEdges` bisects triangles until every edge is ≤ `maxEdge`, keeping material groups.
-- The bake treats objects three ways:
-  - `planetRigid` groups are re-seated as a whole, not bent.
-  - Instances are re-seated one by one and left unculled.
-  - Everything else is bent and gets exact frustum culling.
-- The sphere is `Icosahedron(R, 30)` with radial normals. It never casts shadows.
-- The latitude band: x shrinks by `cos(z/R)`, and the player's z is clamped to ±0.24·C.
-
-**Lake notes (`world/lakeform.js`, `world/lake.js`):**
-- The water is a flat surface at `groundY + LEVEL`. The shoreline is the contour where `field = LEVEL`, and depth is `LEVEL − fieldAt`.
-- `SHORE` is a polygon with a treatment on every vertex. `lakeNear` gives the signed distance to it.
-- `lakeGround()` is the one hook `hills.js` calls. The rim is built into the ground, so the lake cannot spill.
-- Water layers are drawn by marching squares (`contourFill`) as unlit `flat()` layers. Reflections are merged slabs, and ripples are a `planetRigid` hub with inner pivots.
-- Checks (none run automatically; you call them from the console):
-  - `lakeLeakCheck`: flood fill from inside the lake; passes when `escaped < 30`.
-  - `lakeSpillCheck`
-  - `lakeStats`
+| **Planet** | `world/planet.js` | **Not used any more** (flat world). Its flat-authoring habits carry over: build in metres, merge per material, instance repeats. |
+| **Height** | `world/index.js:773` `heightAt(x,z,fromY)`; `hills.js` `fieldAt` / `hillMeshY` | The pattern stays: ground height = terrain, then `min` over cuts, then `max` over platforms; the same surface for walking and for drawing. The terrain now comes from the DEM. |
+| **Hills** | `world/hills.js` | The slope-limiter and `hillSafety` ideas are reused on the DEM terrain near built things. |
+| **Lake** | `world/lakeform.js`, `world/lake.js` | The water is a flat surface; now it is the real OSM polygon at the real level. The reference's leak idea becomes `shoreCheck` (§8). Water layer and ripple ideas are reused. |
+| **Dam** | `world/lakeroad.js` | Riprap, kerbs, spillway, intake and gauge pieces feed the regulator and the embankment. |
+| **Lakeside** | `world/kohan.js` | `timberDeck` (jetty), `boardwalk`, `makeBoat`, lamps, benches, a boat station and a pedal boat. |
+| **Dressing rule** | `world/railway.js:29-38` | "The dressing appears only where the district is": still true along the walk. |
+| **Train** | `world/train.js` | Not used as such; the boats follow lane polylines on the real lake (§6). |
+| **Look** | `core/toon.js`, `post.js`, `outline.js`, `palette.js`, `sky.js` | Unchanged: cel ramps with tinted shadows, the ink / grade / FXAA pipeline, hull outlines, the painted sky. |
+| **Canvas2D signage** | `core/textures.js` | Helpers exported in Phase 1, with three font stacks. |
+| **Utilities** | `core/util.js` | `bake`, `trs`, `rngKit`, `shadowify`, `sstep`. |
+| **Player** | `core/player.js` | Pointer-lock mouse look and collision ideas; movement becomes the jogger's. |
+| **HUD / audio** | `core/hud.js`, `core/audio.js` | Prompt and toast kept; audio replaced by WebAudio synthesis. |
+| **Parametric vehicles** | `world/vehicles.js` | "A type is a row of numbers": reused for bodies, boats, scooters and cars. |
+| **Trees and particles** | `world/trees.js`, `world/petals.js` | Grove building and instanced particles, now with distance LOD. |
+| **Dev screenshots** | `vite.config.js` `frameGrabber` | Ported in Phase 1. |
 
 **Performance rules (measured in the reference's `CLAUDE.md`):**
 - The scene is limited by draw calls: about 1 400 calls take 11 ms, and about 3 050 take 20 ms. Triangles and fill rate barely matter.
 - Merge per material with `bake`, and instance anything repeated.
-- Trees are merged world-wide at the end.
-- Bent meshes are frustum-culled. Switching that off costs about 8 ms.
+- Frustum-cull everything with real bounds (the reference measured ~8 ms saved).
 - Thin or transparent sheets get `depthWrite: false` and `noOutline`.
 - Canopies never receive shadows.
 
 ### What the reference lacks and Sukhna needs
 
-- People and NPCs. The reference has none, by design.
-- A visible player body and a third-person camera.
-- Time-of-day cycling. The reference's sun, sky, palette and grade are all fixed.
-- Weather (rain, fog).
-- Auto-move.
-- A jogging HUD and stamina.
-- A sun disc and sky that react to the sun.
-- Ridgeline rings.
-- Touch controls.
-- WebAudio ambience.
-- Quality tiers.
-- Indic fonts.
-- URL parameters.
-- A draw-call and frame-time readout.
-- Automatic self-checks.
-- Horizon culling. Visibility on a small planet is limited by the curve, and the reference never exploits that.
+- People and NPCs; a visible player body and a third-person camera.
+- Time-of-day cycling, a sun disc and a sky that react to the real sun.
+- Weather (rain, fog) and morning haze that sets the view distance.
+- Auto-move, a jogging HUD and stamina.
+- **A large real-scale world:** DEM terrain to the Shivaliks, distance culling and LOD, and a depth set-up that reaches 40 km without breaking the ink pass (§4).
+- Ridgeline rings for the far ranges only.
+- Touch controls, WebAudio ambience, quality tiers, Indic fonts, URL parameters, a draw-call and frame-time readout, automatic self-checks.
 
 ---
 
 ## 2. Reference photos: the look list
+
+*(Unchanged.)*
 
 **Real photographs, full weight:**
 - r1 `23913875383_…_b.jpg`: garden end at sunrise.
@@ -198,20 +162,12 @@ All paths are in `.ref/sakura-crossing/src/`.
 - **Land side:** a grass verge with royal palms (pale grey trunks #bdb8ad) and dense broadleaf and eucalyptus trees (#3f5a2e / #5f7a3a).
 
 **Gardens and the plaza (r1)**
-- Terracotta interlocking pavers (#c77d5e / #b0664a).
-- Flower beds.
-- A low dark-green chain-link fence (#2f4a33). This is the only "railing" seen.
-- A thatched gazebo (#5a4a3a).
-- Carved grey stone seats and sculptures.
-- A blue signboard with white text (#2f8fcf).
-- Red-brown wooden benches on dark frames (#8a4a32).
-- A small white or grey dustbin.
+- Terracotta interlocking pavers (#c77d5e / #b0664a), flower beds, a low dark-green chain-link fence (#2f4a33, the only "railing" seen), a thatched gazebo (#5a4a3a), carved grey stone seats and sculptures, a blue signboard with white text (#2f8fcf), red-brown wooden benches on dark frames (#8a4a32), a small white or grey dustbin.
 
 **Boat club (r7, r9, r2)**
 - A jetty edge of grey-blue pavers (#8ea0b3) with a red-pink border pattern.
 - A long row of pedal boats in blue #3f7fd0, sky-blue #62a8e6, yellow #f2c230, red #d23b35 and orange #f08a2e, some with swan or dragon heads. These will be stylised swans; no brands.
-- A pink-red launch (#d84a6a).
-- A white gateway frame with red posts (r2, left).
+- A pink-red launch (#d84a6a). A white gateway frame with red posts (r2, left).
 
 **Sculls and rowing (r6)**
 - Slim white shells, low in the water, rowers as dark silhouettes against the glare.
@@ -223,229 +179,170 @@ All paths are in `.ref/sakura-crossing/src/`.
 
 **Sky and hills**
 - **Sunrise:** the sun is a hard disc (#ffd55a) in orange haze (sky #e7a35a → #d9a066). At dawn the far shore shows only as a treeline in haze and the hills disappear (r1).
-- **Hills in clearer light:** layered, low-contrast blue-grey ridges (#7d8aa3 near, #a9b3c6 far), as in r6 and r7.
+- **Hills in clearer light:** layered, low-contrast blue-grey ridges (#7d8aa3 near, #a9b3c6 far), as in r6 and r7. **Now real terrain** out to ~15 km, tinted by aerial perspective; only the farthest ranges are sky rings.
 - **Bright morning:** zenith #6fa3f5 fading to a very pale horizon #c9e0f7 (r2).
 
 **Not confirmed by any photo (kept generic and flagged in code):**
 - Lamp posts: a simple tall pole with a lantern head.
-- Distance markers: invented, stylised.
-- The statue: a generic seated figure on a plinth, unless OSM names it.
-- The lake-club building.
+- Distance markers: invented, stylised (every 100 m of s).
+- The statue: OSM names it a Buddha statue; it will be a generic, respectful seated figure on a plinth, not a copy of the real sculpture.
+- The lake-club building, the regulator's gates.
 - Modernist concrete on the city side: stylised, not a copy of any real building.
 
 ---
 
 ## 3. Real-data pipeline (`scripts/sukhna/`, run at build time, never at runtime)
 
-The scripts are plain Node 18 `.mjs` files with **no new dependencies**:
-- PNG decoding: a small decoder built on `zlib`.
-- Sun position: the NOAA equations in `src/core/sun.js`, shared with the runtime.
+Plain Node 18 `.mjs`, **no new dependencies** (PNG via `zlib`, sun via `src/core/sun.js`).
 
 | File | Does |
 |---|---|
-| `config.mjs` | The bounding box (30.72–30.77 N, 76.79–76.84 E; tightened after the first fetch), the origin (the promenade's midpoint), the date, the simplification tolerances, and manual overrides. Each override gives an OSM id and a `source: 'osm' \| 'photo' \| 'generic'` for landmarks whose tags are missing. |
-| `fetch-osm.mjs` | Sends `overpass.ql` to overpass-api.de (on failure or timeout, retries against overpass.kumi.systems) and saves the result to `raw/osm-<bbox>-<date>.json`. It never overwrites an existing file; `--refresh` forces a fetch. |
-| `overpass.ql` | See the query contents below this table. Output is `out body geom`. |
-| `fetch-terrain.mjs` | Downloads Terrarium tiles (`elevation-tiles-prod`, z11–12) for about 30.70–31.05 N, 76.70–77.15 E, which covers the Shivalik front and the Morni and Kasauli ridges. It saves them to `raw/terrarium/z/x/y.png`. |
-| `lib/png.mjs`, `lib/terrarium.mjs` | Decode a tile; height = (R·256 + G + B/256) − 32768. |
-| `lib/project.mjs` | Converts lat/lon to local ENU metres about the origin (the local-tangent formula, which is accurate to under 1 cm at this size). Also holds the Douglas–Peucker simplification and the curvilinear (s, d) mapping described in §4. |
-| `build-data.mjs` | Reads `raw/*` and writes **`src/data/sukhna.data.json`** (target under 300 KB). See the build steps below this table. |
+| `config.mjs` | The OSM bbox, the promenade way ids, the date, terrain grids (extent, resolution), LOD and draw distances that the data has to support, simplification tolerances. |
+| `fetch-osm.mjs` + `overpass.ql` | Unchanged from Phase 2. Raw result in `raw/osm-<bbox>-<date>.json`. |
+| `fetch-terrain.mjs` | Terrarium tiles: z13 around the lake (have), **plus z12 over ~30.65–30.90 N, 76.72–77.00 E** for the hill grid (≈ 25 tiles, ≈ 1.5 MB), plus z11 for the ridge rings (have). |
+| `lib/png.mjs`, `lib/terrarium.mjs`, `lib/geo.mjs`, `lib/pngenc.mjs` | Unchanged from Phase 2. |
+| `build-data.mjs` | Reads `raw/*`, writes the two data files and the report (below). |
 | `README.md` | How to re-run the pipeline, provenance, and licences. |
 
-**What `overpass.ql` pulls from the bounding box:**
-- `natural=water` / `water=lake` (ways and relations), and `place=islet`.
-- `waterway=dam`, `man_made=dyke|embankment|pier|breakwater`, `leisure=slipway|marina`.
-- `highway=footway|pedestrian|path|cycleway|service|track|steps`.
-- `amenity=parking|boat_rental|cafe|toilets|bench|waste_basket|drinking_water`.
-- `leisure=park|garden|golf_course|pitch`, and `golf=*`.
-- `building=*`.
-- `landuse=forest|grass|recreation_ground`, and `natural=wood|scrub|tree_row|wetland`.
-- `node[natural=tree]`.
-- `tourism=attraction|viewpoint|artwork`, `historic=memorial`, and any named node.
+**World frame:** ENU metres about the promenade midpoint (30.736835 N, 76.817938 E), exact through ECEF. In three.js: **x = east, z = −north, y = up, y = 0 at the lake level (353.2 m ASL).** No mirroring, no distortion; 1 unit = 1 m everywhere.
 
-**What `build-data.mjs` does:**
-1. Projects everything, then picks and chains the promenade: footway or pedestrian ways that lie on or along the dam (`waterway=dam`/`man_made=dyke`) next to the water polygon's dam edge. The chain can be pinned with way ids in the config.
-2. Measures and records these facts:
-   - `promenadeLength`
-   - lake area, perimeter, and extents
-   - dam length
-   - each landmark's **arc position s** along the promenade, and the distance between each consecutive pair
-3. Sets R = (L_prom + L_join) / 2π, with L_join about 40 m (see §4).
-4. Maps every feature into planet authoring coordinates (x, z) and simplifies it: 1 m tolerance near the promenade, 4 m in the far field.
-5. **Hill field:** resamples the DEM into the (x, z) lattice of the hill band (§4) as a `Float32` grid, stored base64 in the JSON.
-6. **Ridgelines:** ray-marches the DEM from 5 viewpoints on the dam over 0–360° in 1° steps, as the elevation-angle horizon profile. It splits the result into near, mid and far layers by distance, and stores them as azimuth → angle arrays per layer. `sky.js` draws these as rings.
-7. **Sun:** stores lat/lon, the default date, and that day's precomputed sunrise, sunset, civil dawn and preset times. The runtime computes the full sun path from `core/sun.js`, so T can scrub to any time.
-8. **Report:** prints a summary (lengths, scales, the distortion table from §4, a fold check) and writes it to `scripts/sukhna/report.md`.
+**Outputs:**
+- `src/data/sukhna.data.json` (vectors, target ≤ 300 KB): the promenade polyline with arc lengths and a smoothed centreline; lake outer ring and islands; landuse polygons (forest, scrub, park, golf, grass, parking, pitch, wetland, built) simplified by distance from the walk (0.5 m near, 5 m far); buildings as real footprints with levels (only within ~1.2 km of the walk; the rest become generic city blocks); roads and paths; waterways; piers; landmarks and steps (with s, real position, source); measures; sun presets; far ridgeline rings.
+- `src/data/sukhna.terrain.json` (heights, base64 Int16 decimetres relative to the lake level, target ≤ 250 KB):
+  - **near grid**: the lake basin, ~5 × 4 km at 20 m (the DEM's own resolution is ~30 m; finer detail near the walk is procedural, §4);
+  - **hill grid**: ~26 × 22 km centred NE of the lake at 120 m, for the Shivalik front;
+  - a **cover grid** (RLE, 10 m over the near grid) so terrain colour and tree scatter follow the real landuse.
+- `scripts/sukhna/report.md`: lengths, lake stats, landmarks and gaps, steps, grid extents and sizes, sun, the checks the pipeline can run (e.g. that the promenade stays on land and the lake polygon is closed and simple).
 
-**Licensing and attribution:**
-- **OSM data is ODbL.** `sukhna.data.json` is a derivative database, so the README, `THIRD_PARTY_LICENSES.md` and the start card will carry "© OpenStreetMap contributors, ODbL".
-- **Terrain tiles** carry the attribution their documentation asks for: the Mapzen/AWS terrain tiles, and SRTM and other sources.
+**Ridgelines:** ray-marched from three points on the walk (s = 0, L/2, L) over 360° in 1° steps; only the **far layer (beyond the hill grid, ~13–40 km: Kasauli, Morni)** is stored. Nearer hills are real terrain.
 
-**Verification:**
-- `?flat=1` puts a flat plane beside the planet. It shows:
-  - (a) the OSM data in real ENU metres, as polygons and lines;
-  - (b) the same data in planet authoring coordinates (x, z);
-  - landmark pins and the join marked on both, with scale readouts.
-- With both side by side, both the projection and the mapping can be checked by eye.
+**Licensing and attribution:** OSM data is ODbL (`sukhna.data.json` is a derivative database: README, `THIRD_PARTY_LICENSES.md` and the start card carry "© OpenStreetMap contributors, ODbL"). Terrain tiles carry the Mapzen / AWS Terrain Tiles attribution (SRTM and other sources).
+
+**`?flat=1`, repurposed:** there is no longer a planet to compare against, so `?flat=1` shows a **2D map panel beside the 3D view**: the OSM layers in ENU, the player and camera frustum, the chunk grid with each chunk's current LOD, and the rowing lanes. It verifies alignment and culling by eye.
 
 ---
 
-## 4. Planet sizing and mapping
+## 4. The world: extent, terrain, rendering distance and LOD
 
-**Radius:** R = (L_prom + L_join) / 2π. OSM measures L_prom = 2 490.9 m (`way/1024118089`, the paved pedestrian walk from the Garden of Silence bridge to the boat club), so with L_join = 40 m, **R ≈ 402.8 m and C ≈ 2 531 m**. The exact figures are in `scripts/sukhna/report.md`.
+**Extent (in real metres around the lake):**
 
-- A lap at jog speed (3.0 m/s) takes about 14 minutes.
-- **x maps 1:1 to arc length along the real promenade.** Landmarks sit in real order at their real distances. Scale factor s_x = 1.000.
-- The report prints the exact figure.
-
-**The join:**
-- The real promenade is not a loop. It runs from the west end (the lake club, the entrance plaza and the boat club) to the east end (the regulator, and the garden with the statue).
-- The loop closes at **x = C − L_join … C: a stylised stretch of about 40 m after the east-end garden.** There the walkway runs through a dense tree screen and a **wooded headland** reaches about 45 m into the lake. From the promenade you therefore never see the east and west shorelines meet.
-- This is documented in `docs/plan.md`, marked in `?flat=1`, and noted in the code comment at the join.
-
-**Cross-section in latitude z** (a "perched" dam, following the reference's approach; the heights are stylised and tuned against the DEM and the photos):
-
-| z (m) | What |
-|---|---|
-| −∞ … −12 | City side, at datum 0: a green belt, then the golf course, the plaza, parking and stylised modernist concrete. Positions come from OSM (x) with compressed d (below). |
-| −12 … −6 | Downstream face of the dam, grassed, 1:2. |
-| −6 … +4 | **The promenade on the crest**, at +5.5 m. Real width from OSM if tagged, otherwise 8 m, plus a 1.2 m parapet on the lake side. **The equator, z = 0, is the walkway centreline.** |
-| +4 … ~+12 | Stone-pitched embankment down to the water. `LEVEL` is +3.0 m, so the parapet top sits about 3 m above the water. |
-| +12 … ~+190 | **The lake.** It is a ring band all the way round, broken only by the join headland (which ends at z ≈ +45). |
-| ~+190 … +330 | Far shore, forest, then the **DEM hill field**: the Shivalik front, compressed in z and exaggerated vertically so its tops clear the horizon. |
-| > +330 … pole (+633) | Bare forest and hill field. Nothing important goes here. |
-
-**Mapping from real coordinates to (x, z):** a curvilinear frame (s, d) around the promenade spine.
-
-- s = arc length along the spine, which gives x = s.
-- d = signed normal distance (positive toward the lake), which gives z = f(d).
-- f is 1:1 for |d| ≤ 60 m. That covers the embankment, jetty, near water, plaza, parking and garden.
-- Beyond 60 m, f is a smooth monotone compression: the real far shore (d ≈ 1.2–1.8 km) lands at z ≈ 170–190, and the city side's golf course lands at z ≈ −80 … −160.
-- Near the spine, the exact promenade polyline is used. Further out the spine blends into a heavily smoothed version, so the normals never cross.
-- **The script checks that no fold occurs** (the Jacobian sign over the whole grid) and fails the build if one does.
-- Trees, buildings and props are **re-seated rigidly**, so they never look squashed. Only the ground and water meshes carry the cos(z/R) squeeze, and on flat water that squeeze cannot be seen.
-
-**How much of the lake fits in the low-distortion band** (lake band z = 18…190):
-
-| | **R = 403 (chosen)** | R = 320 (original) | R = 240 |
+| Zone | Covers | Terrain | Dressing |
 |---|---|---|---|
-| Circumference C | 2 531 m | 2 011 m | 1 508 m |
-| z inside 5% compression | ≤ 128 m | ≤ 102 m | ≤ 76 m |
-| z inside 10% compression | ≤ 182 m | ≤ 144 m | ≤ 108 m |
-| Lake area inside 5% | **65%** | 51% | 37% |
-| Lake area inside 10% | **95%** | 75% | 57% |
-| x-squeeze at the far shore (z = 190) | 0.89 | 0.83 | 0.70 |
-| Water horizon from the promenade (eye 5.6 m above water) | 67 m | 60 m | 52 m |
-| Tops of 15 m far-shore trees visible to | 177 m | 158 m | 137 m |
-| Tops of 60 m hills visible to | 287 m | 256 m | 222 m |
+| **Core** | within ~150 m of the walk, plus the plaza, garden, jetty and regulator | DEM near grid, reshaped by the procedural dam, lake bed and plazas; meshed at 2–4 m along the walk | full: promenade structure, all instanced dressing, NPCs, shadows |
+| **Basin** | the whole lake and its shores, ~5 × 4 km | near grid, 20 m mesh (40 m at mid LOD) | trees at mid/far LOD, city blocks, the far shore forest, boats |
+| **Hills** | to ~13 km NE, ~6 km elsewhere | hill grid, 120 m mesh, forest tint as vertex colour | none (colour only) |
+| **Sky** | beyond ~13 km | — | far ridgeline rings (Kasauli, Morni) in `sky.js` |
 
-(Lake-area percentages use the plan's band model, z = 18…190. The report recomputes them from the mapped shoreline.)
+**The dam and lake bed are procedural overlays on the DEM** (the 30 m DEM cannot see a 10 m-wide bund):
+- Cross-section across the walk, heights relative to the water (y = 0): lake bed falling to −3 m within 60 m of the shore; drawdown band at 0…+0.4; stone-pitched embankment 1:2 up to the parapet foot; parapet top +2.95 (0.45 m high, 1.2 m wide); walk +2.5 (real width from OSM if tagged, otherwise 8 m); grassed downstream face 1:2 down to the DEM ground on the city side (≈ −3 m at the golf course). Stylised, tuned against r2 and r8.
+- Inside the lake polygon the ground is pushed below −0.5; outside it is lifted above +0.3 near the water. `shoreCheck` proves it (§8).
+- The walk polyline (45 OSM nodes) is filleted into a smooth curve (minimum radius ~40 m). The report records the length change, which must stay under 1 m.
 
-So at R = 403:
-- All near-shore action sits under 2% compression: the rowing lane at z = 55, the jetty, the reeds and the birds.
-- The far shore sits just over the curve, so tree tops and hills peek above the bent water. That is the "planet curve toward the horizon" look.
-- The real Shivaliks (5–25 km away) are ridgeline rings in `sky.js`. They sit at their true azimuths, so they are on the correct side relative to the sun.
+**Depth and view distance (a new rendering problem, since the world now reaches 40 km):**
+- A single camera with near 0.3 m and far 40 km has no usable depth precision, and the ink pass reads that depth.
+- So the frame is drawn in **two passes into the same target**: a *far pass* (hill grid, basin terrain beyond ~1.5 km, ridge rings) with near 150 m / far 40 km, then a depth clear, then the *near pass* (everything else) with near 0.3 m / far 3 km.
+- Far-pass pixels read as "sky" to the ink pass (their depth is cleared), which is right: the ink already fades out by 98 m.
+- Fog and haze use view distance, so they stay continuous across the two passes.
 
-**Sun and ridges in the local frame:**
-- `seatLight` (from the reference) re-seats the sun in the player's tangent frame each frame.
-- I extend it so that at the player's x, the local "east" axis is aligned with the **real promenade tangent at arc length s = x**.
-- So the real sun azimuth and the ridgeline azimuths turn relative to you exactly as they would on the real curved dam.
-- At the start position, sunrise at 115° appears over the east end of the lake.
+**Distance culling and LOD (replacing horizon culling):**
+- Static content lives in a **200 m chunk grid** (instanced and merged per chunk per material, with real bounds), so three's frustum culling works, plus a **per-kind draw distance** (tier-dependent) with hysteresis.
+- **The promenade** is chunked by 100 m of s (25 sectors). Near sectors (< ~350 m) get full instanced dressing. Beyond that a **merged low-poly silhouette** of the whole walk (strip, parapet, lamp heads) stands in. The walk curves around the lake, so most of it is visible across the water 1–2 km away.
+- **Trees:** three LODs: near (< 200 m) cel trees (trunk + canopy instanced per chunk); mid (200–1 500 m) single low-poly canopies; far (> 1.5 km) no geometry, a forest tint plus canopy bumps in the terrain. The far shore forest is the sanctuary's real `natural=wood` / `landuse=forest` polygons.
+- **City side:** OSM footprints near the walk become stylised modernist blocks. Beyond ~600 m they are merged low boxes per chunk; beyond ~1.2 km, colour only.
+- **Haze sets the budget:** morning haze (fog colour by time of day) makes LOD switches happen inside it. Pre-dawn visibility is ~3 km, bright morning ~15 km, winter fog ~70 m.
 
-**The rowing eight (this world's train):**
-- It rows a constant-latitude lane at z = +55. That lane sits outside the headland tip and within 2% compression.
-- It uses the train's own trick: the hull is baked once, then rotated about the planet's polar Z axis each frame.
-- The oars sit on `planetRigid` hubs with inner pivots, swinging at 22 strokes per minute.
-- Its speed is 4.6 m/s. The lane is about 2 510 m, so a lap takes about 9.1 minutes. Because that is faster than a jog, it passes you regularly.
-- Its wake is instanced V-shaped foam quads that fade out.
-- Single sculls take lanes at z = 30–90 at varied speeds.
-- Pedal boats are runtime objects, re-seated each frame in the same way as the reference's `ebike.js`. They stay inside a box off the jetty and only appear after 08:30.
+**Draw-call budget (high tier, worst view: standing on the bend looking across the whole lake):**
+
+| Group | Calls |
+|---|---|
+| Sky dome, sun, clouds, far ridge rings | ~6 |
+| Far pass terrain (hill chunks) | ~12 |
+| Basin + core terrain chunks | ~25 |
+| Water (surface, shore band, mist) | ~4 |
+| Promenade: near sectors × ~8 kinds, plus the far silhouette | ~90 |
+| Landmarks (plaza, garden, jetty, regulator, boat club) | ~60 |
+| Trees near/mid per chunk | ~120 |
+| City blocks and golf | ~50 |
+| NPCs (part-instanced) + LOD | ~24 |
+| Birds, boats, wakes | ~20 |
+| Shadow pass (casters within ~35 m) | ~120 |
+| Post (ink, grade, FXAA) | 3 |
+| **Total** | **~530** (target ≤ 900 high, ≤ 350 low) |
+
+**P overview:** an aerial orbit around the lake's centre at ~1 100 m altitude and ~2.4 km out, looking down about 30°. It shows the whole lake, the curved dam, the city grid and the hills, turning slowly. The far pass carries it; near-pass detail is limited to LOD silhouettes. P again returns to the jogger.
+
+**The rowing eight and sculls on the real lake:**
+- **Lanes** are closed polylines built by offsetting the real shoreline inward (~90 m for the eight, 50–200 m for the sculls), smoothed, and clipped to the main basin, away from the islands and the narrow east arm.
+- **The eight** rows its lane (~4–5 km, at 4.6 m/s a lap of ~15–18 min), passing along the dam regularly. The hull is baked once and moved each frame along the lane (position plus heading from the tangent). The oars sit on pivots at 22 strokes per minute, with a V-wake of instanced foam quads.
+- **Sculls** take 3–4 other lanes at varied speeds and directions.
+- **Pedal boats** stay in a box off the real boating jetty and appear after 08:30.
+- `laneCheck` (§8) proves every lane sample is ≥ 30 m inside the water and ≥ 25 m from every island.
+
+**Sun and ridges:** the flat world makes this direct. The sun direction is (sin az · cos el, sin el, −cos az · cos el) in world axes, so the light is the real sun everywhere, with no per-position re-seating. The shadow camera follows the player. Ridge rings sit at their true azimuths.
 
 ---
 
 ## 5. Port, adapt, or new
 
-Target layout mirrors the reference: `src/core`, `src/world`, plus `src/people`, `src/data` and `scripts/sukhna`.
+Target layout: `src/core`, `src/world`, `src/people`, `src/data`, `scripts/sukhna`.
 
 ### Port as-is (MIT header kept, credited)
-
-- `core/toon.js`
-- `core/post.js`
-- `core/outline.js`
-- `core/util.js`
-- `world/planet.js`: port the mechanics; R comes from the data.
-- `world/trees.js`: `buildGrove`, shrubs and palms. Palms are a new form in the same style.
-- The `__shot` plugin in `vite.config.js`, plus `window.__shot`.
+- `core/toon.js`, `core/post.js` (plus the two-pass hook, §4), `core/outline.js`, `core/util.js` (done in Phase 1).
+- `world/trees.js`: `buildGrove`, shrubs and palms, with LODs added.
+- The `__shot` plugin and `window.__shot` (done).
 
 ### Adapt
 
 | File | Change |
 |---|---|
-| `core/palette.js` | Becomes the base palette **plus time-of-day keyframes** (pre-dawn, sunrise, golden hour, bright) for sky, fog, lights, grade, water and ridges. A `tod` registry holds every material or uniform whose colour depends on the time, so the flat and cel caches stay valid. |
-| `core/sky.js` | Adds a sun disc, a horizon glow toward the sun, stars before dawn, drifting cel clouds, and **ridgeline rings** built from the data. |
-| `core/textures.js` | Export `make`, `cached`, `fitText` and `centered`. Add `signTex({lines:[{text,script:'latn'\|'deva'\|'guru'}]})` with three font stacks (below). Indic text gets no per-character tracking. |
-| `core/player.js` | Becomes `core/jogger.js`: walk / jog / sprint states, stamina, V auto-jog, and flat-plane movement with collision kept. |
-| `core/hud.js` | Keeps the prompt and toast. Adds the bottom hint bar (§6) and the jog HUD. H hides both. |
-| `core/audio.js` | Becomes WebAudio `core/sound.js` (§6). |
-| `world/lakeform.js` | `SHORE` comes from the mapped OSM shoreline. The treatment rows (bank, dr, dm, cr) are per stretch: embankment, natural shore, jetty. |
-| `world/lake.js` | High tier: a new water `ShaderMaterial` with a fresnel sky gradient, quantised cel ripples, a sun-glint path and a mist tint. Low tier: the reference's flat layers. |
-| `world/hills.js` | The lattice is fed by the DEM grid. The slope limiter is kept; roughness is lighter. `hillSafety` is kept. |
-| `world/lakeroad.js` | Becomes `world/promenade.js`: the equator structure (§6). |
-| `world/kohan.js` | Becomes `world/boatclub.js`: `timberDeck` jetty, `makeBoat`, and pedal boats as a parametric table. |
-| `world/vehicles.js` | Its pattern is reused for parked scooters and cars at the plaza (a row of numbers per type), and for human bodies (§6). |
+| `core/palette.js` | Base palette **plus time-of-day keyframes** (pre-dawn, sunrise, golden hour, bright) for sky, fog/haze, lights, grade, water and ridges; a `tod` registry for every time-dependent material or uniform. |
+| `core/sky.js` | Sun disc, horizon glow toward the sun, stars before dawn, drifting cel clouds, **far ridgeline rings** from the data. The dome follows the camera (no surface-frame rotation any more). |
+| `core/textures.js` | `signTex({lines:[{text,script}]})` for trilingual signs. |
+| `core/player.js` | Becomes `core/jogger.js`: walk / jog / sprint, stamina, V auto-jog with turnaround, flat-ground movement with collision. |
+| `core/hud.js` | Prompt, toast, the hint bar and the jog HUD. H hides both. |
+| `core/audio.js` | Becomes WebAudio `core/sound.js`. |
+| `world/lake.js` | Water on the real OSM polygon. High tier: a `ShaderMaterial` with a fresnel sky gradient, quantised cel ripples, a sun-glint path and a mist tint. Low tier: flat layers. |
+| `world/hills.js` | Becomes `world/terrain.js`: DEM grids → chunked meshes at three LODs, with procedural overlays (dam, lake bed, plazas) and `hillSafety`-style checks under built things. |
+| `world/lakeroad.js` | Becomes `world/promenade.js` (the walk structure along the real curve) and `world/regulator.js`. |
+| `world/kohan.js` | Becomes `world/boatclub.js`: `timberDeck` jetty, `makeBoat`, pedal boats as a parametric table. |
+| `world/vehicles.js` | Its pattern is reused for parked scooters and cars at the plaza, for boats, and for human bodies. |
 
 ### New
-
-- **Core:** `core/sun.js` (NOAA), `core/timeofday.js`, `core/weather.js`, `core/quality.js`, `core/camera.js` (third-person boom plus first person), `core/touch.js`, `core/perf.js` (draw calls and frame time, `?stats=1`).
-- **World:** `world/index.js` (assembly, sectors, horizon culling), `world/promenade.js`, `world/plaza.js`, `world/garden.js`, `world/cityside.js`, `world/rowing.js`, `world/birds.js`, `world/mist.js`, `world/flat.js` (`?flat=1`), `world/checks.js`.
+- **Core:** `core/sun.js` (done), `core/timeofday.js`, `core/weather.js`, `core/quality.js`, `core/camera.js` (third-person boom plus first person, and the P overview), `core/touch.js`, `core/perf.js` (done).
+- **World:** `world/index.js` (assembly), `world/frame.js` (ENU ↔ three axes, the spine frame `s → position, tangent, lake-side normal`), `world/chunks.js` (chunk grid, distance culling, LOD switching), `world/terrain.js`, `world/promenade.js`, `world/plaza.js`, `world/garden.js`, `world/cityside.js`, `world/vegetation.js`, `world/rowing.js`, `world/birds.js`, `world/mist.js`, `world/flat.js` (`?flat=1` map panel), `world/checks.js`.
 - **People:** `people/body.js`, `people/types.js`, `people/gait.js`, `people/crowd.js`, `people/interact.js`.
-- **Data and scripts:** `src/data/sukhna.data.json` and `scripts/sukhna/*`.
+- **Data and scripts:** `src/data/sukhna.data.json`, `src/data/sukhna.terrain.json`, `scripts/sukhna/*`.
 - **Docs:** `THIRD_PARTY_LICENSES.md`, `README.md`, `docs/compare.md`.
+- **Removed:** `world/planet.js`.
 
 ---
 
 ## 6. System designs (the parts that are new)
 
-### Promenade: the equator structure
+### Promenade: the walk structure along the real curve
 
-These run the whole way round the loop:
-- the asphalt walk;
-- the cobble parapet;
-- the grass verge;
-- the embankment pitching;
-- the drawdown band.
+Built by sweeping cross-sections along the filleted centreline (`world/frame.js` gives position, tangent and lake-side normal at any s):
+- the asphalt walk, the cobble parapet, the grass verge, the embankment pitching and the drawdown band run the full 2 494.9 m;
+- **ends:** the east end meets the regulator footbridge and the Garden of Silence; the west end opens into the entrance plaza and the boat club. There is no join.
 
-**Instanced parts, cut into 16 sectors (about 125 m each):**
-- The parapet is laid as 2 m instanced blocks.
-- Lamps, benches, bins, markers, reeds, palms and trees are instanced per sector.
-- The loop is divided into sectors because three r180's `InstancedMesh.computeBoundingSphere` includes the instances, so each sector gets real bounds and **can be culled**. The reference never culls instances.
+**Instanced parts, 25 sectors of 100 m of s:** 2 m parapet blocks, lamps, benches, bins, 100 m markers, reeds, palms and trees, instanced per sector with real bounds. Near sectors are full; far sectors switch to the merged silhouette (§4).
 
-**Horizon culling:** a sector is hidden when its angular distance from the camera exceeds the horizon angle plus an allowance for object height. On this planet the curve hides most of the loop, and this turns that into saved draw calls.
-
-**Dressing appears only in the districts:**
-- steps down to the water at 3 or 4 real-ish spots;
-- benches facing the water;
-- dustbins;
-- lamps;
-- **a 100 m distance marker**, with a code comment saying it is stylised and not real;
-- trilingual signs.
+**Dressing appears only where the district is:**
+- benches facing the water, dustbins, lamps;
+- **a stylised 100 m distance marker** (s from the east end), with a code comment saying it is not real;
+- trilingual signs;
+- **the six real stairs down the city face** at their OSM positions;
+- **three stylised steps down to the water** (the brief asks for them; OSM maps none, so they are flagged generic).
 
 The **low tier thins** benches, trees and reeds per sector, following a density table.
 
-### Landmarks (real order, real s)
+### Landmarks (real positions)
 
-The **west end** comes first:
-- the lake club, built generically;
-- the **entrance plaza**: terracotta pavers, a gateway frame, kiosks (a chai and nimbu-paani stall, a vendor), and parking with parametric scooters and cars;
-- the **boat club jetty**, with its pedal-boat row and launch.
-
-Then:
-- the **long open bund**;
-- the **regulator** (gates and a gauge, from the reference's `lakeroad.js` works);
-- the **garden with the statue**, at the east end: a gazebo, chain-link fence, flower beds and stone seats (r1);
-- then the join.
-
-The golf course, green belt and modernist blocks sit on the city side at their OSM positions. The modernist blocks are brise-soleil walls and exposed-concrete (béton brut) pavilions, stylised.
+- **West end:** the lake club (tennis courts at their OSM positions, building generic); the **entrance plaza** (terracotta pavers, gateway frame, kiosks with a chai and nimbu-paani stall, parking on the real OSM parking polygons with parametric scooters and cars); the **boat club jetty** at the real boating point and the two OSM piers, with the pedal-boat row and launch.
+- **The long bund** with its six city-side stairs and the downstream footway (real, 9–18 m below and beside the walk).
+- **East end:** the **regulator** (gates, gauge and footbridge, at their OSM positions) and the **Garden of Silence** with the Buddha statue (gazebo, chain-link fence, flower beds, stone seats, per r1).
+- **City side:** the real golf course polygon, green belts, parking, and stylised Chandigarh modernist blocks on OSM footprints (brise-soleil walls, exposed-concrete pavilions).
+- **Far shore:** the sanctuary forest from OSM polygons, rising into the real Shivalik front.
 
 ### Jogger (`core/jogger.js`, `core/camera.js`, `people/*`)
 
@@ -457,77 +354,42 @@ The golf course, green belt and modernist blocks sit on the city side at their O
 | Jog (default, W) | 3.0 m/s | 5:33 /km |
 | Sprint (Shift) | 5.2 m/s | 3:12 /km |
 
-- Speed changes are smoothed with an exponential approach.
-- Releasing W decays to a walk, then to a stop.
+- Speed changes are smoothed with an exponential approach. Releasing W decays to a walk, then to a stop.
+- Free movement on land. The water is blocked (the lake polygon with a margin) and so are building footprints; the parapet can be sat on. Height comes from the same ground function the terrain is drawn from.
 
-**Stamina (0–100):**
-
-| Mode | Rate |
-|---|---|
-| Sprint | −9 /s |
-| Jog | +1.5 /s |
-| Walk | +10 /s |
-| Chai | set to 100 |
-
-- Breathing is audibly heavier below 30.
+**Stamina (0–100):** sprint −9 /s, jog +1.5 /s, walk +10 /s, chai sets it to 100. Breathing is audibly heavier below 30.
 
 **Camera:**
-- A third-person boom in the player's tangent frame, with a lagged slerp of the surface basis so it follows the planet's curve.
-- A gentle bob tied to the jog cadence.
-- The mouse wheel zooms the boom from 5.5 m down to 0, which is first person. In first person the body is hidden.
+- A third-person boom behind the jogger's heading, with lag and a gentle bob tied to the jog cadence.
+- The mouse wheel zooms the boom from 5.5 m down to 0, which is first person; in first person the body is hidden.
 - Mouse look works through pointer lock, as in the reference.
+- **P** switches to the aerial overview (§4) and back.
 
 **V (auto-jog):**
-- Follows the promenade's centre lane.
-- Steers smoothly around NPCs with a lateral potential field and a lookahead of 8 m.
-- The camera slowly orbits toward the lake side.
-- Any WASD input cancels it.
+- Follows the walk's centre lane in the current direction and steers around NPCs with a lateral potential field (8 m lookahead).
+- **At each end it turns round** (a short U-turn arc) and carries on.
+- The camera slowly orbits toward the lake side. Any WASD input cancels it.
 
-**Body:** the player uses the same parametric body as the NPCs, with an inverted-hull outline (the only hero outline). Outfit presets are chosen on the start card:
-1. t-shirt and track pants;
-2. patka, t-shirt and shorts over tights;
-3. hoodie and joggers.
+**Body:** the same parametric body as the NPCs, with an inverted-hull outline (the only hero outline). Outfit presets on the start card: (1) t-shirt and track pants; (2) patka, t-shirt and shorts over tights; (3) hoodie and joggers.
 
-**Gait (`people/gait.js`):** procedural and phase-driven.
-- Stride length and cadence scale with speed.
-- The arms swing opposite the legs.
-- There is a vertical bounce, a forward lean that grows with speed, and a slight twist.
+**Gait (`people/gait.js`):** procedural and phase-driven. Stride length and cadence scale with speed, the arms swing opposite the legs, and there is a vertical bounce, a forward lean that grows with speed, and a slight twist.
 
 ### NPCs (`people/body.js`, `types.js`, `crowd.js`)
 
-**A type is a row of numbers:**
-- height;
-- shoulder and hip width;
-- girth;
-- limb ratios;
-- posture (stoop);
-- gait (cadence, stride, arm swing, and "hands behind the back");
-- top (tee / kurta / tracksuit / hoodie / shawl);
-- bottom (track pants / salwar / trousers / tights);
-- headwear (none / cap / patka / turban / dupatta / monkey cap);
-- a colour table index.
+**A type is a row of numbers:** height; shoulder and hip width; girth; limb ratios; posture (stoop); gait (cadence, stride, arm swing, "hands behind the back"); top (tee / kurta / tracksuit / hoodie / shawl); bottom (track pants / salwar / trousers / tights); headwear (none / cap / patka / turban / dupatta / monkey cap); a colour table index.
 
-**Rendering:**
-- **Instanced by part.** About 16 part meshes (torso variants, pelvis, upper and lower arm and leg, hands, feet and shoes, head, each headwear), each one `InstancedMesh` with `instanceColor`.
-- **The whole crowd costs about 16 draw calls, however many people there are.**
-- Parts use the `cel()` material. Only the player gets a hull outline.
+**Rendering:** instanced by part, about 16 part meshes, each an `InstancedMesh` with `instanceColor`. **The whole crowd costs about 16 draw calls, however many people there are.** `cel()` materials; only the player gets a hull outline.
 
-**LOD:**
+**LOD:** < 45 m full forward kinematics every frame; 45–150 m six parts at 20 Hz; beyond ~250 m not drawn (a person is ~2 px there). NPCs across the lake are simulated but not submitted.
 
-| Distance | Treatment |
-|---|---|
-| < 45 m | Full forward kinematics, updated every frame. |
-| 45–110 m | 6 parts, updated at 20 Hz. |
-| Beyond the horizon | Culled. NPCs are simulated on the flat plane but not submitted. |
-
-**Pathing:** lane-based on the equator.
-- Each NPC has an x, a lane z, a speed and a direction.
-- Joggers overtake by changing lanes when there is a gap. Some of them overtake the player.
+**Pathing:** lanes along the walk in (s, lateral offset), mapped to the world by the spine frame.
+- Each NPC has an s, a lane, a speed and a direction. Joggers overtake by changing lanes when there is a gap; some overtake the player.
+- NPCs **turn round at the ends** or leave and arrive via the stairs, the plaza and the garden (spawn and despawn there), so the ends don't pile up.
 - The plaza and garden have small waypoint graphs.
-- Stationary groups stand at anchor spots: yoga on mats on a grass patch, the laughter club in a circle, a stretcher at the parapet, bench sitters, the photographer with a tripod at the steps, the chai kiosk vendor.
-- A dog walker (with a small parametric dog) and college students jogging in pairs are also included.
+- Stationary groups stand at anchor spots: yoga on mats on a grass patch, the laughter club in a circle, a stretcher at the parapet, bench sitters, the photographer with a tripod at a viewpoint, the chai kiosk vendor.
+- A dog walker (with a small parametric dog) and college students jogging in pairs.
 
-**Density by time:** relative to the actual sunrise. Pre-dawn is at 0.3, the peak runs from sunrise −10 minutes to +70 minutes, and it thins after that. Fog multiplies density by 0.45 and puts everyone into a shawl or monkey cap.
+**Density by time:** relative to the actual sunrise. Pre-dawn is 0.3, the peak runs from sunrise −10 min to +70 min, and it thins after that. Fog multiplies density by 0.45 and puts everyone into a shawl or monkey cap.
 
 | Tier | Maximum NPCs |
 |---|---|
@@ -535,152 +397,92 @@ The golf course, green belt and modernist blocks sit on the city side at their O
 | Med | 125 |
 | Low | 50 |
 
-**Water check:** `npcWaterCheck()` in `world/checks.js` runs automatically in dev and prints its result.
-- It simulates 20 minutes at 0.5 s steps, sampling every NPC, every lane and every anchor.
-- It **asserts** that `lakeDepthAt ≤ 0` and that each point is at least 1 m from the waterline, and reports the worst value.
-- The same file runs `lakeLeakCheck` and `hillSafety` on startup in dev.
+**Water check:** `npcWaterCheck()` (in `world/checks.js`, automatic in dev) simulates 20 minutes at 0.5 s steps, sampling every NPC, lane and anchor. It asserts each point is outside the real lake polygon by at least 1 m and reports the worst margin.
 
-**Interactions (E), short and non-blocking:**
-- **Greet:** "Good morning!", "Sat Sri Akal ji", "Namaste ji", shown in a small speech bubble.
-- **Chai at the kiosk:** the player holds a cup for 4 s and stamina refills.
-- **Join yoga:** the player holds a pose for 5 s.
-- **Bench:** the player sits, and the camera settles on the lake view until they move.
-- **High-five a passing jogger.**
+**Interactions (E), short and non-blocking:** greet ("Good morning!", "Sat Sri Akal ji", "Namaste ji" in a speech bubble); chai at the kiosk (hold a cup 4 s, stamina refills); join yoga (hold a pose 5 s); sit on a bench (the camera settles on the lake view until you move); high-five a passing jogger.
 
-**Birds (`world/birds.js`), about 8 draw calls in total** (instanced bodies plus wing pairs):
+**Birds (`world/birds.js`), about 8 draw calls** (instanced bodies plus wing pairs): high 175, med 100, low 35. Egrets and cormorants on posts and at the water's edge, ducks paddling, crows and pigeons on the parapet, flocks that lift off the water and wheel around when the player comes close, and a parakeet flock that crosses overhead. Flight volumes are over the real lake.
 
-| Tier | Birds |
-|---|---|
-| High | 175 |
-| Med | 100 |
-| Low | 35 |
-
-- Egrets and cormorants on posts and at the water's edge.
-- Ducks paddling.
-- Crows and pigeons on the parapet.
-- Flocks that lift off the water and wheel around when the player comes close, then settle again.
-- A parakeet flock that periodically crosses overhead.
-
-### Morning, weather and signage
+### Morning, haze, weather and signage
 
 **T** jumps between presets, and time also runs at 4× real speed:
 
-| Preset | Time |
-|---|---|
-| Pre-dawn | 06:55 |
-| Sunrise | 07:21 |
-| Golden hour | 07:45 |
-| Bright | 09:15 |
+| Preset | Time | Sun elevation |
+|---|---|---|
+| Pre-dawn | 06:55 | −5.9° |
+| Sunrise | 07:19 | −0.8° (upper limb) |
+| Golden hour | 07:45 | 4.0° |
+| Bright | 09:15 | 19.9° |
 
-- The keyframes are keyed to **sun elevation**, not clock time. They drive the sky, lights, shadow tint, grade uniforms, fog, water and ridge haze.
-- **Mist** (`world/mist.js`): soft instanced sheets over the water plus low haze on the hills. Its opacity falls as the sun climbs and is gone by about 10° of elevation.
+- The keyframes are keyed to **sun elevation**, not clock time. They drive the sky, lights, shadow tint, grade uniforms, **haze density and colour (the view distance)**, water and ridge tint.
+- **Mist** (`world/mist.js`): soft instanced sheets over the real lake polygon plus low haze in the hill valleys. Its opacity falls as the sun climbs and is gone by about 10° of elevation.
 
 **K** cycles clear → rain → winter fog:
 - **Rain:** instanced streaks around the camera with `depthWrite: false`, more ripples, a desaturated grade, and a rain sound bed.
-- **Fog:** `scene.fog` 6–70 m, with the ink fade distances pulled in to match, a muted palette, fewer NPCs, and shawls.
+- **Fog:** 6–70 m, with the ink fade distances pulled in to match, a muted palette, fewer NPCs, shawls, and the far pass skipped entirely (a free saving).
 
-**Signs:**
-- Canvas2D, in English, Hindi and Punjabi.
-- Content: "Sukhna Lake / सुखना झील / ਸੁਖਨਾ ਝੀਲ", the boat club, "Please keep the lake clean", distance markers, and the kiosk's "Chai · Nimbu Paani". No brands.
-- Font stacks, all system fonts: Latin `'Segoe UI','Helvetica Neue',Arial,sans-serif`; Devanagari `'Noto Sans Devanagari','Nirmala UI','Mangal','Kohinoor Devanagari',sans-serif`; Gurmukhi `'Noto Sans Gurmukhi','Nirmala UI','Raavi','Gurmukhi MN',sans-serif`.
-- Textures are drawn after `document.fonts.ready`.
+**Signs:** Canvas2D in English, Hindi and Punjabi. Content: "Sukhna Lake / सुखना झील / ਸੁਖਨਾ ਝੀਲ" (OSM carries the Hindi and Punjabi names), the boat club, "Please keep the lake clean", distance markers, and the kiosk's "Chai · Nimbu Paani". No brands. System font stacks: Latin `'Segoe UI','Helvetica Neue',Arial,sans-serif`; Devanagari `'Noto Sans Devanagari','Nirmala UI','Mangal','Kohinoor Devanagari',sans-serif`; Gurmukhi `'Noto Sans Gurmukhi','Nirmala UI','Raavi','Gurmukhi MN',sans-serif`. Drawn after `document.fonts.ready`.
 
 ### Sound (`core/sound.js`, WebAudio, all generated in code, M toggles)
 
-The layers:
-- birdsong (FM chirp voices whose species mix changes with time of day);
-- water lapping (filtered noise, with the envelope tied to the distance to shore);
-- the oars (a catch thunk plus a splash, in sync with the eight's strokes) and **the cox's calls**;
-- footsteps and breathing tied to cadence and stamina;
-- wind in the trees (low-passed noise with gusts);
-- a distant scooter horn from the city side;
-- the laughter club (formant "ha-ha" bursts);
-- chatter as you pass (formant babble).
-
-How it is mixed:
-- Everything is spatialised with `PannerNode`s, crossfaded, and randomised so no loop repeats audibly.
-- **Honest limitation:** synthesised speech isn't intelligible. The Punjabi, Hindi and English chatter and the cox's calls are therefore shown as small text bubbles over the formant babble.
-- CC0 recordings can be dropped in later. Each would be listed in `THIRD_PARTY_LICENSES.md`.
+*(Unchanged.)* Birdsong (FM chirps whose species mix follows the time of day); water lapping (filtered noise, envelope tied to the distance to the real shoreline); oars and the cox's calls in sync with the eight's strokes, spatialised from the boat's real position; footsteps and breathing tied to cadence and stamina; wind in the trees; a distant scooter horn from the city side; the laughter club; chatter as you pass. Everything is spatialised with `PannerNode`s, crossfaded and randomised so no loop repeats audibly. **Honest limitation:** synthesised speech isn't intelligible, so the Punjabi, Hindi and English chatter and the cox's calls are shown as small text bubbles over the formant babble. CC0 recordings can be dropped in later and listed in `THIRD_PARTY_LICENSES.md`.
 
 ### Controls, HUD and quality
 
 **Hint bar:** fixed to the bottom, full width, `rgba(14,16,22,.58)`, with a 1 px top line in `rgba(255,255,255,.16)`, grey text `#b9bdc7` at 12.5 px, centred. It reads exactly:
-`WASD jog · Shift run · E interact · V auto · T time · K rain · P planet · M sound · H hide`
+`WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide`
 
-**Keys:**
-- P orbits out to the whole-planet view, as in the reference, scaled with R. P again returns.
-- H hides the hint bar and the HUD.
-- Esc releases the cursor.
-- The dev keys C, R, O and G stay, but are left out of the hint.
+**Keys:** P toggles the aerial overview. H hides the hint bar and the HUD. Esc releases the cursor. The dev keys C, R, O and G stay but are left out of the hint.
 
-**Jog HUD (top left, compact):**
-- distance
-- pace (min/km)
-- elapsed time
-- laps
-- a stamina bar
-- the clock and the preset name
+**Jog HUD (top left, compact):** distance, pace (min/km), elapsed time, **lengths** (one length = 2.49 km end to end), a stamina bar, and the clock with the preset name.
 
-**Touch (`core/touch.js`):**
-- A left virtual stick: jogs, and pushing to the rim runs.
-- Dragging on the right half looks around, and pinching zooms.
-- A button row for E, V, T, K, P, M and H.
+**Touch (`core/touch.js`):** a left virtual stick jogs, and pushing it to the rim runs. Dragging on the right half looks around and pinching zooms. A button row covers E, V, T, K, P, M and H.
 
 **Quality tiers (`?q=low|med|high`, auto-detected: mobile or low-memory devices start on low):**
 
-| | Pixel budget | Shadows | Water | Dressing | NPCs | Birds |
-|---|---|---|---|---|---|---|
-| High | 4.6 MP | 2048 | shader | 100% | 200 | 175 |
-| Med | 2.8 MP | 1024 | shader | 75% | 125 | 100 |
-| Low | 1.3 MP | 1024 at a 40 m range | flat layers | 45% | 50 | 35 |
+| | Pixel budget | Shadows | Water | Dressing | NPCs | Birds | Tree mid/far switch | City detail to | Hill grid |
+|---|---|---|---|---|---|---|---|---|---|
+| High | 4.6 MP | 2048 | shader | 100% | 200 | 175 | 200 / 1 500 m | 1 200 m | full |
+| Med | 2.8 MP | 1024 | shader | 75% | 125 | 100 | 150 / 1 000 m | 800 m | full |
+| Low | 1.3 MP | 1024 at a 40 m range | flat layers | 45% | 50 | 35 | 100 / 600 m | 400 m | half resolution |
 
 - A simple fallback drops one tier if frame time stays above 22 ms for 5 s.
 
-**Page metadata:**
-- Title: "Sukhna — a sunrise jog around Sukhna Lake".
-- A meta description.
-- `lang="en"`.
+**Page metadata:** title "Sukhna — a sunrise jog around Sukhna Lake", a meta description (updated: no longer "tiny planet"), `lang="en"`.
 
 ---
 
-## 7. Commits (one per phase)
+## 7. Phases from here (at least one commit each, on `build`)
 
 | Phase | Contents |
 |---|---|
-| 0 | **Plan (this session):** `docs/plan.md` and `.gitignore`. |
-| 1 | Scaffold and engine port, `THIRD_PARTY_LICENSES.md`, README credit, `__shot`, an empty planet rendering. |
-| 2 | The real-data scripts, their raw data, `sukhna.data.json`, the report, and `?flat=1`. |
-| 3 | Planet layout: promenade, lake, hills, ridges, city side, landmarks, vegetation, and the self-checks. |
-| 4 | The jogger, camera, jog HUD, hint bar, controls and touch. |
-| 5 | NPCs, interactions, the rowing eight and sculls, pedal boats, and birds. |
-| 6 | Time of day, mist, weather and signage. |
+| 0–1 | Done (plan; scaffold and engine port). |
+| 2 (planet) | Superseded (`27ca69a`). |
+| **2** | **Flat real-data pipeline and flat scaffold.** Pipeline in ENU (reusing Phase 2's parts): `sukhna.data.json`, `sukhna.terrain.json`, extra z12 tiles, far ridge rings, the report. Runtime: remove the planet bake and `R`; `world/frame.js`; raw DEM terrain chunks (untextured, two LODs); the lake polygon as a flat water plane; the walk as a line; landmark pins; the **two-pass depth** set-up; the **P overview**; `?flat=1` map panel. |
+| 3 | **World layout, LOD and self-checks.** Terrain overlays (dam cross-section, lake bed, plazas) and three terrain LODs; the promenade along the real curve with sectors and the far silhouette; the regulator, garden and statue, plaza, boat club and jetty, lake club; the city side (golf, parking, modernist blocks); vegetation with three LODs from the real forest polygons; the far ridge rings; the chunk system with distance culling; `shoreCheck`, `damCheck`, `hillSafety`. |
+| 4 | The jogger, camera, jog HUD (lengths), hint bar (`P overview`), controls, V turnaround and touch. |
+| 5 | NPCs and interactions; the rowing eight and sculls on real-lake lanes (`laneCheck`); pedal boats; birds; `npcWaterCheck`. |
+| 6 | Time of day with haze as view distance, mist, weather, signage. |
 | 7 | Sound. |
-| 8 | Quality tiers and performance, metadata, verification, `docs/compare.md`, and the final summary. |
+| 8 | Quality tiers (including LOD distances), performance, metadata, verification, `docs/compare.md`, and the final summary. |
 
 ---
 
-## 8. Verification (Phase 8, actually run)
+## 8. Verification (Phase 8, actually run; checks also run in dev from Phase 3)
 
-**Pages to open (dev server and preview):**
-- `npm run dev`, then open `/`, `/?flat=1`, `/?q=low` and `/?stats=1`.
-- `npm run build && npm run preview` must pass.
+**Pages to open:** `npm run dev`, then `/`, `/?flat=1`, `/?q=low`, `/?stats=1`; `npm run build && npm run preview` must pass.
 
-**Screenshots:**
-- Taken in the Claude Desktop Browser pane (a real browser on the user's GPU) by calling `window.__shot` from fixed camera spots that match the photos r1, r2, r6, r7, r8 and a bench view. `__shot` writes `.shots/<name>.jpg` through the dev server; the chosen frames are copied to `docs/shots/`.
-- No Playwright. It is installed only if a phase really needs automated screenshots, and only after asking the user.
-- Each spot is shot at pre-dawn, sunrise, bright morning and in fog.
-- They go into `docs/shots/` and are laid out beside the matching `reference/` photo in `docs/compare.md`, with a list of what still doesn't match.
+**Screenshots:** in the Claude Desktop Browser pane via `window.__shot`, from fixed camera spots that match r1, r2, r6, r7, r8 and a bench view, plus the P overview against r9. Each spot is shot at pre-dawn, sunrise, bright morning and in fog. They go into `docs/shots/` beside the matching `reference/` photo in `docs/compare.md`, with a list of what still doesn't match. No Playwright unless a phase really needs it, and only after asking.
 
 **Numeric checks, printed and recorded:**
-- `lakeLeakCheck`: `contained`.
-- `hillSafety`: worst-built = 0.00.
+- `shoreCheck`: along the whole real shoreline (every 2 m), the ground is ≥ +0.3 m at 3 m outside and ≤ −0.5 m at 3 m inside; reports the worst. (This replaces `lakeLeakCheck`; the water plane is the real polygon, so "leaking" means terrain and polygon disagreeing.)
+- `damCheck`: the walk surface is ≥ +2.0 m above the water along its whole length, and the parapet is continuous.
+- `hillSafety`: terrain never pokes through built things (worst = 0.00).
 - `npcWaterCheck`: 0 violations.
-- The mapping's fold check.
+- `laneCheck`: every rowing lane sample ≥ 30 m inside the water and ≥ 25 m from islands.
+- Pipeline: the filleted walk length is within 1 m of OSM's; the lake polygon is simple and closed.
 
-**Performance:**
-- `renderer.info.render.calls`, triangle count, and frame time per camera spot and tier.
-- Timings come from the user's real GPU and are reported as real numbers: `window.__bench(n)` renders n frames and forces GPU completion with a 1-pixel `readPixels`, so the figure includes GPU time, not just CPU submit time. The GPU name (from `WEBGL_debug_renderer_info`) is recorded next to every figure.
-- Targets:
+**Performance:** `renderer.info.render.calls` (both passes plus shadows plus post), triangles and frame time per camera spot and tier, with `__bench(n)` forcing GPU completion (real numbers from the user's GPU, with the GPU name recorded). Worst views are recorded on purpose (the bend looking across the lake, the P overview).
 
 | Tier | Draw calls | Frame time |
 |---|---|---|
@@ -693,16 +495,19 @@ How it is mixed:
 
 ## 9. Risks
 
-1. **OSM gaps.** The promenade may be mapped as several ways or tagged inconsistently, and landmarks may be missing tags.
-   - Mitigation: overrides in `config.mjs` with provenance. The report lists everything that is not from OSM.
-2. **The mapping could fold far from the dam.** Mitigation: blend to a smoothed spine, and have the fold check fail the build.
-3. **Visibility on a small planet.** The water horizon is only about 60 m away, so the far shore and hills rely on elevation and ridge rings. Their vertical exaggeration will be tuned with screenshots.
-4. **Retrofitting time of day onto cached materials.** Mitigation: the `tod` registry. Without it, colours stay stale.
-5. **Draw calls grow with the 2 km loop, NPCs and birds.** Mitigation: sectors, horizon culling, part-instanced crowds, and a hull outline on the player only. Draw calls are counted per phase.
-6. **The toon patch matches a line of three's shader source.** It would silently fail on another three version. Mitigation: pin `three@^0.180.0`, as the reference does.
-7. **Audio realism.** Laughter and chatter are formant synthesis, and speech appears as text bubbles. Real CC0 recordings would need you to supply the files.
-8. **Fonts.** Linux may lack Devanagari and Gurmukhi (tofu boxes). Bundling Noto (OFL) would be a binary asset, and I'll ask before adding it.
-9. **Ink through fog.** The ink fade has to follow the fog distance, or lines float in the fog.
-10. **One GPU only.** Timings are from the user's machine. They are real, but they are one data point; the low tier is still sized from draw-call counts, not from that one GPU.
-11. **Three photos (r3, r4, r5) appear AI-generated.** They are used for mood only.
-12. **Not confirmed by OSM or the photos yet:** the statue's identity, the lake-club building, the lamp posts and the regulator's appearance. All are kept generic until confirmed.
+1. **Depth precision over 40 km.** One camera can't hold 0.3 m to 40 km without z-fighting and a noisy ink pass. Mitigation: the two-pass far/near render (§4). Fallback: drop the far pass to ridge rings plus a 6 km terrain cap.
+2. **Draw calls when the whole lake is in view.** The walk curves around the water, so from the bend you see most of it and the far shore at once. Mitigation: 100 m sectors with a merged far silhouette, 200 m chunks with per-kind draw distances, three tree LODs, far detail as terrain colour. The budget (§4) is ~530 against 900; it is measured per phase at the worst view.
+3. **Tree counts over real forest areas.** The sanctuary is several km², so tens of thousands of trees. Mitigation: deterministic per-chunk scatter, near/mid instancing only within 1.5 km (tier-dependent), far forests as colour and canopy bumps. Mid-LOD instance lists are rebuilt only when the player crosses a chunk.
+4. **LOD pop-in.** Mitigation: switches happen inside the haze, with hysteresis; the haze density is part of the time-of-day keyframes.
+5. **The DEM can't see the dam, the shoreline or the plaza** (30 m SRTM, ±several metres). Mitigation: procedural overlays for the dam cross-section, lake bed and flattened plazas, proved by `shoreCheck`, `damCheck` and `hillSafety`.
+6. **Real scale changes the feel.** The far shore is 0.6–1.5 km away and small, which is correct. The planet's "curve to the horizon" look is gone by design; the depth now comes from haze layers and the real hills.
+7. **Data size.** Vectors ≤ 300 KB plus terrain ≤ 250 KB (≈ 250 KB gzipped together). Mitigation: distance-dependent simplification, Int16 grids, generic city blocks beyond ~1.2 km.
+8. **Shadows cover only ~35 m around the player.** Distant things are unshadowed; the cel look hides it, and time of day tints the shadow colour.
+9. **Retrofitting time of day onto cached materials.** Mitigation: the `tod` registry.
+10. **The toon patch matches a line of three's shader source.** Mitigation: pin `three@^0.180.0`.
+11. **Audio realism.** Formant synthesis; speech as text bubbles.
+12. **Fonts.** Linux may lack Devanagari and Gurmukhi. Bundling Noto (OFL) would be a binary asset; I'll ask first.
+13. **Ink through fog.** The ink fade must follow the fog distance.
+14. **One GPU only.** Real timings, but one data point; the low tier is sized from draw-call counts.
+15. **Three photos (r3, r4, r5) appear AI-generated.** Mood only.
+16. **Not confirmed by OSM or photos:** the lake-club building, the lamp posts, the regulator's gates, the statue's look (OSM names it; the model stays generic). All kept generic and flagged.
