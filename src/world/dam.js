@@ -39,6 +39,8 @@ const SECTOR = 100;
 /** Where the stylised steps down to the water go (s, m).  Not in OSM: flagged generic. */
 export const WATER_STEPS = [820, 1480, 2130];
 const WATER_STEP_HALF = 1.6;
+/** Every bench on the walk, { s, d }: the crowd sits people on them, the jogger can sit too. */
+export const BENCHES = [];
 
 let PROF = null;
 
@@ -329,19 +331,93 @@ const MARKER = mergedParts([
   { geo: new THREE.BoxGeometry(0.26, 0.9, 0.26), color: PAL.concrete, matrix: M4(0, 0.45, 0) },
   { geo: new THREE.BoxGeometry(0.28, 0.16, 0.28), color: 0xd84a3a, matrix: M4(0, 0.78, 0) },
 ]);
-/** Royal palm: pale grey trunk, a tuft of fronds (photo r2). */
+/**
+ * One royal-palm frond: a tapering blade that rises from the crown and
+ * arches over into a droop (a parabola, out `len`, up `rise`, down `droop`),
+ * folded along its midrib so the two halves of leaflets read as a V.
+ * Built along +x from the origin; the palm turns it into place.
+ */
+function frondGeometry(len, rise, droop, width, seg = 9) {
+  const pos = [], idx = [];
+  for (let i = 0; i <= seg; i++) {
+    const t = i / seg;
+    const x = len * t, y = rise * t - (rise + droop) * t * t;
+    const w = width * Math.sin(Math.PI * Math.min(1, 0.15 + t * 0.95)) * (1 - 0.6 * t);
+    const fold = w * 0.35; // leaflets hang below the midrib
+    pos.push(x, y, 0, x, y - fold, -w, x, y - fold, w);
+    if (i) { const a = (i - 1) * 3, b = i * 3; idx.push(a, b, a + 1, a + 1, b, b + 1, a, a + 2, b, a + 2, b + 2, b); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+/** Royal palm: pale grey trunk, green crownshaft, arching fronds (photo r2). */
 const PALM = (() => {
   const fronds = [];
-  for (let i = 0; i < 9; i++) {
-    const a = (i / 9) * Math.PI * 2;
-    fronds.push({ geo: new THREE.ConeGeometry(0.35, 3.4, 4), color: PAL.palmFrond, matrix: M4(Math.cos(a) * 1.3, 11.6, Math.sin(a) * 1.3, -a, 1, 1, 0.35, 0, Math.PI / 2 - 0.35) });
+  for (let i = 0; i < 11; i++) {
+    const a = (i / 11) * Math.PI * 2 + (i % 2) * 0.2;
+    const old = i % 3 === 0; // the older, lower fronds droop further
+    fronds.push({ geo: frondGeometry(old ? 3.6 : 3.2, old ? 0.6 : 1.3, old ? 2.4 : 1.6, 0.55), color: old ? 0x6f7f3a : PAL.palmFrond, matrix: M4(0, 12.0, 0, -a) });
   }
+  // two young fronds still standing up out of the crown
+  for (const a of [0.6, 2.9]) fronds.push({ geo: frondGeometry(1.4, 2.6, 0.2, 0.3), color: 0x7f9a45, matrix: M4(0, 12.1, 0, -a) });
   return mergedParts([
     { geo: new THREE.CylinderGeometry(0.22, 0.34, 11.2, 7), color: PAL.palmTrunk, matrix: M4(0, 5.6, 0) },
-    { geo: new THREE.CylinderGeometry(0.26, 0.24, 1.2, 7), color: 0x8a9a5a, matrix: M4(0, 11.4, 0) },
+    { geo: new THREE.CylinderGeometry(0.26, 0.24, 1.2, 7), color: 0x8a9a5a, matrix: M4(0, 11.6, 0) },
     ...fronds,
   ]);
 })();
+
+/**
+ * The parapet as one continuous swept mesh along the curve (1 m steps), so
+ * it bends with the walk instead of stepping at 2 m block joints.  The cobble
+ * texture repeats every 2 m along s.  Broken only at the water steps
+ * (`isGap(s)`), where the ends are capped.
+ */
+function parapetGeometry(s0, s1, isGap) {
+  const pos = [], uv = [], idx = [];
+  const H = DAM.parH, a = DAM.parIn, b = DAM.parOut;
+  let prev = null;
+  const quad = (p0, p1, p2, p3, u0, u1, v0, v1) => {
+    const k = pos.length / 3;
+    pos.push(...p0, ...p1, ...p2, ...p3);
+    uv.push(u0, v0, u1, v0, u1, v1, u0, v1);
+    idx.push(k, k + 2, k + 1, k, k + 3, k + 2); // outward: s runs east to west with the lake on the right
+  };
+  const ring = (s) => {
+    const f = spineAt(s), y = walkY(s);
+    const P = (d, h) => [f.e + f.ne * d, y + h, -(f.n + f.nn * d)];
+    return { s, ib: P(a, 0), it: P(a, H), ot: P(b, H), ob: P(b, 0) };
+  };
+  const cap = (r, flip) => {
+    const k = pos.length / 3;
+    const pts = flip ? [r.ob, r.ot, r.it, r.ib] : [r.ib, r.it, r.ot, r.ob];
+    pos.push(...pts[0], ...pts[1], ...pts[2], ...pts[3]);
+    uv.push(0, 0, 0, 1, 0.6, 1, 0.6, 0);
+    idx.push(k, k + 2, k + 1, k, k + 3, k + 2);
+  };
+  for (let s = s0; s <= s1 + 1e-6; s += 1) {
+    const ss = Math.min(s, L);
+    if (isGap(ss)) { if (prev) cap(prev, false); prev = null; continue; }
+    const r = ring(ss);
+    if (!prev) { cap(r, true); prev = r; continue; }
+    const u0 = prev.s / 2, u1 = r.s / 2;
+    quad(prev.ib, r.ib, r.it, prev.it, u0, u1, 0, 1);            // walk-side face
+    quad(prev.it, r.it, r.ot, prev.ot, u0, u1, 0, 2.4);          // top
+    quad(prev.ot, r.ot, r.ob, prev.ob, u0, u1, 1, 0);            // lake-side face
+    prev = r;
+    if (ss >= L) break;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  g.computeBoundingSphere();
+  return g;
+}
 const REEDS = (() => {
   const parts = [];
   const r = rngKit(31);
@@ -410,7 +486,7 @@ export function buildDam(scene, { ground }) {
   const vc = cel({ color: 0xffffff, vertexColors: true, relief: true, bands: 'terrain', flat: false });
   const vcProps = cel({ color: 0xffffff, vertexColors: true, flat: false });
   const parapetMat = cel({ color: 0xffffff, map: cobbleTex() });
-  const parapetGeo = new THREE.BoxGeometry(2.02, DAM.parH, DAM.parOut - DAM.parIn);
+  const palmMat = cel({ color: 0xffffff, vertexColors: true, flat: false, side: THREE.DoubleSide });
   const stats = { sectors: 0, parapet: 0, lamps: 0, benches: 0, palms: 0, reeds: 0 };
   const rng = rngKit(2027);
 
@@ -434,14 +510,12 @@ export function buildDam(scene, { ground }) {
     add(new THREE.Mesh(stripGeometry(s0, s1, STEP, cityStations), vc));
     add(new THREE.Mesh(stripGeometry(s0, s1, STEP, lakeStations), vc));
 
-    // parapet blocks, 2 m, broken only at the steps to the water
-    const par = [];
-    for (let s = s0 + 1; s < s1; s += 2) {
-      if (nearGap(s)) continue;
-      par.push(placeAt(s, (DAM.parIn + DAM.parOut) / 2, walkY(s) + DAM.parH / 2));
-    }
-    stats.parapet += par.length;
-    add(instanced(parapetGeo, parapetMat, par, 'parapet'));
+    // the parapet: one swept mesh along the curve, broken only at the steps to the water
+    const parapet = new THREE.Mesh(parapetGeometry(s0, s1, nearGap), parapetMat);
+    parapet.name = 'parapet';
+    parapet.castShadow = parapet.receiveShadow = true;
+    stats.parapet += Math.round(s1 - s0);
+    add(parapet);
 
     // lamps every 30 m on the city verge, benches every 45 m facing the water, a bin by every other bench
     const lamps = [], benches = [], bins = [], markers = [], palms = [], reeds = [];
@@ -449,6 +523,7 @@ export function buildDam(scene, { ground }) {
     for (let s = Math.ceil(s0 / 45) * 45 + 25; s < s1; s += 45) {
       if (nearStair(s)) continue;
       benches.push(placeAt(s, -DAM.half - 1.1, walkY(s)));
+      BENCHES.push({ s, d: -DAM.half - 1.1 });
       if (Math.round(s / 45) % 2) bins.push(placeAt(s + 2.2, -DAM.half - 0.9, walkY(s + 2.2)));
     }
     for (let s = Math.ceil(s0 / 100) * 100; s < s1; s += 100) if (s > 0) markers.push(placeAt(s, -DAM.half - 0.35, walkY(s)));
@@ -472,7 +547,7 @@ export function buildDam(scene, { ground }) {
     add(instanced(BENCH, vcProps, benches, 'benches'));
     add(instanced(BIN, vcProps, bins, 'bins'));
     add(instanced(MARKER, vcProps, markers, 'markers'));
-    add(instanced(PALM, vcProps, palms, 'palms'));
+    add(instanced(PALM, palmMat, palms, 'palms'));
     const reedMesh = instanced(REEDS, vcProps, reeds, 'reeds');
     if (reedMesh) { reedMesh.castShadow = false; add(reedMesh); }
     near.traverse((o) => { if (o.isMesh && !o.isInstancedMesh) { o.receiveShadow = true; o.userData.noOutline = true; } });

@@ -3,14 +3,17 @@ import { nearestS, inLake, shoreDist } from './frame.js';
 import { NEAR, groundGrid, groundAt, setOverlay, setPatches, sampleNear, buildTerrain } from './terrain.js';
 import { detectPatches, buildPatchGrids } from './patches.js';
 import { gradeGrid, buildShoreBand } from './shore.js';
-import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM } from './dam.js';
+import { buildProfile, cutTerrain, damAt, buildDam, inFootprint, walkY, DAM, BENCHES } from './dam.js';
 import { buildLake } from './lake.js';
-import { runChecks, shoreCheck } from './checks.js';
+import { runChecks, shoreCheck, waterMarginCheck, laneCheck } from './checks.js';
 import { buildVegetation } from './vegetation.js';
 import { buildCityside } from './cityside.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildRidgeRing } from '../core/sky.js';
 import { data } from './frame.js';
+import { buildCrowd } from '../people/crowd.js';
+import { buildRowing } from './rowing.js';
+import { buildBirds } from './birds.js';
 
 /* ------------------------------------------------------------------ *
  * World assembly (plan §4, §6).
@@ -27,7 +30,7 @@ import { data } from './frame.js';
 
 export { walkY, DAM };
 
-export function buildWorld(scene) {
+export function buildWorld(scene, { npcs = 200, birdCount = 175 } = {}) {
   const t0 = performance.now();
   // the DEM as decoded (smoothed, upsampled), before any shaping
   const raw = { ...NEAR, h: NEAR.h.slice() };
@@ -64,12 +67,26 @@ export function buildWorld(scene) {
   const city = buildCityside(scene);
   const landmarks = buildLandmarks(scene);
   const ridges = buildRidgeRing(scene, data.ridges);
+  const tLife = performance.now();
+  const crowd = buildCrowd(scene, { landmarks, dam }, { max: npcs });
+  const rowing = buildRowing(scene, { landmarks });
+  const birds = buildBirds(scene, { count: birdCount });
+  const lifeMs = Math.round(performance.now() - tLife);
 
   const lods = [terrain.lod, dam.lod, city.lod, landmarks.lod];
-  const timing = { shapeMs: Math.round(tShape), vegMs, buildMs: Math.round(performance.now() - t0), trees: vegetation.trees.n };
+  const timing = { shapeMs: Math.round(tShape), vegMs, buildMs: Math.round(performance.now() - t0), trees: vegetation.trees.n, lifeMs, people: crowd.people.length, birds: birds.count };
   console.info(`[world] shaped ${shaped.shore} shore + ${shaped.dam} dam grid nodes, ${shaped.patches} detail patches (${shaped.refined} spots refined); built in ${timing.buildMs} ms`, dam.stats);
 
-  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks() : [];
+  // npcWaterCheck: twenty simulated minutes of the crowd, every position
+  // anyone stands on or walks through stays ≥ 1 m from the water
+  const npcWaterCheck = () => {
+    const pts = crowd.positions();
+    for (let t = 0; t < 20 * 60; t += 0.5) { crowd.simulate(0.5); if (t % 5 === 0) pts.push(...crowd.positions()); }
+    const r = waterMarginCheck('npcWaterCheck', pts, 1);
+    r.detail = `20 simulated min, ${r.detail}`;
+    return r;
+  };
+  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30)]) : [];
   window.__checks = checks;
 
   return {
@@ -82,17 +99,23 @@ export function buildWorld(scene) {
     city,
     landmarks,
     ridges,
+    crowd,
+    rowing,
+    birds,
     lods,
     timing,
     patches: patchRects,
     /** Console access to the ground functions (dev). */
-    debug: { groundGrid, groundAt, damAt, inFootprint, shoreDist, nearestS, inLake, NEAR },
+    debug: { groundGrid, groundAt, damAt, inFootprint, shoreDist, nearestS, inLake, NEAR, BENCHES },
     /** Standing height at (e, n): the dam where you are on it, else the ground (never under the water). */
     heightAt(e, n) {
       const g = groundAt(e, n);
       return inLake(e, n) ? Math.max(0, g) : g;
     },
-    update(dt, viewPos, overview = false) {
+    update(dt, viewPos, overview = false, jogger = null) {
+      crowd.update(dt, viewPos, jogger);
+      rowing.update(dt);
+      birds.update(dt, jogger);
       for (const l of this.lods) l.update(viewPos);
       vegetation.update(viewPos, overview);
       const ve = viewPos.x, vn = -viewPos.z;

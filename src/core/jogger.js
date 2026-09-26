@@ -29,6 +29,7 @@ export class Jogger {
     this.heading = spawn.heading ?? 0; // three yaw: 0 faces -z (north)
     this.speed = 0;
     this.stamina = 100;
+    this.spent = false; // sprinted out: no sprint until stamina is back to 30
     this.auto = false;
     this.autoDir = 1;
     this.distance = 0;
@@ -38,6 +39,7 @@ export class Jogger {
     this.sprinting = false;
     this.sitting = 0; // 0..1, driven by interactions
     this.frozen = false; // interactions hold the jogger still
+    this.override = null; // interactions bend the pose (a cup of chai, a high five, yoga)
     this.lane = -1.6; // auto-jog keeps a little to the city side of the centre
     this.avoid = null; // (e, n, heading) -> lateral offset; the crowd provides it
     this.keys = new Set();
@@ -99,7 +101,10 @@ export class Jogger {
     const s = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     const shift = k.has('ShiftLeft') || k.has('ShiftRight');
     if ((f || s) && this.auto) this.auto = false;
-    if (this.frozen) { this.speed = 0; this.gait.update(dt, 0, this.sitting); this.pose(); return 0; }
+    if (this.stamina <= 0.5) this.spent = true;
+    else if (this.stamina >= 30) this.spent = false;
+    const canSprint = shift && !this.spent;
+    if (this.frozen) { this.speed = 0; this.gait.update(dt, 0, this.sitting); this.override?.(this.gait.pose); this.pose(); return 0; }
 
     let target = 0, want = null;
     if (this.auto) {
@@ -113,13 +118,13 @@ export class Jogger {
       const lateral = THREE.MathUtils.clamp((this.lane + avoid - dNow) * 0.35, -0.8, 0.8);
       const de = fr.te * this.autoDir + fr.ne * lateral, dn = fr.tn * this.autoDir + fr.nn * lateral;
       want = Math.atan2(-de, dn);
-      target = shift && this.stamina > 5 ? SPEED.sprint : SPEED.jog;
+      target = canSprint ? SPEED.sprint : SPEED.jog;
     } else if (f || s) {
       // camera-relative direction, in (e, n): forward is (-sin yaw, cos yaw)
       const fe = -Math.sin(camYaw), fn = Math.cos(camYaw);
       const de = fe * f + fn * s, dn = fn * f - fe * s;
       want = Math.atan2(-de, dn);
-      target = f < 0 && !s ? SPEED.walk : shift && this.stamina > 5 ? SPEED.sprint : SPEED.jog;
+      target = f < 0 && !s ? SPEED.walk : canSprint ? SPEED.sprint : SPEED.jog;
     }
     this.sprinting = target === SPEED.sprint;
 
@@ -160,6 +165,7 @@ export class Jogger {
     }
 
     this.gait.update(dt, this.speed, this.sitting);
+    this.override?.(this.gait.pose);
     this.pose();
     return this.speed;
   }

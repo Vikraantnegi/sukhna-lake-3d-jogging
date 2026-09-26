@@ -17,6 +17,7 @@ import { groundAt } from './world/terrain.js';
 import { LAYER } from './world/chunks.js';
 import { buildWorld } from './world/index.js';
 import { createCollider } from './world/collide.js';
+import { createInteractions } from './people/interact.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -95,12 +96,14 @@ const rig = createCameraRig(camera, { groundAt });
 rig.yaw = SPAWN.heading;
 const hud = createHud({ outfit, touch: TOUCH });
 hud.setClock(data.sun.clock.bright, 'bright morning');
+jogger.avoid = world.crowd.avoid;
+const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world });
 
 /* -------------------------------- actions -------------------------------- */
 /* One table for keys and touch buttons.  T, K and M are wired by the time
  * of day (Phase 6), weather (Phase 6) and sound (Phase 7). */
 const actions = {
-  E: () => world.interact?.(jogger, hud),
+  E: () => interact.activate(),
   V: () => { const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off'); },
   T: () => world.cycleTime?.(hud) ?? hud.flash('time of day: coming in Phase 6'),
   K: () => world.cycleWeather?.(hud) ?? hud.flash('weather: coming in Phase 6'),
@@ -122,12 +125,22 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => jogger.keys.delete(e.code));
 window.addEventListener('blur', () => jogger.keys.clear());
+document.addEventListener('visibilitychange', () => jogger.keys.clear());
+// a Shift released while the pointer lock or another window had the keyboard never sends keyup
+for (const ev of ['keydown', 'keyup', 'pointerdown']) window.addEventListener(ev, (e) => { if (!TOUCH && !e.shiftKey && !(ev === 'keydown' && e.key === 'Shift')) { jogger.keys.delete('ShiftLeft'); jogger.keys.delete('ShiftRight'); } }, true);
 
 /* ----------------------------- mouse and touch ----------------------------- */
 const locked = () => document.pointerLockElement === canvas;
 canvas.addEventListener('click', () => { if (hud.started && !TOUCH && !locked()) { canvas.requestPointerLock?.(); hud.setPaused(false); } });
 document.addEventListener('pointerlockchange', () => { if (!TOUCH) hud.setPaused(!locked()); });
 document.addEventListener('mousemove', (e) => { if (locked()) rig.look(e.movementX * 0.0022, e.movementY * 0.0022); });
+// Drag to look whenever the pointer is not locked (before Start, in the
+// overview's absence, or in an embedded browser that refuses pointer lock).
+let dragging = false;
+canvas.addEventListener('pointerdown', (e) => { if (!TOUCH && e.button === 0) { dragging = true; canvas.setPointerCapture?.(e.pointerId); } });
+canvas.addEventListener('pointerup', (e) => { dragging = false; canvas.releasePointerCapture?.(e.pointerId); });
+canvas.addEventListener('pointercancel', () => { dragging = false; });
+canvas.addEventListener('pointermove', (e) => { if (dragging && !locked() && !TOUCH) rig.look(e.movementX * 0.0035, e.movementY * 0.0035); });
 window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
 hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setItem('sukhna-outfit', String(i)); } catch { /* optional */ } };
 hud.onStart = () => { if (!TOUCH) canvas.requestPointerLock?.(); world.onStart?.(); };
@@ -171,7 +184,8 @@ function frame() {
   const playing = hud.started && !hud.paused;
   jogger.update(playing ? dt : 0, rig.yaw);
   world.update(dt, camera.position, rig.mode === 'overview', jogger);
-  rig.update(dt, jogger, { bench: world.benchView?.() });
+  rig.update(dt, jogger, { bench: interact.benchView() });
+  if (playing) interact.update(); else hud.setPrompt('');
   placeLights();
   hud.setRun(jogger);
   if (coordsOn) {
@@ -189,7 +203,7 @@ if (params.has('flat')) {
   import('./world/flat.js').then(({ createFlatPanel }) => { flatPanel = createFlatPanel(world); });
 }
 
-window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, collider, perf, sun, fill, bounce, hemi, THREE, data };
+window.__scene = { scene, camera, farCamera, renderer, pipeline, world, sky, jogger, rig, hud, interact, collider, perf, sun, fill, bounce, hemi, THREE, data };
 
 /** GPU-inclusive frame time from the current camera (see core/perf.js). */
 window.__bench = (n = 120) => ({

@@ -33,6 +33,26 @@ function capsule() {
   g.translate(0, -0.5, 0);
   return g;
 }
+/**
+ * A limb: a round-ended rod whose end caps are centred on its two joints
+ * (y = 0 and y = -1), so the next segment's cap sits in the same place and
+ * a bent knee or elbow stays closed.  `aspect` is the part's usual
+ * length / width, which makes the scaled caps come out round.
+ */
+function limb(aspect) {
+  const g = new THREE.CapsuleGeometry(0.5, 1, 4, 10);
+  const k = 1 / aspect, pos = g.attributes.position, nor = g.attributes.normal;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    if (Math.abs(y) > 0.5) {
+      pos.setY(i, Math.sign(y) * (0.5 + (Math.abs(y) - 0.5) * k));
+      const nx = nor.getX(i), ny = nor.getY(i) / k, nz = nor.getZ(i), l = Math.hypot(nx, ny, nz);
+      nor.setXYZ(i, nx / l, ny / l, nz / l);
+    }
+  }
+  g.translate(0, -0.5, 0);
+  return g;
+}
 function ellipsoid() { return new THREE.IcosahedronGeometry(0.5, 2); }
 function shoe() {
   const g = new THREE.BoxGeometry(1, 1, 1);
@@ -86,6 +106,7 @@ let GEOS = null;
 export function partGeometries() {
   if (GEOS) return GEOS;
   const cap = capsule(), ell = ellipsoid(), sh = shoe();
+  const limbs = { thigh: limb(3.3), shin: limb(4.1), upperArm: limb(3.6), lowerArm: limb(4.2) };
   GEOS = PARTS.map((name) => {
     if (name === 'head' || name === 'pelvis' || name === 'hair') return ell;
     if (name.startsWith('hand')) return ell;
@@ -93,7 +114,8 @@ export function partGeometries() {
     if (name === 'headwear') return null; // chosen per person (see headwearGeometry)
     if (name === 'dupatta') return dupatta();
     if (name === 'eyes') return eyes();
-    return cap;
+    const lb = limbs[name.slice(0, -1)];
+    return lb || cap;
   });
   return GEOS;
 }

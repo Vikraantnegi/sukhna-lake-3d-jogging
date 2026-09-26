@@ -92,6 +92,9 @@ function buildMask() {
     }
   }
   for (const b of data.features.buildings) mark(b.c[0], b.c[1], Math.max(b.l, b.w) / 2 + 2);
+  // the entrance plaza's paving (world/landmarks.js lays 44 x 30 m round this point)
+  const plaza = data.landmarks.find((l) => l.id === 'entrance_plaza');
+  if (plaza) mark(plaza.at[0], plaza.at[1], 27);
   return (e, n) => {
     const i = Math.floor((e - r[0]) / step), j = Math.floor((n - r[1]) / step);
     return i >= 0 && j >= 0 && i < nx && j < ny && m[j * nx + i] === 1;

@@ -14,10 +14,23 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | 2 Flat real-data pipeline + flat scaffold | **done** | `build` | "Phase 2: flat real-data pipeline and world scaffold" |
 | 3 World layout, LOD and self-checks | **done** | `build` | `1d299d4` (part 1) + "Phase 3: world layout …" |
 | 4 Jogger, camera, HUD, controls, touch | **done** | `build` | "Phase 4: the jogger …" |
-| 5 NPCs, interactions, rowing, birds | **next** | `build` | — |
-| 6 Time of day, haze, mist, weather, signage | — | `build` | — |
+| 5 NPCs, interactions, rowing, birds | **done** | `build` | "Phase 5: NPCs, interactions, rowing, birds" |
+| 6 Time of day, haze, mist, weather, signage | **next** | `build` | — |
 | 7 Sound | — | `build` | — |
 | 8 Quality tiers, verification, compare.md | — | `build` | — |
+
+**Polish notes from the user's review (after Phase 4), folded into Phase 5:**
+- [x] The parapet zigzags at curves: now one continuous swept mesh along the curve (1 m steps, cobble texture every 2 m), capped at the water steps (`parapetGeometry` in `world/dam.js`).
+- [x] Palm fronds: each is now an arching blade that rises and droops (older ones further), folded along the midrib, plus two young upright fronds (`frondGeometry`).
+- [x] Plaza paving: one draped surface with shared corner heights and checkered 1.5 m tiles, instead of separate boxes; trees are kept off it.
+- [x] Mouse drag-to-orbit was lost in Phase 4 (look needed pointer lock, which the Browser pane refuses): drag-to-look restored whenever the pointer isn't locked.
+
+**Notes on Phase 4 from the user's review (second round), folded into Phase 5:**
+- [x] Gaps at the knees and elbows: thighs, shins, upper and lower arms are now round-ended rods whose end caps are centred on the joints (`limb(aspect)` in `people/body.js`), so the next segment's cap fills the same spot and a bent knee or elbow stays closed. Shared by the player and every NPC.
+- [x] Stride too big for a jog: hip swing and heel recovery now split into a jog part and a sprint part (`sprint = smooth(3.4, 5.2, speed)` in `people/gait.js`). At 3 m/s: hip ±0.40 rad (was ±0.62), knee recovery 1.1 rad (was 1.7); the long reach and high back-kick only come in towards 5.2 m/s.
+- [x] Auto-jog pace 3:31–4:09 /km: measured, auto-jog alone is exactly 3.0 m/s (5:33 /km) and the pace formula is right. Those readings are what happens with Shift held (or stuck) while auto-jogging: sprint drained stamina to 5, then speed flickered between sprint and jog at ~4.0–4.7 m/s. Fixed both ways: sprinting to empty now leaves you **spent** (no sprint until stamina is back to 30), and a Shift whose keyup was lost (pointer lock, another window) is cleared by the next key or click event that reports Shift up, and every key is cleared when the tab is hidden.
+- [x] Start card said "K weather": now "K rain", as on the hint bar.
+- [x] Parapet still stepped at the joints: confirmed the Phase 3 note above, and found two more causes. (1) `spineAt` returned one normal per 4 m spine segment, so anything offset from the spine jumped at every vertex (up to ~1.2 m at d = 4 m on the 33°-per-10 m bend at s ≈ 2 280); the tangent now blends between the vertices' central chords, so every offset curve (parapet, verges, lanes, placements) is continuous. (2) The swept parapet's faces were wound inside out, so from the walk you looked through a missing top to the far face (it read as set back behind a green strip) and each 100 m sector's end cap showed as a step. Both fixed; the parapet is a solid, continuous cobble wall.
 
 **Decisions made during the run** (newest last; each one is something the plan left open, the data forced, or the user changed):
 - ~~**Phase 2: R ≈ 403 m, not 320.**~~ *Superseded by the flat world below.* (OSM measured the promenade at 2 494.9 m, which with a 40 m join gave R ≈ 403; the user chose the full walk, 1:1, and raised the high/medium NPC and bird limits by about 25%. Those limits stay: the walk is the same length.)
@@ -42,6 +55,11 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Phase 4: play doesn't depend on pointer lock.** The game runs whenever the start/pause card is away; pointer lock only steers the mouse (embedded browsers may refuse it) and losing it (Esc) brings the pause card back.
 - **Phase 4: the body has a face**: an extra `eyes` part (two small dark ellipsoids) on every body; one more instanced draw for the crowd. Only the player carries hull outlines (19 parts).
 - **Phase 4: auto-jog lane** is 1.6 m to the city side of the centreline; it turns round 7 m short of each end and counts a length on every arrival at one end after touching the other. Verified: 15 simulated minutes from the east end → turned at s 6.8 and s 2 488.8, 1 length, never stuck.
+- **Phase 5: crowd** (`people/types.js`, `people/crowd.js`): 200 people on high (the user's +25% limit); movers on five lanes across the walk (d −3.1 … +2.9 m) in both directions with pairs, students and dog walkers, overtaking and giving way; stationary groups at real-ish places: stretchers along the parapet, a yoga group on the grass at s ≈ 560, the laughter club at s ≈ 1 950, ten bench sitters, a photographer at the bend, the chai vendor at the plaza stall. Drawn as one InstancedMesh per body part plus four headwear pools (patka, turban, cap, monkey cap): 23 calls for the whole crowd, plus the dogs. Poses are refreshed every frame within 45 m, every 3rd to 120 m, every 6th beyond; drawn to 250 m. `crowd.setDensity` and `crowd.setBundled` (shawls and monkey caps) are ready for Phase 6.
+- **Phase 5: interactions** (`people/interact.js`), one prompt at a time for the nearest thing: greet (Sat Sri Akal ji / Namaste ji / Good morning, and they answer in kind), a cutting chai at the stall (4 s, stamina to 100), join the yoga (5 s, arms up), sit on a free bench (camera settles on the lake view until you move), high five a jogger coming the other way. One speech bubble at a time, projected over the speaker's head. The player's pose takes an `override` hook for these.
+- **Phase 5: rowing** (`world/rowing.js`): four lanes traced as offset curves of the real lake polygon (SDF + marching squares, Chaikin, 5 m resample) at 50, 90, 140 and 210 m from any shore or island; the eight (8 rowers + cox, 4.6 m/s, 22 strokes/min, `rowing.eight` exposes position, stroke phase and catch count for Phase 7's sound) and three sculls, each with a wake. Pedal swans leave from the boat-club jetty (`rowing.showPedal` for the after-08:30 rule in Phase 6). laneCheck: closest 49.6 m.
+- **Phase 5: birds** (`world/birds.js`): 175 on high; egrets wading at the edge, cormorants and ducks swimming, crows and pigeons on the parapet (flee under 3.5 m), three flocks of ducks and cormorants resting ~28 m off the dam (inside the rowing lanes) that lift off and wheel when you pass within 110 m, and parakeets crossing overhead about every 70 s. Instanced body + two wings: about 9 calls.
+- **Phase 5: npcWaterCheck** simulates 20 minutes of the crowd at 0.5 s steps and checks every standing and walking position (48 200 samples) against the lake: closest 6.3 m.
 - **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
@@ -76,6 +94,12 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
   - `core/jogger.js` (movement, stamina, V auto with turnaround, lengths, pace; `avoid` hook for the crowd; `frozen`/`sitting` for interactions), `core/camera.js` (boom 0–5.5 m, first person under 0.35 m, V drift toward the lake, `bench` view, P overview), `core/hud.js` (jog HUD, hint bar `HINT`, prompt, toast, speech `say()`, start/pause card with outfits and credits, C coordinates), `core/touch.js` (stick → the same key codes; drag look; pinch zoom; E V T K P M H buttons), `world/collide.js` (`surfaceAt` with the jetty and footbridge decks; `move` with sliding; water, parapet except the water steps, building footprints).
   - `main.js` `actions` table: E → `world.interact`, T → `world.cycleTime`, K → `world.cycleWeather`, M → `world.toggleSound` (placeholders toast until Phases 5–7 add them); `world.benchView()` feeds the camera.
   - `__shot` opts now place the jogger: `{ s, d, az, heading, pitch, boom, first, hideJogger }` or `{ e, n, … }` or `{ overview }`.
+- **State after Phase 5:**
+  - `world.crowd` (`people`, `setDensity`, `setBundled`, `update`, `avoid` — wired as `jogger.avoid` —, `near`, `positions`, `simulate`), `world.rowing` (`lanes`, `boats`, `eight`, `showPedal`, `laneSamples`), `world.birds`; all updated from `world.update(dt, viewPos, overview, jogger)`. `buildWorld(scene, { npcs, birdCount })` takes the tier's counts (Phase 8).
+  - `main.js`: `interact = createInteractions(...)`; E → `interact.activate()`; `interact.benchView()` feeds the camera; `__scene.interact` for the console. T/K/M are still placeholders.
+  - Checks at dev start-up: shoreCheck 0/4 426; damCheck ≥ 2.50 m; hillSafety 0.00; npcWaterCheck closest 6.3 m; laneCheck closest 49.6 m.
+  - World build ~1.5 s in dev (shaping ~0.7 s, people/boats/birds ~0.4 s).
+- **Measured at the end of Phase 5** (same GPU, 1900×1320): spawn 381 calls / 1.22 M tris / 1.24 ms; laughter-club stretch along the walk 376 / 1.05 M / 1.28 ms; mid-walk across 279 / 1.32 M / 1.08 ms; overview 272 / 1.29 M / 1.08 ms.
 - **Measured at the end of Phase 4** (same GPU, 1900×1320): spawn 255 calls / 0.94 M tris / 0.57 ms; mid-walk across 196 / 0.99 M / 0.55 ms; bend 245 / 0.98 M / 0.58 ms.
 - **Dev hooks:**
   - `window.__scene` exposes the scene objects and `data`.

@@ -44,6 +44,13 @@ class Parts {
     this.list.push(g);
     return this;
   }
+  /** Add a geometry that already carries its own vertex colours. */
+  addColoured(geo) {
+    const g = geo.index ? geo.toNonIndexed() : geo.clone();
+    if (g.attributes.uv) g.deleteAttribute('uv');
+    this.list.push(g);
+    return this;
+  }
   box(w, h, d, color, x, y, z, ry = 0, rx = 0, rz = 0) { return this.add(new THREE.BoxGeometry(w, h, d), color, M4(x, y, z, ry, 1, 1, 1, rx, rz)); }
   cyl(rt, rb, h, color, x, y, z, seg = 8, sx = 1, sz = 1) { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), color, M4(x, y, z, 0, sx, 1, sz)); }
   ball(r, color, x, y, z, sx = 1, sy = 1, sz = 1, detail = 1) { return this.add(new THREE.IcosahedronGeometry(r, detail), color, M4(x, y, z, 0, sx, sy, sz)); }
@@ -199,15 +206,28 @@ function buildPlaza(p) {
   const f = spineAt(pl.s);
   const yaw = yawToward(f.ne, f.nn); // local -z toward the lake
   const [pe, pn] = pl.at;
-  // terracotta pavers, 44 x 30 m, draped on a 3 m grid
-  for (let u = -22; u < 22; u += 3) {
-    for (let v = -15; v < 15; v += 3) {
-      const [x, z] = at(pe, pn, yaw, u + 1.5, v + 1.5);
-      const e = x, n = -z;
-      if (inLake(e, n) || nearestS(e, n).d < DAM.half + 0.5) continue;
-      p.box(3.02, 0.14, 3.02, ((Math.floor(u / 3) + Math.floor(v / 3)) & 1) ? PAL.paverRed : PAL.paverRedDark, x, groundAt(e, n) + 0.04, z, yaw);
+  // terracotta pavers, 44 x 30 m: one draped surface (shared corner heights, so it is
+  // a single clean skin over the ground), 1.5 m tiles in two tones, checkered
+  const T = 1.5, pos = [], col = [], index = [];
+  const cA = new THREE.Color(PAL.paverRed), cB = new THREE.Color(PAL.paverRedDark);
+  const hAt = (u, v) => { const [x, z] = at(pe, pn, yaw, u, v); return [x, groundAt(x, -z) + 0.06, z]; };
+  for (let u = -22; u < 22; u += T) {
+    for (let v = -15; v < 15; v += T) {
+      const [cx, cz] = at(pe, pn, yaw, u + T / 2, v + T / 2);
+      if (inLake(cx, -cz) || nearestS(cx, -cz).d < DAM.half + 0.5) continue;
+      const k = pos.length / 3, c = ((Math.round(u / T) + Math.round(v / T)) & 1) ? cA : cB;
+      for (const [uu, vv] of [[u, v], [u + T, v], [u + T, v + T], [u, v + T]]) { pos.push(...hAt(uu, vv)); col.push(c.r, c.g, c.b); }
+      index.push(k, k + 1, k + 2, k, k + 2, k + 3);
     }
   }
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  pg.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  pg.setIndex(index);
+  pg.computeVertexNormals();
+  // whichever way the tiles wound, the paving faces up
+  if (pg.attributes.normal.getY(0) < 0) { index.reverse(); pg.setIndex(index); pg.computeVertexNormals(); }
+  p.addColoured(pg);
   // the gateway frame on the walk (r2, left): white beams on red posts, generic
   const gs = Math.min(L - 8, pl.s + 14), g = spineAt(gs), gy = walkY(gs), gyaw = yawToward(g.ne, g.nn);
   for (const side of [-1, 1]) {
@@ -238,7 +258,7 @@ function buildPlaza(p) {
 
 const SWANS = [PAL.boatBlue, PAL.boatSky, PAL.boatYellow, PAL.boatRed, PAL.boatOrange];
 /** A pedal boat as a swan (r7): hull, seat well, neck and head.  Local +x is the bow. */
-function swanParts(color) {
+export function swanParts(color) {
   const q = new Parts();
   q.add(new THREE.IcosahedronGeometry(1, 1), color, M4(0, 0.35, 0, 0, 1.45, 0.45, 0.8));
   q.box(1.2, 0.2, 0.9, 0xf4f0e6, -0.2, 0.62, 0);

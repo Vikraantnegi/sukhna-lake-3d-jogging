@@ -39,8 +39,9 @@ export function createGait(style = {}) {
       const a = phase * TAU, aR = a + Math.PI;
 
       // legs: hip swing grows with speed; knee flexion peaks as the leg recovers behind
-      const hipAmp = (0.32 + 0.3 * run + Math.min(0.2, Math.max(0, speed - 3.5) * 0.12)) * st.stride * moving * (1 - st.stiff * 0.4);
-      const kneeRec = (0.35 + 1.35 * run) * moving * (1 - st.stiff * 0.5);
+      const sprint = smooth(3.4, 5.2, speed);           // 0 jog .. 1 sprint: the long stride and high heel
+      const hipAmp = (0.32 + 0.08 * run + 0.3 * sprint) * st.stride * moving * (1 - st.stiff * 0.4);
+      const kneeRec = (0.35 + 0.75 * run + 0.6 * sprint) * moving * (1 - st.stiff * 0.5);
       const knee = (x) => kneeRec * Math.pow(Math.max(0, Math.sin(x - 0.9)), 1.6) + (0.08 + 0.18 * run) * moving;
       pose.hipL = Math.sin(a) * hipAmp;
       pose.hipR = Math.sin(aR) * hipAmp;

@@ -72,7 +72,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
         <div class="outfits" role="radiogroup" aria-label="Outfit">
           ${OUTFITS.map((o, i) => `<button type="button" role="radio" data-outfit="${i}" aria-checked="${i === outfit}"><span style="background:${hex(o.row.top)}"></span><span style="background:${hex(o.row.bottom)}"></span>${o.row.headwear === 'patka' ? `<span style="background:${hex(o.row.headwearColor)}"></span>` : ''}<em>${o.name}</em></button>`).join('')}
         </div>
-        <div class="controls">${touch ? 'Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H' : 'WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K weather · P overview · M sound · H hide · Esc pause'}</div>
+        <div class="controls">${touch ? 'Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H' : 'WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · H hide · Esc pause'}</div>
         <button type="button" class="go">${touch ? 'Tap to start' : 'Start jogging'}</button>
         <div class="credits">Map data © OpenStreetMap contributors (ODbL) · terrain: Mapzen / AWS Terrain Tiles · engine after sakura-crossing (MIT)</div>
       </div>

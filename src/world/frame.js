@@ -51,9 +51,18 @@ export function spineAt(s) {
   const i = Math.min(SP.length - 2, Math.floor(f)), a = Math.min(1, f - i);
   const p0 = SP[i], p1 = SP[i + 1];
   const e = p0[0] + (p1[0] - p0[0]) * a, n = p0[1] + (p1[1] - p0[1]) * a;
-  // tangent from a +-6 m chord, so it turns smoothly between samples
-  const q0 = SP[Math.max(0, i - 1)], q1 = SP[Math.min(SP.length - 1, i + 2)];
-  let te = q1[0] - q0[0], tn = q1[1] - q0[1];
+  // tangent: the central-chord tangents at the two ends of this segment,
+  // blended by a, so it (and everything offset along the normal: the
+  // parapet, the verges, the lanes) turns continuously instead of stepping
+  // at each spine vertex
+  const last = SP.length - 1;
+  const chord = (k) => {
+    const u = SP[Math.max(0, k - 1)], v = SP[Math.min(last, k + 1)];
+    const x = v[0] - u[0], y = v[1] - u[1], l = Math.hypot(x, y) || 1;
+    return [x / l, y / l];
+  };
+  const c0 = chord(i), c1 = chord(i + 1);
+  let te = c0[0] + (c1[0] - c0[0]) * a, tn = c0[1] + (c1[1] - c0[1]) * a;
   const tl = Math.hypot(te, tn) || 1;
   te /= tl; tn /= tl;
   return { e, n, te, tn, ne: tn, nn: -te };
