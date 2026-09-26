@@ -2,7 +2,7 @@
   "name": "full-tour",
   "about": "The whole game in about two minutes: the start card and an outfit, pre-dawn with mist and lamps, sunrise and golden hour, jogging among people (a greeting, a high five, chai), the laughter club, the eight passing near the dam, a ticket, boating and docking, sunset rain on the steps with the lo-fi, and up into the overview as the fog rolls in.",
   "seed": 6,
-  "duration": 128.0,
+  "duration": 125,
   "start": {
     "time": "predawn",
     "weather": "clear"
@@ -949,9 +949,5 @@
       "blend": 3.0
     }
   ],
-  "captions": [],
-  "endCard": {
-    "at": 124.6,
-    "text": "Sukhna · built live · kick.com/asumagg"
-  }
+  "captions": []
 }

@@ -23,9 +23,9 @@ Videos go to `recordings/` (git-ignored): `<name>.mp4` and a report, `<name>.jso
   the list), and the director runs the game at a fixed 1/60 s step: one step, one rendered frame.
   The same list gives the same video.
 - **Composited.** Each frame is drawn onto a 2D canvas (2560 x 1440) with what the recording
-  shows and the game's HUD never does: captions, the end card, speech bubbles, the `?stats`
-  readout (with the GPU's frame time from a timer query), the start card. The window shows that
-  canvas, so what you see is what is recorded.
+  shows and the game's HUD never does: captions, speech bubbles, the `?stats` readout (with the
+  GPU's frame time from a timer query), the start card, and an end card if a list asks for one.
+  The window shows that canvas, so what you see is what is recorded.
 - **Encoded frame-exact.** The frames are encoded with WebCodecs (H.264 High, 4:2:0), each
   stamped n/60 s, so the file is exactly 60 fps. If the page hitches (a cut to a new place
   refills the trees and the crowd), the steps it owes are each still drawn and recorded. The
@@ -55,10 +55,21 @@ and at 1080p alike, however the frames were fed to it. It is still there as a fa
   "events": [ { "at": 0, "do": "place", "s": 1200, "d": -1.6, "face": "east" } ],
   "shots":  [ { "at": 0, "mode": "keys", "keys": [ ... ] } ],
   "captions": [ { "from": 0.5, "to": 4, "text": "a caption" } ],
-  "endCard": { "at": 13, "text": "Sukhna · built live · kick.com/asumagg" },
+  "endCard": { "at": 13, "text": "…" },   // optional; no list uses one now
   "clip": { "frames": "/recordings/phase1-orbit.video", "from": 0.5, "until": 4 }   // optional: show recorded frames first
 }
 ```
+
+### Captions
+
+Nunito Bold (OFL; `fonts/Nunito.ttf` with its licence), warm white, centred at 83 % of the
+frame's height, 5.2 % of it tall: sized for a phone in the X feed (a 16:9 video there is ~390 px
+wide) and clear of the feed's controls along the bottom. Each fades in and out over 0.35 s. When
+the frame behind a caption is bright (fog, pale water, sky), a very soft dark gradient fades in
+behind the text, with no edge and no plate: every 4th step the director reads that patch back
+small and takes its brighter pixels (the 75th percentile), and the gradient eases up from
+brightness 0.42 to full at 0.64 (0 to 1). The font is fetched by URL while the director runs, so
+it never reaches `dist/`.
 
 ### Events (`"do"`)
 
@@ -105,7 +116,7 @@ the lake from the centreline.
 
 ## Adding a video
 
-1. Copy a list here as `<name>.json`; set its duration, events, shots, captions and end card.
+1. Copy a list here as `<name>.json`; set its duration, events, shots and captions.
 2. `node tests/director/record.mjs <name> --preview 2,8,14` and look at the stills in
    `recordings/preview/`; adjust.
 3. `node tests/director/record.mjs <name>`: the video and its frame check.

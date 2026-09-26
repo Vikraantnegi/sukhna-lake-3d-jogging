@@ -291,7 +291,7 @@
           "look": "current"
         },
         {
-          "t": 3.4,
+          "t": 2.9,
           "pos": {
             "walk": [
               1492,
@@ -331,9 +331,5 @@
       "to": 27.2,
       "text": "built live in the browser"
     }
-  ],
-  "endCard": {
-    "at": 27.6,
-    "text": "Sukhna · built live · kick.com/asumagg"
-  }
+  ]
 }

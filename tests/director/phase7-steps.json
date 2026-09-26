@@ -94,7 +94,7 @@
           }
         },
         {
-          "t": 5.8,
+          "t": 5.2,
           "pos": {
             "walk": [
               834,
@@ -124,9 +124,5 @@
       "to": 13.6,
       "text": "every sound is generated in code"
     }
-  ],
-  "endCard": {
-    "at": 17.4,
-    "text": "Sukhna · built live · kick.com/asumagg"
-  }
+  ]
 }

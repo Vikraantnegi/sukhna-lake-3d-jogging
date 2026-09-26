@@ -43,6 +43,11 @@ const EASE = {
 };
 const FONT = `"Segoe UI", "Segoe UI Emoji", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif`;
 
+// Captions: Nunito Bold (OFL, tests/director/fonts/), fetched by URL at run time so nothing
+// reaches dist/. Sizes are fractions of the frame's height, set for a phone in the X feed (a
+// 16:9 video there is ~390 px wide); the line sits at 0.83 H, clear of the feed's own controls.
+const CAPTION = { family: `"Director Nunito", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif`, weight: 700, size: 0.052, track: 0.02, y: 0.83, color: '#fff8ec' };
+
 export async function runDirector(ctx) {
   const { THREE, world, jogger, collider, interact, boat, hud, rig, camera, tod, weather, sound, pipeline, tick, render, setSize, updateTime, actions, canvas, setCameraHook } = ctx;
   const params = new URLSearchParams(location.search);
@@ -70,6 +75,13 @@ export async function runDirector(ctx) {
   document.body.appendChild(comp);
   const g = comp.getContext('2d', { alpha: false });
   const gl = pipeline.renderer.getContext();
+
+  try { document.fonts.add(await new FontFace('Director Nunito', 'url(/tests/director/fonts/Nunito.ttf)', { weight: '200 1000' }).load()); }
+  catch (e) { status.errors.push(`font: ${e.message}`); }
+  // how bright the frame is behind the caption: sampled small (a 48 x 12 read-back every 4th
+  // step while a caption shows) and eased, so the gradient behind the text never flickers
+  const probe = Object.assign(document.createElement('canvas'), { width: 48, height: 12 }).getContext('2d', { willReadFrequently: true });
+  const scrim = { level: 0, target: 0, n: 0 };
 
   /* ------------------------------ where things are ------------------------------ */
   const V = (e, y, n) => new THREE.Vector3(e, y, -n);
@@ -368,13 +380,45 @@ export async function runDirector(ctx) {
   }
 
   function caption(text, alpha) {
+    const c = CAPTION, px = Math.round(H * c.size), x = W / 2, y = H * c.y;
     g.save();
+    g.font = `${c.weight} ${px}px ${c.family}`;
+    g.letterSpacing = `${c.track * px}px`;
+    const rx = g.measureText(text).width / 2 + px * 2.4, ry = px * 1.6;
+    // a bright background (fog, pale water, sky) fades in a soft dark gradient behind the text:
+    // an ellipse that falls off to nothing, no edge and no plate
+    const fresh = scrim.n === 0;
+    if (scrim.n++ % 4 === 0) {
+      probe.drawImage(comp, x - rx, y - ry, rx * 2, ry * 2, 0, 0, 48, 12);
+      const d = probe.getImageData(0, 0, 48, 12).data;
+      // the brighter pixels decide (the 75th percentile): half the line over a pale lake is
+      // hard to read even when the other half is over dark stone
+      const ls = [];
+      for (let i = 0; i < d.length; i += 4) ls.push((0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255);
+      ls.sort((p, q) => p - q);
+      const lum = ls[Math.floor(ls.length * 0.75)];
+      status.scrimLum = Math.round(lum * 100) / 100;
+      scrim.target = Math.min(1, Math.max(0, (lum - 0.42) / 0.22));
+    }
+    scrim.level = fresh ? scrim.target : scrim.level + (scrim.target - scrim.level) * 0.06; // (the caption's own fade covers its start)
+    status.scrim = Math.round(scrim.level * 100) / 100;
+    if (scrim.level > 0.01) {
+      g.save();
+      g.translate(x, y); g.scale(rx / ry, 1);
+      const grad = g.createRadialGradient(0, 0, 0, 0, 0, ry);
+      const a = 0.24 * scrim.level * alpha, stop = (k, f) => grad.addColorStop(k, `rgba(12,10,16,${a * f})`);
+      stop(0, 1); stop(0.3, 0.9); stop(0.55, 0.55); stop(0.8, 0.18); stop(1, 0); // (a long, smooth falloff: no edge)
+      g.fillStyle = grad; g.fillRect(-ry, -ry, ry * 2, ry * 2);
+      g.restore();
+    }
+    // two shadows: a wide soft one for mood, a tight one so the edges hold
     g.globalAlpha = alpha;
-    g.font = `600 ${Math.round(H * 0.036)}px ${FONT}`;
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.shadowColor = 'rgba(0,0,0,0.6)'; g.shadowBlur = H * 0.014; g.shadowOffsetY = H * 0.002;
-    g.fillStyle = '#fff';
-    g.fillText(text, W / 2, H * 0.875);
+    g.fillStyle = c.color;
+    g.shadowColor = 'rgba(30,18,8,0.5)'; g.shadowBlur = px * 0.6; g.shadowOffsetY = px * 0.04;
+    g.fillText(text, x, y);
+    g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = px * 0.08; g.shadowOffsetY = px * 0.02;
+    g.fillText(text, x, y);
     g.restore();
   }
   function endCard(text, k) {
@@ -495,6 +539,7 @@ export async function runDirector(ctx) {
       const k = card.hideAt !== undefined ? 1 - (t - card.hideAt) / 0.45 : 1; // the card's own 0.45 s fade
       if (k > 0) { g.save(); g.globalAlpha = k; startCard(); g.restore(); } else card.show = false;
     }
+    if (!captions.some((c) => t >= c.from && t <= c.to)) { scrim.level = 0; scrim.n = 0; } // (each caption judges its own background)
     for (const c of captions) {
       if (t < c.from || t > c.to) continue;
       const k = Math.min(1, (t - c.from) / 0.35, (c.to - t) / 0.35);

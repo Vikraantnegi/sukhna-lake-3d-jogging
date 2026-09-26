@@ -1,8 +1,8 @@
 {
   "name": "before-after",
-  "about": "4 s of the Phase 1 build's P orbit of its empty planet (commit 4c528c4, recorded first by record.mjs), a hard cut to 6 s of golden hour on the dam today.",
+  "about": "4 s of the Phase 1 build's P orbit of its empty planet (commit 4c528c4, recorded first by record.mjs), a hard cut to 5 s of golden hour on the dam today.",
   "seed": 10,
-  "duration": 10,
+  "duration": 9,
   "clip": {
     "frames": "/recordings/phase1-orbit.video",
     "from": 0.5,
@@ -55,7 +55,7 @@
           }
         },
         {
-          "t": 10.0,
+          "t": 8.4,
           "pos": {
             "walk": [
               2256,
@@ -89,9 +89,5 @@
       "to": 7.6,
       "text": "today"
     }
-  ],
-  "endCard": {
-    "at": 8.0,
-    "text": "Sukhna · built live · kick.com/asumagg"
-  }
+  ]
 }
