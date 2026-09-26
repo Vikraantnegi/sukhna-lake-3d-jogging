@@ -116,13 +116,14 @@ export async function buildSigns(scene, { plaza, club } = {}) {
     out.boards++;
   }
 
-  // 3. boating: an overhead board on two posts at the parapet by the jetty, facing the walk
+  // 3. boating: a gateway over the stair down to the jetty -- posts on its cheek walls
+  //    (either side of the parapet gap, dam.js), the board across, facing the walk
   if (club?.jetty) {
-    const s = club.jetty.s, f = spineAt(s), y0 = walkY(s) + DAM.parH, d = (DAM.parIn + DAM.parOut) / 2;
-    const tex = boardTex(TEXT.boat, 768, 288);
-    for (const side of [-1, 1]) frames.push(boxAt(0.1, 2.6, 0.1, 0x3e4a46, f.e + f.ne * d + f.te * 1.3 * side, y0 + 1.3, f.n + f.nn * d + f.tn * 1.3 * side, -f.ne, -f.nn));
-    frames.push(boxAt(2.5, 0.95, 0.06, BLUE_HEX, f.e + f.ne * d, y0 + 2.2, f.n + f.nn * d, -f.ne, -f.nn));
-    group.add(signMesh([facePlane(2.4, 0.9, f.e + f.ne * (d - 0.035), y0 + 2.2, f.n + f.nn * (d - 0.035), -f.ne, -f.nn)], tex, 'sign.boating'));
+    const s = club.jetty.s, f = spineAt(s), y0 = walkY(s) + DAM.parH, d = (DAM.parIn + DAM.parOut) / 2, px = 1.6 + 0.175;
+    const tex = boardTex(TEXT.boat, 1024, 288);
+    for (const side of [-1, 1]) frames.push(boxAt(0.1, 2.6, 0.1, 0x3e4a46, f.e + f.ne * d + f.te * px * side, y0 + 1.3, f.n + f.nn * d + f.tn * px * side, -f.ne, -f.nn));
+    frames.push(boxAt(3.5, 0.95, 0.06, BLUE_HEX, f.e + f.ne * d, y0 + 2.2, f.n + f.nn * d, -f.ne, -f.nn));
+    group.add(signMesh([facePlane(3.4, 0.9, f.e + f.ne * (d - 0.035), y0 + 2.2, f.n + f.nn * (d - 0.035), -f.ne, -f.nn)], tex, 'sign.boating'));
     out.boards++;
   }
 

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { data, L, spineAt, shoreDist, inLake, nearestS } from './frame.js';
 import { groundAt, groundGrid } from './terrain.js';
-import { walkY, damHeight, shoreOffset, DAM, WATER_STEPS } from './dam.js';
+import { walkY, damHeight, shoreOffset, DAM, WATER_STEPS, GAPS } from './dam.js';
 
 /* ------------------------------------------------------------------ *
  * Numeric self-checks (plan §8).  They run in dev on start-up, print a
@@ -59,8 +59,8 @@ export function damCheck() {
     if (!Number.isFinite(shoreOffset(s))) lakeless++;
   }
   const ok = low >= 2.0;
-  return { name: 'damCheck', ok, lowest: +fmt(low), at: Math.round(lowS), gaps: WATER_STEPS.length,
-    detail: `walk ≥ 2.00 m above the water: lowest ${fmt(low)} m at s = ${Math.round(lowS)}; parapet gaps only at the ${WATER_STEPS.length} water steps; ${Math.round(lakeless * 2)} m of the walk has no water alongside` };
+  return { name: 'damCheck', ok, lowest: +fmt(low), at: Math.round(lowS), gaps: GAPS.length,
+    detail: `walk ≥ 2.00 m above the water: lowest ${fmt(low)} m at s = ${Math.round(lowS)}; parapet gaps only at the ${GAPS.length} flights (${WATER_STEPS.length} to the water, ${GAPS.length - WATER_STEPS.length} to the jetty); ${Math.round(lakeless * 2)} m of the walk has no water alongside` };
 }
 
 /**
