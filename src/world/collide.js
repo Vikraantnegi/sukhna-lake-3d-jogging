@@ -1,5 +1,5 @@
 import { data, L, spineAt, nearestS, shoreDist, inLake } from './frame.js';
-import { groundAt } from './terrain.js';
+import { groundAt, NEAR } from './terrain.js';
 import { DAM, GAPS } from './dam.js';
 
 /* ------------------------------------------------------------------ *
@@ -37,15 +37,27 @@ export function createCollider(world) {
   // a flight is built along the straight normal from its spine point (dam.js), so its treads
   // are looked up in that frame -- not by nearestS, which follows the curved spine and, on a
   // long pier over a bend, disagrees with the geometry by metres
-  const frames = (world.dam?.waterStairs || []).map((st) => ({ st, f: spineAt(st.s) }));
+  const frames = [...(world.dam?.waterStairs || []), ...(world.dam?.cityStairs || [])].map((st) => ({ st, f: spineAt(st.s) }));
+  const FOOT = 0.1; // half a foot's length: you stand on the highest step your foot is on
   const treadAt = (e, n) => {
     for (const { st, f } of frames) {
       if (!st.treads) continue;
       const de = e - f.e, dn = n - f.n;
       const u = de * f.ne + dn * f.nn, v = -de * f.nn + dn * f.ne;
-      if (Math.abs(v) > st.width / 2 || u < st.treads[0].d0 - 0.01) continue;
-      const tr = st.treads.find((q) => u >= q.d0 && u < q.d1 + 0.06);
-      if (tr) return tr;
+      if (Math.abs(v) > st.width / 2) continue;
+      // the flight's extent along its line (city flights run toward −d, the others toward +d)
+      st.span ||= [Math.min(st.landing?.d0 ?? Infinity, ...st.treads.map((q) => q.d0)), Math.max(...st.treads.map((q) => q.d1))];
+      if (u < st.span[0] - FOOT - 0.05 || u > st.span[1] + FOOT + 0.05) continue; // (+ the lip)
+      const dir = st.dir ?? 1;
+      // the paved landing through the parapet counts too (it overhangs the first tread by 5 cm)
+      // a foot, not a point: the highest tread (or landing) within ±FOOT along the flight
+      let best = st.landing && u + FOOT >= st.landing.d0 && u - FOOT < st.landing.d1 ? { y: st.from.y + 0.02, d0: st.landing.d0, d1: st.landing.d1 } : null;
+      for (const q of st.treads) {
+        // the tread as drawn, with its 5 cm lip downhill
+        const lo = dir > 0 ? q.d0 : q.d0 - 0.05, hi = dir > 0 ? q.d1 + 0.05 : q.d1;
+        if (u + FOOT >= lo && u - FOOT < hi && (!best || q.y > best.y)) best = q;
+      }
+      if (best) return best;
     }
     return null;
   };
@@ -81,7 +93,10 @@ export function createCollider(world) {
   };
 
   /** Is (e, n) somewhere you may stand? */
+  // the edge of the world: 20 m inside the detailed terrain (the playtest ran off it)
+  const [ex0, ey0, ex1, ey1] = NEAR.rect;
   function free(e, n) {
+    if (e < ex0 + 20 || e > ex1 - 20 || n < ey0 + 20 || n > ey1 - 20) return false;
     if (deckAt(e, n)) return true;
     if (shoreDist(e, n, 5) < 0.5) return false;
     const ns = nearestS(e, n);
@@ -95,13 +110,18 @@ export function createCollider(world) {
   return {
     decks,
     free,
+    /** On a flight of steps (for the stair-walking pace)? */
+    onFlight(e, n) { return !!treadAt(e, n); },
     /** The height you stand at. */
     surfaceAt(e, n) {
       const d = deckAt(e, n);
-      if (d && d.kind !== 'stairs') return d.y;
-      const g = Math.max(groundAt(e, n), 0);
-      // the steps down to the water: stand on the treads, not the slope under them
+      // the steps first: where the jetty stair's foot overlaps the jetty, the higher wins
       const tr = treadAt(e, n);
+      if (d && d.kind !== 'stairs') return tr ? Math.max(tr.y, d.y) : d.y;
+      // never under the water's surface -- but dry land below lake level (the city side of the
+      // dam is ~0.5-3 m lower) is where it is (the playtest caught the jogger floating there)
+      const g0 = groundAt(e, n), g = inLake(e, n) ? Math.max(g0, 0) : g0;
+      // the steps down to the water: stand on the treads, not the slope under them
       if (tr) return d ? tr.y : Math.max(g, tr.y);
       return g;
     },

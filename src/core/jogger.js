@@ -18,7 +18,7 @@ import { LAYER, setLayers } from '../world/chunks.js';
  *   V: auto-jog along the walk; turns round at each end; WASD cancels
  * ------------------------------------------------------------------ */
 
-export const SPEED = { walk: 1.5, jog: 3.0, sprint: 5.2 };
+export const SPEED = { walk: 1.5, jog: 3.0, sprint: 5.2, stairs: 1.6 };
 
 const tmpM = () => new THREE.Matrix4();
 
@@ -126,6 +126,9 @@ export class Jogger {
       want = Math.atan2(-de, dn);
       target = f < 0 && !s ? SPEED.walk : canSprint ? SPEED.sprint : SPEED.jog;
     }
+    // on a flight of steps nobody jogs: a stair-walking pace, so the feet land on every tread
+    const onStairs = this.collider.onFlight?.(this.e, this.n);
+    if (onStairs) target = Math.min(target, SPEED.stairs);
     this.sprinting = target === SPEED.sprint;
 
     // speed: quick to pick up, and on release easing down through a walk to a stop
@@ -155,13 +158,20 @@ export class Jogger {
       if (moved < step * 0.2 && this.auto) this.autoDir *= -1; // walked into something: turn back
     }
     if (this.speed > 0.2) this.elapsed += dt;
-    this.y += (this.collider.surfaceAt(this.e, this.n) - this.y) * (1 - Math.exp(-18 * dt));
+    // follow the surface; on steps, fast enough to land on each tread (the playtest found the
+    // feet sinking 0.13-0.21 m into the step above when climbing at jog speed)
+    // (on stairs *now*, after the move: the first step onto a flight snaps too)
+    const surface = this.collider.surfaceAt(this.e, this.n), stairsNow = this.collider.onFlight?.(this.e, this.n);
+    if (stairsNow && surface > this.y) this.y = surface;
+    else this.y += (surface - this.y) * (1 - Math.exp(-(stairsNow ? 40 : 18) * dt));
 
     // lengths: every arrival at one end of the walk after touching the other
     const w = this.where();
     if (w.d < 12) {
-      if (w.s < 10) { if (this.lastEnd === 'west') this.lengths++; this.lastEnd = 'east'; }
-      else if (w.s > L - 10) { if (this.lastEnd === 'east') this.lengths++; this.lastEnd = 'west'; }
+      // 25 m end zones: a jog that starts just off an end still counts its first length
+      // (the playtest's there-and-back from s 12 only counted 1)
+      if (w.s < 25) { if (this.lastEnd === 'west') this.lengths++; this.lastEnd = 'east'; }
+      else if (w.s > L - 25) { if (this.lastEnd === 'east') this.lengths++; this.lastEnd = 'west'; }
     }
 
     this.gait.update(dt, this.speed, this.sitting);

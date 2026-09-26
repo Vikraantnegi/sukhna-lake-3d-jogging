@@ -107,11 +107,14 @@ export function buildWorld(scene, { npcs = Q.npcs, birdCount = Q.birds, simpleWa
     BODY.OUTFITS.forEach((o, i) => cases.push({ name: `bench (jogger) outfit ${i}`, body: BODY.makeBody(o.row), seatTop: 0.48, footTop: 0, front: 0.21 }));
     return cases;
   };
-  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30), () => seatCheck(seatCases(), BODY)]) : [];
+  const checkSet = () => runChecks([npcWaterCheck, () => laneCheck(rowing.laneSamples(), 30), () => seatCheck(seatCases(), BODY)]);
+  const checks = import.meta.env?.DEV || new URLSearchParams(location.search).has('checks') ? checkSet() : [];
   window.__checks = checks;
 
   return {
     checks,
+    /** Run every self-check again, now (the playtest). */
+    rerunChecks() { const r = checkSet(); window.__checks = r; return r; },
     terrain,
     lake,
     dam,

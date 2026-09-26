@@ -368,7 +368,7 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     let v = 0;
     const hwCount = Object.fromEntries(HW_KINDS.map((k) => [k, 0]));
     for (const p of people) {
-      p.visible = false;
+      p.visible = false; p.fade = 1; p.camDist = Infinity;
       if (!p.active) continue;
       const dx = p.e - camPos.x, dz = -p.n - camPos.z, d2 = dx * dx + dz * dz;
       if (d2 > DRAW_R * DRAW_R) continue;
@@ -384,7 +384,8 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
       }
       p.poseAge++;
       const near = Math.hypot(dx, p.y + 1.1 - camPos.y, dz);
-      const f = THREE.MathUtils.smoothstep(near, 0.8, 1.7);
+      const f = THREE.MathUtils.smoothstep(near, 1.0, 2.0); // gone by 1.0 m, half by 1.5 m
+      p.camDist = near; p.fade = f; // read by the playtest (tests/playtest/camera)
       _root.compose(_v.set(p.e, p.y, -p.n), _q.setFromAxisAngle(UP, p.yaw), _s.set(1, 1, 1));
       for (let k = 0; k < PARTS.length; k++) {
         if (k === P.headwear) {
@@ -417,7 +418,10 @@ export function buildCrowd(scene, world, { max = 200, seed = 2027 } = {}) {
     /** Scale how many movers are out (time of day, weather): 0..1. */
     setDensity(f) {
       density = THREE.MathUtils.clamp(f, 0, 1);
-      const want = Math.round(moverCount * density * keep);
+      // the share is of the people who lead (followers walk with their leader): counting the
+      // followers here too put ~15% more people out than the rule (found by the playtest)
+      const leaders = people.filter((p) => p.mode === 'walk' && p.leader === undefined).length;
+      const want = Math.round(leaders * density * keep);
       let i = 0;
       for (const p of people) { if (p.mode !== 'walk' || p.leader !== undefined) continue; p.active = i++ < want; }
     },
