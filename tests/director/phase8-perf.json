@@ -1,0 +1,194 @@
+{
+  "name": "phase8-perf",
+  "about": "A fast auto-jog through the busiest stretch at golden hour with the ?stats=1 readout; hard cuts to fog, sunset and the P overview.",
+  "seed": 8,
+  "duration": 15,
+  "stats": true,
+  "start": {
+    "time": "golden",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 1880,
+      "d": -1.6,
+      "face": "west"
+    },
+    {
+      "at": 0.05,
+      "do": "auto"
+    },
+    {
+      "at": 0.1,
+      "do": "hold",
+      "keys": [
+        "ShiftLeft"
+      ]
+    },
+    {
+      "at": 6.0,
+      "do": "weather",
+      "value": "fog",
+      "instant": true
+    },
+    {
+      "at": 8.5,
+      "do": "time",
+      "value": "sunset"
+    },
+    {
+      "at": 8.5,
+      "do": "weather",
+      "value": "clear",
+      "instant": true
+    },
+    {
+      "at": 11.0,
+      "do": "release",
+      "keys": [
+        "ShiftLeft"
+      ]
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              1.3,
+              1.9,
+              -4.6
+            ]
+          },
+          "look": {
+            "player": [
+              -0.2,
+              1.3,
+              6
+            ]
+          }
+        },
+        {
+          "t": 6,
+          "pos": {
+            "player": [
+              1.8,
+              1.6,
+              -4.0
+            ]
+          },
+          "look": {
+            "player": [
+              -0.4,
+              1.2,
+              6
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 6.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              -2.2,
+              1.5,
+              5.5
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              1.3,
+              0
+            ]
+          }
+        },
+        {
+          "t": 2.5,
+          "pos": {
+            "player": [
+              -2.6,
+              1.7,
+              4.5
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              1.3,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 8.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              3.0,
+              2.2,
+              -3.5
+            ]
+          },
+          "look": {
+            "player": [
+              -3,
+              1.2,
+              12
+            ]
+          }
+        },
+        {
+          "t": 2.5,
+          "pos": {
+            "player": [
+              3.4,
+              2.6,
+              -3.0
+            ]
+          },
+          "look": {
+            "player": [
+              -3,
+              1.2,
+              12
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 11.0,
+      "mode": "overview",
+      "orbit": 3.9
+    }
+  ],
+  "captions": [
+    {
+      "from": 0.5,
+      "to": 5.6,
+      "text": "~1 ms a frame on my RTX 4080"
+    },
+    {
+      "from": 11.2,
+      "to": 13.4,
+      "text": "29 shots checked against real photos of Sukhna"
+    }
+  ]
+}

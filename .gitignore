@@ -20,3 +20,6 @@ public/audio/*
 tests/playtest/report/
 test-results/
 playwright-report/
+
+# the director's videos (tests/director): large, rendered on demand, never committed
+recordings/

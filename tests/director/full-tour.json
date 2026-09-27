@@ -1,0 +1,953 @@
+{
+  "name": "full-tour",
+  "about": "The whole game in about two minutes: the start card and an outfit, pre-dawn with mist and lamps, sunrise and golden hour, jogging among people (a greeting, a high five, chai), the laughter club, the eight passing near the dam, a ticket, boating and docking, sunset rain on the steps with the lo-fi, and up into the overview as the fog rolls in.",
+  "seed": 6,
+  "duration": 125,
+  "start": {
+    "time": "predawn",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 2330,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 0,
+      "do": "card",
+      "show": true,
+      "pick": 0
+    },
+    {
+      "at": 2.0,
+      "do": "outfit",
+      "value": 1
+    },
+    {
+      "at": 3.4,
+      "do": "outfit",
+      "value": 2
+    },
+    {
+      "at": 4.8,
+      "do": "outfit",
+      "value": 1
+    },
+    {
+      "at": 6.0,
+      "do": "card",
+      "press": true
+    },
+    {
+      "at": 6.25,
+      "do": "card",
+      "hide": true
+    },
+    {
+      "at": 7.2,
+      "do": "auto"
+    },
+    {
+      "at": 12.0,
+      "do": "place",
+      "s": 2290,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 12.02,
+      "do": "auto"
+    },
+    {
+      "at": 19.0,
+      "do": "place",
+      "s": 2276,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 19.02,
+      "do": "auto"
+    },
+    {
+      "at": 19.0,
+      "do": "timeLapse",
+      "to": 7.4,
+      "over": 8.0
+    },
+    {
+      "at": 27.0,
+      "do": "timeLapse",
+      "to": 7.75,
+      "over": 6.0
+    },
+    {
+      "at": 33.0,
+      "do": "place",
+      "s": 1700,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 33.02,
+      "do": "auto"
+    },
+    {
+      "at": 38.5,
+      "do": "greet",
+      "minS": 1300,
+      "maxS": 2200
+    },
+    {
+      "at": 43.5,
+      "do": "five",
+      "minS": 600,
+      "maxS": 2100
+    },
+    {
+      "at": 49.5,
+      "do": "chai"
+    },
+    {
+      "at": 54.5,
+      "do": "place",
+      "s": 2372,
+      "d": -1.6,
+      "face": "east"
+    },
+    {
+      "at": 54.52,
+      "do": "auto"
+    },
+    {
+      "at": 61.0,
+      "do": "join",
+      "kind": "laugh",
+      "angle": 1.2
+    },
+    {
+      "at": 74.0,
+      "do": "place",
+      "s": 1200,
+      "d": 3.3,
+      "face": "lake"
+    },
+    {
+      "at": 74.0,
+      "do": "rowers",
+      "which": "eight",
+      "near": {
+        "walk": [
+          1206,
+          104
+        ]
+      },
+      "lead": 32
+    },
+    {
+      "at": 84.0,
+      "do": "place",
+      "s": 2388.4,
+      "d": 1.3,
+      "face": "west"
+    },
+    {
+      "at": 84.2,
+      "do": "ticket"
+    },
+    {
+      "at": 88.0,
+      "do": "place",
+      "spot": {
+        "jetty": [
+          16.5,
+          0
+        ]
+      },
+      "face": "lake",
+      "s": 2395.3
+    },
+    {
+      "at": 88.05,
+      "do": "walkTo",
+      "path": [
+        {
+          "jetty": [
+            21.6,
+            0
+          ]
+        }
+      ],
+      "pace": "jog"
+    },
+    {
+      "at": 90.8,
+      "do": "board",
+      "pace": "jog"
+    },
+    {
+      "at": 94.0,
+      "do": "boatAt",
+      "spot": {
+        "walk": [
+          2050,
+          128
+        ]
+      },
+      "face": "lake"
+    },
+    {
+      "at": 94.05,
+      "do": "pedal",
+      "path": [
+        {
+          "walk": [
+            2045,
+            190
+          ]
+        }
+      ],
+      "tol": 4
+    },
+    {
+      "at": 99.5,
+      "do": "boatAt",
+      "spot": {
+        "freeBerth": 9
+      },
+      "face": "berth"
+    },
+    {
+      "at": 99.55,
+      "do": "dock"
+    },
+    {
+      "at": 104.0,
+      "do": "time",
+      "value": "sunset"
+    },
+    {
+      "at": 104.0,
+      "do": "weather",
+      "value": "rain",
+      "instant": true
+    },
+    {
+      "at": 104.0,
+      "do": "place",
+      "spot": {
+        "flight": 820,
+        "at": "seat",
+        "back": 3.2
+      },
+      "s": 820,
+      "face": "lake"
+    },
+    {
+      "at": 104.2,
+      "do": "sitSteps",
+      "flight": 820
+    },
+    {
+      "at": 111.8,
+      "do": "weather",
+      "value": "clear"
+    },
+    {
+      "at": 121.4,
+      "do": "weather",
+      "value": "fog"
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "rig"
+    },
+    {
+      "at": 7.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              2.2,
+              1.9,
+              -5.0
+            ]
+          },
+          "look": {
+            "player": [
+              -0.5,
+              1.2,
+              8
+            ]
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "player": [
+              2.6,
+              2.1,
+              -4.4
+            ]
+          },
+          "look": {
+            "player": [
+              -0.6,
+              1.2,
+              8
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 12.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              2238,
+              2.0
+            ],
+            "h": 1.3
+          },
+          "look": {
+            "walk": [
+              2268,
+              -0.8
+            ],
+            "h": 1.7
+          }
+        },
+        {
+          "t": 7.0,
+          "pos": {
+            "walk": [
+              2240,
+              1.8
+            ],
+            "h": 1.4
+          },
+          "look": {
+            "walk": [
+              2266,
+              -0.9
+            ],
+            "h": 1.6
+          }
+        }
+      ]
+    },
+    {
+      "at": 19.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              2262,
+              3.2
+            ],
+            "h": 1.9
+          },
+          "look": {
+            "azFrom": {
+              "walk": [
+                2262,
+                3.2
+              ]
+            },
+            "az": 112,
+            "dist": 400,
+            "y": 12
+          }
+        },
+        {
+          "t": 8.0,
+          "pos": {
+            "walk": [
+              2259,
+              3.2
+            ],
+            "h": 2.1
+          },
+          "look": {
+            "azFrom": {
+              "walk": [
+                2259,
+                3.2
+              ]
+            },
+            "az": 113,
+            "dist": 400,
+            "y": 14
+          }
+        }
+      ]
+    },
+    {
+      "at": 27.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              -2.6,
+              1.6,
+              3.2
+            ]
+          },
+          "look": {
+            "player": [
+              1.2,
+              1.3,
+              -5
+            ]
+          }
+        },
+        {
+          "t": 6.0,
+          "pos": {
+            "player": [
+              -3.0,
+              1.8,
+              2.6
+            ]
+          },
+          "look": {
+            "player": [
+              1.4,
+              1.3,
+              -5
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 33.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              1.6,
+              2.4,
+              6.5
+            ]
+          },
+          "look": {
+            "player": [
+              -0.6,
+              1.0,
+              -22
+            ]
+          }
+        },
+        {
+          "t": 5.5,
+          "pos": {
+            "player": [
+              2.0,
+              2.6,
+              6.0
+            ]
+          },
+          "look": {
+            "player": [
+              -0.8,
+              1.0,
+              -22
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 38.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              3.4,
+              1.7,
+              0.9
+            ]
+          },
+          "look": {
+            "player": [
+              0.2,
+              1.45,
+              0.9
+            ]
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "player": [
+              3.6,
+              1.8,
+              0.5
+            ]
+          },
+          "look": {
+            "player": [
+              0.2,
+              1.45,
+              0.7
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 43.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              4.6,
+              1.8,
+              3.0
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              1.3,
+              3.0
+            ]
+          }
+        },
+        {
+          "t": 6.0,
+          "pos": {
+            "player": [
+              4.8,
+              1.9,
+              1.5
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              1.3,
+              0.5
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 49.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              2.2,
+              2.0,
+              -2.6
+            ]
+          },
+          "look": {
+            "player": [
+              -0.3,
+              1.3,
+              1.8
+            ]
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "player": [
+              2.6,
+              2.1,
+              -2.4
+            ]
+          },
+          "look": {
+            "player": [
+              -0.3,
+              1.3,
+              1.8
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 54.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              -2.4,
+              2.2,
+              4.5
+            ]
+          },
+          "look": {
+            "player": [
+              0.5,
+              1.2,
+              -3
+            ]
+          }
+        },
+        {
+          "t": 6.5,
+          "pos": {
+            "player": [
+              -2.8,
+              2.6,
+              4.0
+            ]
+          },
+          "look": {
+            "player": [
+              0.5,
+              1.2,
+              -3
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 61.0,
+      "mode": "rig"
+    },
+    {
+      "at": 74.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              0.9,
+              1.9,
+              -2.6
+            ]
+          },
+          "look": {
+            "walk": [
+              1206,
+              104
+            ],
+            "y": 0.8
+          }
+        },
+        {
+          "t": 10.0,
+          "pos": {
+            "player": [
+              1.1,
+              2.0,
+              -2.8
+            ]
+          },
+          "look": {
+            "walk": [
+              1188,
+              104
+            ],
+            "y": 0.8
+          }
+        }
+      ]
+    },
+    {
+      "at": 84.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              2394.2,
+              0.2
+            ],
+            "h": 1.8
+          },
+          "look": {
+            "player": [
+              0,
+              1.2,
+              0
+            ]
+          }
+        },
+        {
+          "t": 4.0,
+          "pos": {
+            "walk": [
+              2394.6,
+              0.0
+            ],
+            "h": 1.8
+          },
+          "look": {
+            "player": [
+              0,
+              1.2,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 88.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "spot": {
+              "jetty": [
+                13.5,
+                1.2
+              ]
+            },
+            "y": 5.0
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              5
+            ]
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "spot": {
+              "jetty": [
+                22,
+                1.6
+              ]
+            },
+            "y": 3.2
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              3
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 93.0,
+      "mode": "rig",
+      "blend": 1.0
+    },
+    {
+      "at": 94.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "boat": [
+              0.9,
+              3.2,
+              -6.5
+            ]
+          },
+          "look": {
+            "boat": [
+              0,
+              1.2,
+              6
+            ]
+          }
+        },
+        {
+          "t": 2.0,
+          "pos": {
+            "boat": [
+              5.5,
+              2.8,
+              -1.5
+            ]
+          },
+          "look": {
+            "boat": [
+              0,
+              1.2,
+              1
+            ]
+          }
+        },
+        {
+          "t": 5.5,
+          "pos": {
+            "boat": [
+              3.0,
+              2.6,
+              7.5
+            ]
+          },
+          "look": {
+            "boat": [
+              -1.5,
+              1.4,
+              -40
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 99.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "spot": {
+              "jetty": [
+                33.5,
+                -0.6
+              ]
+            },
+            "y": 3.3
+          },
+          "look": {
+            "boat": [
+              0,
+              0.9,
+              0
+            ]
+          }
+        },
+        {
+          "t": 4.5,
+          "pos": {
+            "spot": {
+              "jetty": [
+                34.5,
+                -0.8
+              ]
+            },
+            "y": 3.1
+          },
+          "look": {
+            "player": [
+              0,
+              1.0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 104.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              826.5,
+              9.5
+            ],
+            "h": 2.4
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              0
+            ]
+          }
+        },
+        {
+          "t": 2.6,
+          "pos": {
+            "walk": [
+              825.8,
+              11.5
+            ],
+            "h": 2.4
+          },
+          "look": {
+            "player": [
+              0,
+              0.7,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 106.8,
+      "mode": "rig",
+      "blend": 2.2
+    },
+    {
+      "at": 114.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": "current",
+          "look": "current"
+        },
+        {
+          "t": 4.5,
+          "pos": {
+            "walk": [
+              840,
+              60
+            ],
+            "y": 45
+          },
+          "look": {
+            "walk": [
+              820,
+              4
+            ],
+            "y": 2
+          }
+        }
+      ]
+    },
+    {
+      "at": 118.5,
+      "mode": "overview",
+      "orbit": 3.3,
+      "blend": 3.0
+    }
+  ],
+  "captions": []
+}

@@ -1,0 +1,377 @@
+{
+  "name": "boating",
+  "about": "A ticket at the shack, down the jetty stair past the swans, board; pedal out at golden hour, the camera swinging round to the curved dam with the rowers crossing; back at the jetty: dock, step off, up the stair and jog off.",
+  "seed": 4,
+  "duration": 25,
+  "start": {
+    "time": "golden",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 2388.4,
+      "d": 1.3,
+      "face": "west"
+    },
+    {
+      "at": 0.2,
+      "do": "ticket"
+    },
+    {
+      "at": 4.4,
+      "do": "place",
+      "spot": {
+        "jetty": [
+          15.2,
+          0
+        ]
+      },
+      "face": "lake",
+      "s": 2395.3
+    },
+    {
+      "at": 4.45,
+      "do": "walkTo",
+      "path": [
+        {
+          "jetty": [
+            21.6,
+            0
+          ]
+        }
+      ],
+      "pace": "jog"
+    },
+    {
+      "at": 8.3,
+      "do": "board",
+      "pace": "jog"
+    },
+    {
+      "at": 12.4,
+      "do": "boatAt",
+      "spot": {
+        "walk": [
+          2050,
+          128
+        ]
+      },
+      "face": "lake"
+    },
+    {
+      "at": 12.4,
+      "do": "rowers",
+      "which": "eight",
+      "near": {
+        "walk": [
+          2050,
+          104
+        ]
+      },
+      "lead": 45
+    },
+    {
+      "at": 12.45,
+      "do": "pedal",
+      "path": [
+        {
+          "walk": [
+            2045,
+            190
+          ]
+        }
+      ],
+      "tol": 4
+    },
+    {
+      "at": 18.0,
+      "do": "boatAt",
+      "spot": {
+        "freeBerth": 9
+      },
+      "face": "berth"
+    },
+    {
+      "at": 18.05,
+      "do": "dock"
+    },
+    {
+      "at": 21.4,
+      "do": "place",
+      "s": 2395.3,
+      "d": 7.4,
+      "face": "city"
+    },
+    {
+      "at": 21.45,
+      "do": "walkTo",
+      "path": [
+        {
+          "walk": [
+            2395.3,
+            1.8
+          ]
+        },
+        {
+          "walk": [
+            2378,
+            -1.2
+          ]
+        }
+      ],
+      "pace": "jog",
+      "tol": 0.6
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              2394.2,
+              0.2
+            ],
+            "h": 1.8
+          },
+          "look": {
+            "player": [
+              0,
+              1.2,
+              0
+            ]
+          }
+        },
+        {
+          "t": 4.4,
+          "pos": {
+            "walk": [
+              2394.6,
+              0.0
+            ],
+            "h": 1.8
+          },
+          "look": {
+            "player": [
+              0,
+              1.2,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 4.4,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "spot": {
+              "jetty": [
+                12.5,
+                1.2
+              ]
+            },
+            "y": 5.0
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              5
+            ]
+          }
+        },
+        {
+          "t": 6.4,
+          "pos": {
+            "spot": {
+              "jetty": [
+                22,
+                1.6
+              ]
+            },
+            "y": 3.2
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              3
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 10.8,
+      "mode": "rig",
+      "blend": 1.2
+    },
+    {
+      "at": 12.4,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "boat": [
+              0.9,
+              3.2,
+              -6.5
+            ]
+          },
+          "look": {
+            "boat": [
+              0,
+              1.2,
+              6
+            ]
+          }
+        },
+        {
+          "t": 2.2,
+          "pos": {
+            "boat": [
+              5.5,
+              2.8,
+              -1.5
+            ]
+          },
+          "look": {
+            "boat": [
+              0,
+              1.2,
+              1
+            ]
+          }
+        },
+        {
+          "t": 5.6,
+          "pos": {
+            "boat": [
+              3.0,
+              2.6,
+              7.5
+            ]
+          },
+          "look": {
+            "boat": [
+              -1.5,
+              1.4,
+              -40
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 18.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "spot": {
+              "jetty": [
+                33.5,
+                -0.6
+              ]
+            },
+            "y": 3.3
+          },
+          "look": {
+            "boat": [
+              0,
+              0.9,
+              0
+            ]
+          }
+        },
+        {
+          "t": 3.4,
+          "pos": {
+            "spot": {
+              "jetty": [
+                34.5,
+                -0.8
+              ]
+            },
+            "y": 3.1
+          },
+          "look": {
+            "player": [
+              0,
+              1.0,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 21.4,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              2383,
+              -2.6
+            ],
+            "h": 1.7
+          },
+          "look": {
+            "player": [
+              0,
+              1.1,
+              0
+            ]
+          }
+        },
+        {
+          "t": 3.6,
+          "pos": {
+            "walk": [
+              2381,
+              -2.9
+            ],
+            "h": 1.8
+          },
+          "look": {
+            "player": [
+              0,
+              1.2,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": 1.0,
+      "to": 4.2,
+      "text": "tickets at the counter"
+    },
+    {
+      "from": 13.4,
+      "to": 17.6,
+      "text": "the real lake, at real scale"
+    },
+    {
+      "from": 21.6,
+      "to": 24.2,
+      "text": "if you've done boating at Sukhna, you know"
+    }
+  ]
+}
