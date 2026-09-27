@@ -15,7 +15,7 @@ import { OUTFITS } from '../people/body.js';
  *   start / pause card  title, outfit, controls, credits
  *   coordinates (C)     dev readout, off the hint bar
  *
- *   next-morning fade  black, a short card, and back at pre-dawn
+ *   next-morning fade  black, a short card, and back at sunrise
  *
  * H hides the hint bar and both HUD cards together.
  * ------------------------------------------------------------------ */
@@ -57,7 +57,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   // ---------------------------- conditions ----------------------------
   const cond = el('div', 'cond', root);
   cond.innerHTML = `
-    <div class="cond-row"><kbd>T</kbd><b data-c="clock">06:55</b><span data-c="preset">pre-dawn</span></div>
+    <div class="cond-row"><kbd>T</kbd><b data-c="clock">07:19</b><span data-c="preset">sunrise</span></div>
     <div class="cond-row"><kbd>K</kbd><span data-c="weather">Clear</span></div>
     <div class="cond-row"><kbd>M</kbd><span data-c="sound">Sound on</span></div>`;
   const cq = (k) => cond.querySelector(`[data-c="${k}"]`);
@@ -66,7 +66,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
 
   // ---------------------------- next-morning fade ----------------------------
   const fade = el('div', 'fade', root);
-  fade.innerHTML = '<div class="fade-card"><i>Next morning</i><b>06:55</b><span>pre-dawn · 15 January</span></div>';
+  fade.innerHTML = '<div class="fade-card"><i>Next morning</i><b>07:19</b><span>sunrise · 15 January</span></div>';
 
   // ---------------------------- hint bar ----------------------------
   const hint = el('div', 'hintbar', root, HINT);
