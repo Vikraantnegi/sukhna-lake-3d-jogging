@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Sukhna — a 3D sunrise jog around Sukhna Lake, Chandigarh</title>
+<title>Sukhna Lake 3D: a morning jog in Chandigarh, in your browser</title>
 <meta name="description" content="Jog the dam at Sukhna Lake, Chandigarh, in 3D at its real size: the real winter sunrise, boating, rain and fog, the laughter club. Free, in your browser." />
 <link rel="canonical" href="https://sukhna-lake.trymurmur.studio/" />
 <meta name="theme-color" content="#6fa3f5" />
@@ -12,8 +12,8 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <!-- link previews (X, WhatsApp, Slack…): absolute URLs, since X won't resolve relative ones -->
 <meta property="og:type" content="website" />
-<meta property="og:site_name" content="Sukhna" />
-<meta property="og:title" content="Sukhna — a sunrise jog around Sukhna Lake" />
+<meta property="og:site_name" content="Sukhna Lake 3D" />
+<meta property="og:title" content="Sukhna Lake 3D: a morning jog in Chandigarh, in your browser" />
 <meta property="og:description" content="Jog the dam at Sukhna Lake, Chandigarh, at its real shape and scale, as the real winter sun comes up. Free, in your browser." />
 <meta property="og:url" content="https://sukhna-lake.trymurmur.studio/" />
 <meta property="og:image" content="https://sukhna-lake.trymurmur.studio/og-image.jpg" />
@@ -22,7 +22,7 @@
 <meta property="og:image:height" content="630" />
 <meta property="og:image:alt" content="A jogger on the dam promenade at Sukhna Lake at golden hour, the low sun over the water and palms along the walk, in a cel-shaded style." />
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="Sukhna — a sunrise jog around Sukhna Lake" />
+<meta name="twitter:title" content="Sukhna Lake 3D: a morning jog in Chandigarh, in your browser" />
 <meta name="twitter:description" content="Jog the dam at Sukhna Lake, Chandigarh, at its real shape and scale, as the real winter sun comes up. Free, in your browser." />
 <meta name="twitter:image" content="https://sukhna-lake.trymurmur.studio/og-image.jpg" />
 <meta name="twitter:image:alt" content="A jogger on the dam promenade at Sukhna Lake at golden hour, the low sun over the water and palms along the walk, in a cel-shaded style." />
@@ -36,14 +36,15 @@
       "@type": "WebSite",
       "@id": "https://sukhna-lake.trymurmur.studio/#website",
       "url": "https://sukhna-lake.trymurmur.studio/",
-      "name": "Sukhna",
+      "name": "Sukhna Lake 3D",
+      "alternateName": "Sukhna",
       "inLanguage": "en"
     },
     {
       "@type": ["VideoGame", "WebApplication"],
       "@id": "https://sukhna-lake.trymurmur.studio/#game",
-      "name": "Sukhna",
-      "alternateName": "Sukhna — a sunrise jog around Sukhna Lake",
+      "name": "Sukhna Lake 3D",
+      "alternateName": ["Sukhna Lake 3D: a morning jog in Chandigarh, in your browser", "Sukhna"],
       "url": "https://sukhna-lake.trymurmur.studio/",
       "description": "A free 3D game in the browser: a winter-morning jog along the dam at Sukhna Lake, Chandigarh, at the lake's real shape and scale, with the real sunrise, boating, rain and fog, and the laughter club.",
       "image": "https://sukhna-lake.trymurmur.studio/og-image.jpg",
@@ -221,7 +222,7 @@
   .card-art .dam { position: absolute; left: -20%; right: -20%; bottom: 18%; height: 18px; background: #9a978d; border-top: 5px solid #b9b3a4; transform: rotate(-6deg); }
   .card-copy { padding: 28px 30px 22px; display: flex; flex-direction: column; gap: 10px; }
   .kicker { font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: #8a6a4a; }
-  .card h1 { margin: 0; font-size: 46px; line-height: 1; letter-spacing: -.02em; color: #2f3346; }
+  .card .wordmark { margin: 0; font-size: 46px; font-weight: 700; line-height: 1; letter-spacing: -.02em; color: #2f3346; }
   .names { font-size: 17px; color: #5a5f73; }
   .card p { margin: 2px 0; font-size: 13.5px; line-height: 1.6; color: #4a4f60; }
   .pause-only { display: none; }
@@ -257,7 +258,7 @@
     color: #3f4456; font-size: 14.5px; line-height: 1.65;
   }
   .about h2 { margin: 26px 0 8px; font-size: 20px; line-height: 1.25; color: #2f3346; }
-  .about > h2:first-child { margin-top: 0; font-size: 23px; }
+  .about h1 { margin: 0 0 8px; font-size: 24px; line-height: 1.25; color: #2f3346; }
   .about h3 { margin: 18px 0 4px; font-size: 15.5px; color: #2f3346; }
   .about p { margin: 6px 0; }
   .about ul { margin: 6px 0; padding-left: 20px; }
@@ -288,7 +289,7 @@
     .card { grid-template-columns: 1fr; }
     .card-art { min-height: 110px; border-right: 0; border-bottom: 2px solid #2f3346; }
     .card-copy { padding: 18px 18px 16px; }
-    .card h1 { font-size: 36px; }
+    .card .wordmark { font-size: 36px; }
     .about { padding: 20px 18px 16px; font-size: 14px; }
     .jog { min-width: 0; left: 8px; top: 8px; padding: 7px 9px; }
     .jog b { font-size: 14px; }
@@ -308,7 +309,7 @@
         </div>
         <div class="card-copy">
           <div class="kicker"><span class="start-only">A winter sunrise · Chandigarh</span><span class="pause-only">Paused</span></div>
-          <h1 id="card-title">Sukhna</h1>
+          <div class="wordmark" id="card-title">Sukhna</div>
           <div class="names"><span lang="hi">सुखना झील</span> · <span lang="pa">ਸੁਖਨਾ ਝੀਲ</span></div>
           <p class="start-only">A jog along the dam at Sukhna Lake at its real shape and scale, on a mid-January morning: the sun comes up where and when it really does, over the lake and the Shivalik hills.</p>
           <p class="pause-only">The lake is waiting where you left it.</p>
@@ -327,7 +328,7 @@
     </div>
 
     <article id="about" class="about start-only" aria-labelledby="about-title">
-      <h2 id="about-title">A morning jog around Sukhna Lake, in your browser</h2>
+      <h1 id="about-title">Sukhna Lake 3D: a morning jog in Chandigarh, in your browser</h1>
       <p>Sukhna is a free 3D game about one simple pleasure: a winter-morning jog along the dam at Sukhna Lake in Chandigarh. The lake, the 2.5 km promenade and the Shivalik hills behind them are laid out at their real shape and real size, so a length of the dam takes about as long here as it does there. It runs in the browser on a laptop or a phone, with nothing to install.</p>
       <p class="links"><a href="https://youtu.be/h8QdG8cU2Go">Watch the 30-second trailer</a> · <a href="https://github.com/Vikraantnegi/sukhna-lake-3d-jogging">Source code on GitHub</a></p>
 
@@ -348,7 +349,7 @@
       <h2 id="faq">Questions</h2>
       <section class="faq" aria-labelledby="faq">
         <h3>Is this the real Sukhna Lake?</h3>
-        <p>Its shape and size are real: the walk follows the dam's actual curve for its full 2.5 km, the water has the lake's true outline and islands, and the hills sit where they really are. The look is a stylised, hand-drawn-style take rather than a photographic copy, and some details are made up, such as the lamps, the benches, the people and the steps down to the water.</p>
+        <p>Its shape and size are real: the walk follows the dam's actual curve for its full 2.5 km, the water has the lake's true outline and islands, and the hills sit where they really are. The look is a stylised, hand-drawn-style take rather than a photographic copy, and some details are made up, such as the lamps, the benches, the people, and exactly where the steps down to the water are.</p>
         <h3>Does it work on a phone?</h3>
         <p>Yes. On a phone or tablet you get a thumb stick to jog, a drag to look around and buttons for everything else, and the game picks lighter graphics on its own. A recent phone runs it most smoothly; if frames start to drop on a slower device, the game lowers its quality by itself.</p>
         <h3>Is it free? Do I need to install anything?</h3>
@@ -356,7 +357,7 @@
         <h3>How was it made?</h3>
         <p>With three.js and real map data: OpenStreetMap for the dam, the lake and the city, elevation data for the terrain and hills, and a solar calculation for the sunrise. It was built live on stream with Claude Code, and the source code is open on GitHub under the MIT licence.</p>
         <h3>What time of day is it in the game?</h3>
-        <p>A mid-January morning in 2027. The clock starts in the blue half-light at 06:55, the sun comes up at 07:19, and time runs four times faster than real life. Press T, or the T button on a phone, to jump between pre-dawn, sunrise, golden hour, bright morning and sunset.</p>
+        <p>A mid-January morning. The clock starts in the blue half-light at 06:55, the sun comes up at 07:19, and time runs four times faster than real life. Press T, or the T button on a phone, to jump between pre-dawn, sunrise, golden hour, bright morning and sunset.</p>
         <h3>Can I go boating on the lake?</h3>
         <p>Yes, on clear or foggy mornings; the counter closes in the rain. Get a ticket at the shack by the Boating gateway at the west end of the dam, go down the steps to the jetty and press E beside a swan boat to take it out. W and S pedal, A and D steer, and you dock again back at the jetty.</p>
       </section>
