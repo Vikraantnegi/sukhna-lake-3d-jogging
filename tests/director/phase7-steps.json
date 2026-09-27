@@ -1,0 +1,128 @@
+{
+  "name": "phase7-steps",
+  "about": "Rain at sunset: the jogger walks down a water step and sits on the lowest dry one; the camera eases into the seated view as the lo-fi fades in; then a slow pull back and up to the steps, the parapet and the lit lamps.",
+  "seed": 7,
+  "duration": 20,
+  "start": {
+    "time": "sunset",
+    "weather": "rain"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 820,
+      "d": 3.0,
+      "face": "lake"
+    },
+    {
+      "at": 0.4,
+      "do": "sitSteps",
+      "flight": 820
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              827.5,
+              7.0
+            ],
+            "h": 2.3
+          },
+          "look": {
+            "player": [
+              0,
+              0.9,
+              0
+            ]
+          }
+        },
+        {
+          "t": 6.8,
+          "pos": {
+            "walk": [
+              825.5,
+              10.8
+            ],
+            "h": 2.5
+          },
+          "look": {
+            "player": [
+              0,
+              0.7,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 7.0,
+      "mode": "rig",
+      "blend": 2.6
+    },
+    {
+      "at": 14.2,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": "current",
+          "look": "current"
+        },
+        {
+          "t": 2.8,
+          "pos": {
+            "walk": [
+              829,
+              21
+            ],
+            "y": 3.8
+          },
+          "look": {
+            "player": [
+              0,
+              0.8,
+              0
+            ]
+          }
+        },
+        {
+          "t": 5.2,
+          "pos": {
+            "walk": [
+              834,
+              33
+            ],
+            "y": 6.5
+          },
+          "look": {
+            "walk": [
+              818,
+              -2.5
+            ],
+            "h": 2.2
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": 0.6,
+      "to": 4.6,
+      "text": "sound on 🔊"
+    },
+    {
+      "from": 9.6,
+      "to": 13.6,
+      "text": "every sound is generated in code"
+    }
+  ]
+}
