@@ -1,6 +1,7 @@
 /* Structure follows sakura-crossing's src/main.js (renderer setup, the
  * two-light anime rig, the dev `__shot` capture).  Copyright (c) 2026
  * Kenton Wang, MIT License -- see THIRD_PARTY_LICENSES.md. */
+import { track, deviceType, heartbeat } from './core/analytics.js';
 import * as THREE from 'three';
 import { PAL } from './core/palette.js';
 import { Pipeline } from './core/post.js';
@@ -23,6 +24,7 @@ import { createSound } from './core/sound.js';
 import { Q, TIERS, lower } from './core/quality.js';
 import { createBoat } from './core/boat.js';
 import { mulberry32 } from './core/util.js';
+import { OUTFITS } from './people/body.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -47,7 +49,16 @@ if (DIRECTOR) Math.random = mulberry32(+(params.get('seed') || 2027));
 const canvas = document.getElementById('view');
 const TOUCH = isTouch();
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
+} catch (err) {
+  // no WebGL: say so on the (static) start card instead of leaving it on "Loading"
+  track('webgl_unavailable', { device_type: deviceType(TOUCH) });
+  const go = document.querySelector('.overlay .go');
+  if (go) go.textContent = "This browser can't show 3D (WebGL is off or unsupported)";
+  throw err;
+}
 renderer.setPixelRatio(1);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.NoToneMapping;
@@ -124,9 +135,13 @@ const actions = {
     if (interact.state === 'boat' || interact.state === 'group') { hud.flash(interact.state === 'boat' ? 'no auto-jog in a boat' : 'leave the group first'); return; }
     const on = jogger.toggleAuto(); hud.flash(on ? 'auto-jog on' : 'auto-jog off');
   },
-  T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); },
-  K: () => { const w = weather.cycle(); hud.setWeather(w); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); },
-  P: () => { rig.setOverview(rig.mode !== 'overview'); hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam'); },
+  T: () => { const p = tod.next(); hud.flash(`${tod.clock()} · ${p.label}`); track('time_preset_changed', { preset: p.key }); },
+  K: () => { const w = weather.cycle(); hud.setWeather(w); hud.flash(w === 'clear' ? 'clear skies' : w === 'rain' ? 'rain' : 'winter fog'); track('weather_changed', { weather: w }); },
+  P: () => {
+    rig.setOverview(rig.mode !== 'overview');
+    hud.flash(rig.mode === 'overview' ? 'overview · P to return' : 'back on the dam');
+    if (rig.mode === 'overview') track('overview_opened');
+  },
   M: () => { const on = sound.toggle(); hud.flash(on ? 'sound on' : 'sound off'); },
   H: () => hud.toggleHidden(),
 };
@@ -179,7 +194,9 @@ canvas.addEventListener('pointercancel', () => { dragging = false; });
 canvas.addEventListener('pointermove', (e) => { if (dragging && !locked() && !TOUCH) rig.look(e.movementX * 0.0035, e.movementY * 0.0035); });
 window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
 hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setItem('sukhna-outfit', String(i)); } catch { /* optional */ } };
+let startedOnce = false;
 hud.onStart = () => {
+  if (!startedOnce) { startedOnce = true; track('game_started', { outfit: OUTFITS[outfit]?.name, quality_tier: tier, device_type: DEVICE }); }
   if (sound.enabled) sound.start();
   if (!TOUCH) lockPointer();
   world.onStart?.();
@@ -266,6 +283,7 @@ function watchFrameTime(raw) {
   slow = 0; settle = 10;
   const next = lower(tier);
   if (!next) return;
+  track('quality_fallback', { from: tier, to: next, device_type: DEVICE });
   tier = next;
   const T = TIERS[tier];
   pipeline.pixelBudget = T.pixelBudget;
@@ -278,6 +296,31 @@ function watchFrameTime(raw) {
   hud.flash(`quality: ${tier} (frames were slow)`, 2600);
   console.info(`[quality] fell back to ${tier}`);
 }
+
+/* ------------------------------ usage stats ------------------------------ */
+// Anonymous and cookieless (core/analytics.js, production only).  The moments worth
+// counting are read off the game's own state once a frame, so no module has to know
+// that anyone is counting.
+const DEVICE = deviceType(TOUCH);
+const seen = { state: null, ticket: false, lengths: 0, ride: null };
+function countMoments() {
+  const s = interact.state;
+  if (s !== seen.state) {
+    if (seen.state === 'boat' && seen.ride?.docking) track('boat_docked', { ride_seconds: Math.round(seen.ride.time), ride_metres: Math.round(seen.ride.distance) });
+    if (s === 'steps') track('sat_on_steps');
+    else if (s === 'bench') track('sat_on_bench');
+    else if (s === 'group') track('joined_group', { group: interact.group?.kind === 'laugh' ? 'laughter_club' : 'chat' });
+    else if (s === 'chai') track('chai');
+    else if (s === 'boat') track('boat_boarded');
+    seen.state = s;
+    seen.ride = null;
+  }
+  if (s === 'boat') seen.ride = { time: boat.state.time, distance: boat.state.distance, docking: boat.phase === 'docking' || !!seen.ride?.docking };
+  if (interact.ticket && !seen.ticket) track('boat_ticket');
+  seen.ticket = interact.ticket;
+  if (jogger.lengths > seen.lengths) { seen.lengths = jogger.lengths; track('length_completed', { lengths: jogger.lengths, run_seconds: Math.round(jogger.elapsed) }); }
+}
+heartbeat(() => hud.started && !hud.paused, () => ({ quality_tier: tier, device_type: DEVICE }));
 
 /* --------------------------------- loop --------------------------------- */
 const clock = new THREE.Clock();
@@ -296,6 +339,7 @@ function tick(dt) {
   rig.update(dt, jogger, { bench: interact.benchView() });
   cameraHook?.(dt);
   if (playing) interact.update(dt); else hud.setPrompt('');
+  if (playing) countMoments();
   sound.update(dt, camera, playing);
   placeLights();
   hud.setRun(jogger, boat.active ? boat : null);

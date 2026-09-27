@@ -1,5 +1,7 @@
 # Sukhna
 
+**Play it: [sukhna-lake.trymurmur.studio](https://sukhna-lake.trymurmur.studio)** · [trailer](https://youtu.be/h8QdG8cU2Go)
+
 A winter-morning jog along the dam at **Sukhna Lake, Chandigarh**, built with
 three.js in a cel-shaded anime style.
 

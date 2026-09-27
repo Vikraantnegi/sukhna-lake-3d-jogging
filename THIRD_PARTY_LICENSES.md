@@ -69,6 +69,17 @@ https://github.com/tilezen/joerd/blob/master/docs/attribution.md
 
 Raw tiles are kept in `scripts/sukhna/raw/terrarium/` (z11, z12, z13).
 
+## PostHog loader snippet — Apache 2.0
+
+`src/core/analytics.js` contains PostHog's documented JavaScript loader snippet
+(https://posthog.com/docs/libraries/js), from **posthog-js**,
+https://github.com/PostHog/posthog-js, Copyright 2020 Posthog / Hiberly, Inc.,
+licensed under the Apache License, Version 2.0
+(https://www.apache.org/licenses/LICENSE-2.0). The snippet only defines a small
+queue and adds a `<script>` tag; the PostHog library itself is loaded from
+PostHog's servers at run time in production and is not part of this repository
+or its build.
+
 ## Sound and music
 
 **No recordings ship with this project.** Every sound is synthesised at run

@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A sunrise jog around Sukhna Lake, Chandigarh, at its real shape and scale (three.js, cel-shaded).",
+  "homepage": "https://sukhna-lake.trymurmur.studio",
   "license": "MIT",
   "engines": {
     "node": ">=18"
