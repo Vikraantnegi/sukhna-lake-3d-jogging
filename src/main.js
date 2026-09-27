@@ -36,7 +36,7 @@ import { OUTFITS } from './people/body.js';
  * (0.5 m - 1.2 km) draws everything close over a cleared depth buffer.
  *
  * Time of day (core/tod.js) runs the real sun on 15 Jan 2027 at 4x from
- * 06:55; its look (sky, lights, haze, grade, water, mist) is pushed to the
+ * sunrise (07:19); its look (sky, lights, haze, grade, water, mist) is pushed to the
  * scene whenever it changes.  Weather (core/weather.js) folds in on top.
  * ------------------------------------------------------------------ */
 
@@ -90,10 +90,11 @@ const hemi = new THREE.HemisphereLight(PAL.hemiSky, PAL.hemiGround, 1.12);
 for (const l of [sun, fill, bounce, hemi]) { l.layers.enableAll(); scene.add(l); }
 scene.add(sun.target, fill.target, bounce.target);
 
-// the clock: opens at civil dawn (plan §0); ?t=predawn|sunrise|golden|bright overrides
+// the clock: opens at sunrise, 07:19 (the user's call; it was civil dawn, 06:55, in plan §0);
+// ?t=predawn|sunrise|golden|bright|sunset overrides
 // the four morning presets plus the real sunset (17:45 on 15 Jan)
 const PRESET_HOURS = { ...data.sun.presets, sunset: data.sun.sunset };
-const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'predawn' });
+const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'sunrise' });
 const weather = createWeather(scene, { drops: Q.rain });
 if (['rain', 'fog'].includes(params.get('w'))) weather.set(params.get('w'), true);
 
@@ -238,10 +239,10 @@ function updateTime(dt, running) {
   tod.state.running = running && !looping;
   weather.update(dt, camera.position);
   // the loop (plan: Decisions): past the morning window, or half an hour after sunset,
-  // fade to black and start the next morning at pre-dawn
+  // fade to black and start the next morning at sunrise, as the game does
   if (running && !looping && tod.pastWindow(SUNSET)) {
     looping = true;
-    hud.nextMorning(() => { tod.set('predawn'); hud.flash('06:55 · pre-dawn'); }, () => { looping = false; });
+    hud.nextMorning(() => { tod.set('sunrise'); hud.flash(`${tod.clock()} · sunrise`); }, () => { looping = false; });
   }
   if (tod.update(dt, weather.state)) {
     applyLook(tod.look, tod.state, LOOK_TARGETS);

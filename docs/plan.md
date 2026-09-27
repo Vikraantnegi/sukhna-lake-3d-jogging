@@ -24,7 +24,8 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | Launch polish: link previews, favicon, production and phone checks | **done**, merged (PR #6) | `launch-polish` (from `main`) | "Launch polish: link previews, favicon, touch controls off the start card" |
 | Director mode: scripted shots recorded as video | **done**, 7 videos | `director` (from `main` after PR #5) | "Director mode: scripted cinematic shots, recorded as video" |
 | Director style: no end card, Nunito captions | **done**, merged (PR #7); the seven videos re-rendered since | `director` | "Director: drop the end card, Nunito captions with a soft gradient on bright frames" |
-| SEO: page text, FAQ, structured data, custom domain, PostHog | **done** (awaiting merge) | `seo` (from `main` after PRs #6 and #7) | "SEO: About and FAQ in the page, structured data, custom domain, cookieless PostHog" |
+| SEO: page text, FAQ, structured data, custom domain, PostHog | **done**, merged (PR #8) | `seo` (from `main` after PRs #6 and #7) | "SEO: About and FAQ in the page, structured data, custom domain, cookieless PostHog" |
+| Sunrise as the default start | **done** | `default-sunrise` (from `main` after PR #8) | "Open at sunrise (07:19) instead of pre-dawn" |
 
 **Polish notes from the user's review (after Phase 4), folded into Phase 5:**
 - [x] The parapet zigzags at curves: now one continuous swept mesh along the curve (1 m steps, cobble texture every 2 m), capped at the water steps (`parapetGeometry` in `world/dam.js`).
@@ -200,6 +201,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Groups: circles are data in the crowd** (`crowd.circles`, `joinCircle` / `leaveCircle`); the laughter club laughs on one clock (`crowd.laughBurst`), which the player's pose and sound share. Yoga stays a 5 s join (a class facing a teacher is not a circle).
 - **Groups: Esc with the pointer locked** arrives as the lock's release: in a circle that leaves the circle (the game goes on, a click locks the mouse again) instead of pausing.
 - **Re-plan: the promenade direction.** Arc length s runs from the east end (s = 0, Garden of Silence / regulator footbridge) to the west end (s = 2 494.9 m, boat club / entrance plaza). This is only a labelling choice now; nothing is mirrored in a flat world.
+- **The day opens at sunrise** (user, after the SEO pass): the game starts at the sunrise preset, 07:19, not at civil dawn (06:55, the plan's §0 default), and the next-morning loop comes back at sunrise too. Pre-dawn is still one T press away (T cycles sunrise → golden hour → bright morning → sunset → pre-dawn), and `?t=predawn` still opens there. The HUD's placeholder clock, the next-morning card, the page's About and FAQ text and the README say so. The director's shot lists set their own time, so the videos are unaffected.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
 
