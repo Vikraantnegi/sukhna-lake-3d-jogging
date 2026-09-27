@@ -75,27 +75,16 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   const coords = el('div', 'coords', root, '');
 
   // ---------------------------- start / pause card ----------------------------
-  const overlay = el('div', 'overlay', root);
-  overlay.dataset.mode = 'start';
-  overlay.innerHTML = `
-    <section class="card" role="dialog" aria-labelledby="card-title">
-      <div class="card-art" aria-hidden="true">
-        <div class="sun"></div><div class="ridge r1"></div><div class="ridge r2"></div><div class="water"></div><div class="dam"></div>
-      </div>
-      <div class="card-copy">
-        <div class="kicker"><span class="start-only">A winter sunrise · Chandigarh</span><span class="pause-only">Paused</span></div>
-        <h1 id="card-title">Sukhna</h1>
-        <div class="names"><span lang="hi">सुखना झील</span> · <span lang="pa">ਸੁਖਨਾ ਝੀਲ</span></div>
-        <p class="start-only">A jog along the dam at Sukhna Lake at its real shape and scale, on a mid-January morning: the sun comes up where and when it really does, over the lake and the Shivalik hills.</p>
-        <p class="pause-only">The lake is waiting where you left it.</p>
-        <div class="outfits" role="radiogroup" aria-label="Outfit">
-          ${OUTFITS.map((o, i) => `<button type="button" role="radio" data-outfit="${i}" aria-checked="${i === outfit}"><span style="background:${hex(o.row.top)}"></span><span style="background:${hex(o.row.bottom)}"></span>${o.row.headwear === 'patka' ? `<span style="background:${hex(o.row.headwearColor)}"></span>` : ''}<em>${o.name}</em></button>`).join('')}
-        </div>
-        <div class="controls">${touch ? 'Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H' : 'WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · H hide · Esc pause'}</div>
-        <button type="button" class="go">${touch ? 'Tap to start' : 'Start jogging'}</button>
-        <div class="credits">Map data © OpenStreetMap contributors (ODbL) · terrain: Mapzen / AWS Terrain Tiles · engine after sakura-crossing (MIT)</div>
-      </div>
-    </section>`;
+  // The card is plain HTML in index.html, with the About text and FAQ under it, so it shows
+  // (and crawlers read it) before any script runs.  Here it is moved into the HUD, given the
+  // outfits and the controls for this device, and its button is enabled.
+  const overlay = document.querySelector('.overlay');
+  root.appendChild(overlay);
+  overlay.querySelector('.outfits').innerHTML = OUTFITS.map((o, i) => `<button type="button" role="radio" data-outfit="${i}" aria-checked="${i === outfit}"><span style="background:${hex(o.row.top)}"></span><span style="background:${hex(o.row.bottom)}"></span>${o.row.headwear === 'patka' ? `<span style="background:${hex(o.row.headwearColor)}"></span>` : ''}<em>${o.name.replace('&', '&amp;')}</em></button>`).join('');
+  overlay.querySelector('.controls').textContent = touch ? 'Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H' : 'WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · H hide · Esc pause';
+  const go = overlay.querySelector('.go');
+  go.textContent = touch ? 'Tap to start' : 'Start jogging';
+  go.disabled = false;
 
   const api = {
     onStart: null,
@@ -170,6 +159,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
       if (!api.started) return;
       api.paused = paused;
       overlay.dataset.mode = 'paused';
+      overlay.scrollTop = 0; // (the pause card has no About text under it)
       overlay.classList.toggle('hidden', !paused);
     },
     hideCard() { overlay.classList.add('hidden'); },
@@ -181,7 +171,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
     b.setAttribute('aria-checked', 'true');
     api.onOutfit?.(+b.dataset.outfit);
   }));
-  overlay.querySelector('.go').addEventListener('click', (e) => {
+  go.addEventListener('click', (e) => {
     e.stopPropagation();
     api.started = true;
     api.paused = false;

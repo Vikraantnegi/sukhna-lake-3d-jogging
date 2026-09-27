@@ -95,12 +95,32 @@ function recordings(outDir) {
   };
 }
 
+/**
+ * The FAQ's structured data (schema.org FAQPage), made from the FAQ in index.html itself
+ * -- each <h3> question and the <p> after it -- so the two can never say different things.
+ */
+function faqSchema() {
+  const text = (s) => s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
+  return {
+    name: 'faq-schema',
+    transformIndexHtml(html) {
+      const faq = html.match(/<section class="faq"[^>]*>([\s\S]*?)<\/section>/);
+      if (!faq) throw new Error('faq-schema: no <section class="faq"> in index.html');
+      const qa = [...faq[1].matchAll(/<h3>([\s\S]*?)<\/h3>\s*<p>([\s\S]*?)<\/p>/g)].map(([, q, a]) => ({
+        '@type': 'Question', name: text(q), acceptedAnswer: { '@type': 'Answer', text: text(a) },
+      }));
+      const ld = { '@context': 'https://schema.org', '@type': 'FAQPage', '@id': 'https://sukhna-lake.trymurmur.studio/#faq', mainEntity: qa };
+      return html.replace('</head>', `<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>\n</head>`);
+    },
+  };
+}
+
 const SHOT_DIR = path.resolve(process.cwd(), '.shots');
 
 export default defineConfig({
   /* Relative asset URLs, so a build runs from any subdirectory. */
   base: './',
-  plugins: [frameGrabber(SHOT_DIR), localTracks(path.resolve(process.cwd(), 'public', 'audio')), recordings(path.resolve(process.cwd(), 'recordings'))],
+  plugins: [faqSchema(), frameGrabber(SHOT_DIR), localTracks(path.resolve(process.cwd(), 'public', 'audio')), recordings(path.resolve(process.cwd(), 'recordings'))],
   server: {
     port: 5178,
     strictPort: true,
