@@ -9,13 +9,15 @@ node tests/director/record.mjs trailer-30s                    # record one (or s
 node tests/director/record.mjs --all                          # every *.json here
 node tests/director/record.mjs full-tour --preview 10,40,90   # stills at those seconds, no video
 node tests/director/record.mjs boating --size 1080            # 1920 x 1080 instead of 2560 x 1440
+node tests/director/record.mjs trailer-30s --portrait         # 1080 x 1920 (<name>-portrait.mp4); a list with "portrait": true always is
 node tests/director/record.mjs --phase1                       # re-record the Phase 1 clip before-after plays
 ```
 
 To watch one play in the browser: `http://127.0.0.1:5178/?director=phase7-steps&q=high&seed=7`
 (it plays once; add `&record=1` to record from there).
 
-Videos go to `recordings/` (git-ignored): `<name>.mp4` and a report, `<name>.json`.
+Videos go to `recordings/` (git-ignored): `<name>.mp4` (the master), `<name>-delivery.mp4` (a
+smaller copy for posting) and a report, `<name>.json`.
 
 ## How a video is made
 
@@ -31,10 +33,16 @@ Videos go to `recordings/` (git-ignored): `<name>.mp4` and a report, `<name>.jso
   refills the trees and the crowd), the steps it owes are each still drawn and recorded. The
   WebAudio master output is recorded next to it by MediaRecorder as AAC.
 - **One MP4.** `record.mjs` writes the two into one MP4 with its index at the front (the
-  `+faststart` layout), ready to upload to X. No ffmpeg needed.
+  `+faststart` layout), ready to upload to X.
+- **Loudness and a delivery copy** (with ffmpeg, `winget install Gyan.FFmpeg`): the master's
+  audio is normalised to **-14 LUFS** integrated, true peak -1.5 dBTP, LRA 11 (`loudnorm`, two
+  passes, the picture copied untouched; the game's mix alone sits around -20 to -30 LUFS), and
+  `<name>-delivery.mp4` is the same picture re-encoded at 10-12 Mbit/s (x264 High, yuv420p) with
+  the normalised audio. Without ffmpeg both are skipped and the report says so.
 - **Checked.** `record.mjs` reads the file's own sample table back: the frame count against the
   list's length, every frame's duration (a gap is a dropped frame, a short one a doubled frame),
-  the resolution, and the audio's length.
+  the resolution, and the audio's length; the delivery copy is checked the same way, and the
+  table gives the loudness before and after.
 
 Why not `canvas.captureStream(60)` into MediaRecorder (the first plan)? On this machine
 (Chrome 154, a 240 Hz display) it lost 1-5 % of the frames, one in about every 101, at 1440p
@@ -56,14 +64,36 @@ and at 1080p alike, however the frames were fed to it. It is still there as a fa
   "shots":  [ { "at": 0, "mode": "keys", "keys": [ ... ] } ],
   "captions": [ { "from": 0.5, "to": 4, "text": "a caption" } ],
   "endCard": { "at": 13, "text": "…" },   // optional; no list uses one now
-  "clip": { "frames": "/recordings/phase1-orbit.video", "from": 0.5, "until": 4 }   // optional: show recorded frames first
+  "clip": { "frames": "/recordings/phase1-orbit.video", "from": 0.5, "until": 4 },  // optional: show recorded frames first
+  "portrait": false,                       // true: always 1080 x 1920 (the vertical-* lists)
+  "portraitFov": 68,                       // the camera's vertical field of view in portrait (the game's is 55)
+  "captionY": 0.17                         // optional: where captions sit, as a fraction of the height
 }
 ```
+
+### Portrait (Shorts, Reels, TikTok)
+
+`--portrait` (or `"portrait": true` in a list) renders 1080 x 1920. A tall frame at the game's
+55 degrees is only ~32 degrees across, so the camera opens up to `portraitFov` (68); a shot may set
+its own `"fov"`, eased across a blend. Any shot, caption or event can carry a `"portrait": { ... }`
+block whose fields replace its own in portrait, so a landscape list can give a shot its own tall
+framing instead of a crop:
+
+```jsonc
+{ "at": 8, "mode": "keys", "keys": [ ... ], "portrait": { "keys": [ ... ], "fov": 72 } }
+```
+
+The apps draw their buttons and text over the bottom ~20 % and the right-hand ~15 % of a tall
+frame, so captions stay in the rest: centred in the left 85 %, wrapped to 74 % of the width
+(two lines break where they come out most even), 6.2 % of the width tall, at 0.73 of the height by
+default or wherever `captionY` / a caption's own `"y"` puts them (the vertical lists use 0.17, the
+sky, clear of the subject). A line that can't break (a web address) shrinks to fit. Frame the
+subject in the upper two thirds; the preview stills (`--preview`) come out full-frame at 720 x 1280.
 
 ### Captions
 
 Nunito Bold (OFL; `fonts/Nunito.ttf` with its licence), warm white, centred at 83 % of the
-frame's height, 5.2 % of it tall: sized for a phone in the X feed (a 16:9 video there is ~390 px
+frame's height (landscape; see Portrait above), 5.2 % of it tall: sized for a phone in the X feed (a 16:9 video there is ~390 px
 wide) and clear of the feed's controls along the bottom. Each fades in and out over 0.35 s. When
 the frame behind a caption is bright (fog, pale water, sky), a very soft dark gradient fades in
 behind the text, with no edge and no plate: every 4th step the director reads that patch back
@@ -79,7 +109,7 @@ it never reaches `dist/`.
 | `timeLapse` | `to` (hours), `over` (s), `ease` | run the clock to a time |
 | `weather` | `value`, `instant` | clear / rain / fog (eased over ~3 s unless `instant`) |
 | `key` | `key` (E V T K P M H Esc) | press a key |
-| `place` | `s`, `d`, `face` or `spot` | put the jogger somewhere (`face`: lake / city / west / east / azimuth) |
+| `place` | `s`, `d`, `face` or `spot`, `speed` | put the jogger somewhere (`face`: lake / city / west / east / azimuth; `speed`: already moving, m/s, so a video can open mid-stride) |
 | `walkTo` | `to` or `path` (spots), `pace` (walk / jog) | walk there with W |
 | `auto` / `hold` / `release` | `keys` | auto-jog; hold or let go of keys |
 | `sitSteps` | `flight` (its s) | walk down that flight and sit on the lowest dry step |

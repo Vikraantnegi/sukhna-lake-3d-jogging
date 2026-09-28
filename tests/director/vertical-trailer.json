@@ -1,0 +1,412 @@
+{
+  "name": "vertical-trailer",
+  "about": "The trailer's beats in portrait (1080 x 1920) for Shorts, Reels and TikTok. The first frame is the hook: the jogger running the dam at golden hour, the low sun ahead over the lake, 'I rebuilt Sukhna Lake in 3D' already on screen. Then the real sunrise from the parapet, the laughter club with the jogger running past ('Good morning!'), a swan boat heading out, rain on the water steps with the lo-fi, and a pull back up the steps as the rain clears to gold, ending on the site's address.",
+  "portrait": true,
+  "seed": 5,
+  "duration": 26.2,
+  "captionY": 0.17,
+  "start": {
+    "time": "golden",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 2262,
+      "d": -1.2,
+      "face": "east"
+    },
+    {
+      "at": 0,
+      "do": "auto"
+    },
+    {
+      "at": 3.6,
+      "do": "time",
+      "value": "sunrise"
+    },
+    {
+      "at": 3.6,
+      "do": "place",
+      "s": 2262,
+      "d": 2.2,
+      "face": 112
+    },
+    {
+      "at": 3.65,
+      "do": "timeLapse",
+      "to": 7.5,
+      "over": 2.4
+    },
+    {
+      "at": 7.6,
+      "do": "place",
+      "s": 1938,
+      "d": -1.2,
+      "face": "west"
+    },
+    {
+      "at": 7.62,
+      "do": "auto"
+    },
+    {
+      "at": 9.4,
+      "do": "say",
+      "who": "player",
+      "text": "Good morning!",
+      "secs": 2.0
+    },
+    {
+      "at": 11.8,
+      "do": "time",
+      "value": "golden"
+    },
+    {
+      "at": 11.8,
+      "do": "boatAt",
+      "spot": {
+        "walk": [
+          1310,
+          70
+        ]
+      },
+      "face": "lake"
+    },
+    {
+      "at": 11.85,
+      "do": "pedal",
+      "path": [
+        {
+          "walk": [
+            1330,
+            150
+          ]
+        }
+      ],
+      "tol": 4
+    },
+    {
+      "at": 15.8,
+      "do": "place",
+      "face": "lake",
+      "spot": {
+        "flight": 1480,
+        "at": "seat",
+        "back": 3.2
+      },
+      "s": 1480
+    },
+    {
+      "at": 15.8,
+      "do": "key",
+      "key": "K"
+    },
+    {
+      "at": 16.0,
+      "do": "sitSteps",
+      "flight": 1480
+    },
+    {
+      "at": 19.5,
+      "do": "weather",
+      "value": "clear"
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              0.6,
+              2.4,
+              -4.6
+            ]
+          },
+          "look": {
+            "player": [
+              -0.3,
+              -0.6,
+              10
+            ]
+          }
+        },
+        {
+          "t": 3.6,
+          "pos": {
+            "player": [
+              0.8,
+              2.6,
+              -5.0
+            ]
+          },
+          "look": {
+            "player": [
+              -0.4,
+              -0.5,
+              10
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 3.6,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              0.6,
+              2.1,
+              -8.0
+            ]
+          },
+          "look": {
+            "player": [
+              0.6,
+              1.4,
+              40
+            ]
+          }
+        },
+        {
+          "t": 4.0,
+          "pos": {
+            "player": [
+              0.7,
+              2.3,
+              -8.8
+            ]
+          },
+          "look": {
+            "player": [
+              0.7,
+              1.5,
+              40
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 7.6,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": [
+            -514.4,
+            8.1,
+            476.2
+          ],
+          "look": [
+            -481.0,
+            6.2,
+            494.0
+          ]
+        },
+        {
+          "t": 4.2,
+          "pos": [
+            -513.8,
+            8.3,
+            477.6
+          ],
+          "look": [
+            -479.5,
+            6.2,
+            495.3
+          ]
+        }
+      ]
+    },
+    {
+      "at": 11.8,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "boat": [
+              0.5,
+              2.5,
+              4.6
+            ]
+          },
+          "look": {
+            "boat": [
+              0,
+              -1.0,
+              -6
+            ]
+          }
+        },
+        {
+          "t": 4.0,
+          "pos": {
+            "boat": [
+              0.7,
+              2.7,
+              4.3
+            ]
+          },
+          "look": {
+            "boat": [
+              0,
+              -1.0,
+              -6
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 15.8,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              1483.5,
+              8.0
+            ],
+            "h": 2.0
+          },
+          "look": {
+            "player": [
+              0,
+              0.2,
+              0
+            ]
+          }
+        },
+        {
+          "t": 2.6,
+          "pos": {
+            "walk": [
+              1483.0,
+              9.6
+            ],
+            "h": 2.1
+          },
+          "look": {
+            "player": [
+              0,
+              0.1,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 18.4,
+      "mode": "keys",
+      "blend": 1.6,
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              0.3,
+              1.9,
+              -2.8
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              -1.2,
+              9
+            ]
+          }
+        },
+        {
+          "t": 3.2,
+          "pos": {
+            "player": [
+              0.3,
+              2.0,
+              -3.1
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              -1.2,
+              9
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 21.6,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": "current",
+          "look": "current"
+        },
+        {
+          "t": 2.8,
+          "pos": {
+            "player": [
+              0.6,
+              5.5,
+              -7.5
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              -2.5,
+              14
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": -0.35,
+      "to": 3.3,
+      "text": "I rebuilt Sukhna Lake in 3D"
+    },
+    {
+      "from": 4.2,
+      "to": 7.3,
+      "text": "the real winter sunrise, 07:19"
+    },
+    {
+      "from": 8.2,
+      "to": 11.4,
+      "text": "200 people on the dam"
+    },
+    {
+      "from": 21.8,
+      "to": 23.8,
+      "text": "built live on stream"
+    },
+    {
+      "from": 22.4,
+      "to": 23.8,
+      "text": "runs in your browser",
+      "y": 0.218
+    },
+    {
+      "from": 24.0,
+      "to": 26.5,
+      "text": "sukhna-lake.trymurmur.studio"
+    }
+  ]
+}

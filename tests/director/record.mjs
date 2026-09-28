@@ -4,6 +4,7 @@
 //   node tests/director/record.mjs --all                     # every shot list
 //   node tests/director/record.mjs trailer-30s --preview 2,9,16   # stills at those seconds, no video
 //   node tests/director/record.mjs full-tour --size 1080     # 1920 x 1080 instead of 2560 x 1440
+//   node tests/director/record.mjs trailer-30s --portrait    # 1080 x 1920 (a list with "portrait": true always is)
 //
 // Chrome runs headed on the real GPU (as the playtest does), plays the list at a fixed
 // 1/60 s step, and the page records itself (captureStream(60) + the WebAudio output ->
@@ -17,7 +18,7 @@
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, execSync } from 'node:child_process';
+import { spawn, spawnSync, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -32,7 +33,7 @@ const flags = new Set(argv.filter((a) => a.startsWith('--')));
 const preview = opt('--preview');
 let names = argv.filter((a, i) => !a.startsWith('--') && !['--preview', '--size', '--capture'].includes(argv[i - 1]));
 if (flags.has('--all')) names = fs.readdirSync(HERE).filter((f) => f.endsWith('.json')).map((f) => f.replace(/\.json$/, ''));
-if (!names.length && !flags.has('--phase1')) { console.log('usage: node tests/director/record.mjs <name...> | --all [--preview 2,5] [--size 1080]'); process.exit(1); }
+if (!names.length && !flags.has('--phase1')) { console.log('usage: node tests/director/record.mjs <name...> | --all [--preview 2,5] [--size 1080] [--portrait]'); process.exit(1); }
 
 const ARGS = ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--autoplay-policy=no-user-gesture-required',
   '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'];
@@ -269,11 +270,65 @@ async function recordPhase1(browser, size) {
   }
 }
 
+/* ------------------------------ loudness and a delivery copy (ffmpeg) ------------------------------ */
+
+// Every render ships at -14 LUFS integrated, true peak <= -1.5 dBTP (loudnorm, two passes, the
+// picture copied untouched), and gets a smaller delivery copy (<tag>-delivery.mp4, H.264 at
+// 10-12 Mbit/s) beside the master.  Both need ffmpeg (winget install Gyan.FFmpeg); without it the
+// report says so and the master is left as recorded.
+const FFMPEG = (() => {
+  for (const exe of ['ffmpeg', path.join(process.env.LOCALAPPDATA || '', 'Microsoft', 'WinGet', 'Links', 'ffmpeg.exe')]) {
+    try { if (spawnSync(exe, ['-hide_banner', '-version'], { encoding: 'utf8' }).status === 0) return exe; } catch { /* not this one */ }
+  }
+  return null;
+})();
+const LOUD = { I: -14, TP: -1.5, LRA: 11 };
+const ff = (args) => {
+  const r = spawnSync(FFMPEG, ['-hide_banner', '-nostdin', ...args], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  if (r.status !== 0) throw new Error(`ffmpeg ${args.join(' ')}\n${(r.stderr || '').slice(-1500)}`);
+  return r.stderr;
+};
+/** loudnorm's measurement of a file's audio (integrated loudness, true peak, range, threshold). */
+function measureLoudness(file) {
+  const err = ff(['-i', file, '-vn', '-af', `loudnorm=I=${LOUD.I}:TP=${LOUD.TP}:LRA=${LOUD.LRA}:print_format=json`, '-f', 'null', '-']);
+  const j = JSON.parse(err.slice(err.lastIndexOf('{'), err.lastIndexOf('}') + 1));
+  return { I: +j.input_i, TP: +j.input_tp, LRA: +j.input_lra, thresh: +j.input_thresh, offset: +j.target_offset };
+}
+/** Put `from` in place of `to`.  (Windows can refuse a rename over a file something still has open,
+ * a virus scan or a preview: then copy over it, retrying for a few seconds.) */
+function replaceFile(from, to) {
+  for (let i = 0; ; i++) {
+    try { fs.renameSync(from, to); return; } catch (e) { if (e.code !== 'EPERM' && e.code !== 'EBUSY') throw e; }
+    try { fs.copyFileSync(from, to); fs.rmSync(from, { force: true }); return; } catch (e) { if (i >= 20) throw e; }
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 250);
+  }
+}
+/** Normalise the master's audio in place: measure, then apply with the measured values (linear when it can be). */
+function normaliseLoudness(file) {
+  const m = measureLoudness(file);
+  const tmp = file.replace(/\.mp4$/, '.loudnorm.mp4');
+  ff(['-y', '-i', file, '-map', '0', '-c:v', 'copy',
+    '-af', `loudnorm=I=${LOUD.I}:TP=${LOUD.TP}:LRA=${LOUD.LRA}:measured_I=${m.I}:measured_TP=${m.TP}:measured_LRA=${m.LRA}:measured_thresh=${m.thresh}:offset=${m.offset}:linear=true:print_format=summary`,
+    '-ar', '48000', '-c:a', 'aac', '-b:a', '256k', '-movflags', '+faststart', tmp]);
+  replaceFile(tmp, file);
+  const after = measureLoudness(file);
+  return { before: { I: m.I, TP: m.TP }, after: { I: after.I, TP: after.TP, LRA: after.LRA } };
+}
+/** The delivery copy: the same picture re-encoded at 10-12 Mbit/s (H.264 High, yuv420p), the normalised audio copied. */
+function deliveryCopy(file) {
+  const out = file.replace(/\.mp4$/, '-delivery.mp4');
+  ff(['-y', '-i', file, '-map', '0', '-c:v', 'libx264', '-preset', 'slow', '-profile:v', 'high', '-pix_fmt', 'yuv420p',
+    '-b:v', '12M', '-maxrate', '13M', '-bufsize', '24M', '-g', '120', '-c:a', 'copy', '-movflags', '+faststart', out]);
+  return out;
+}
+
 /* ------------------------------ one shot list ------------------------------ */
 
 async function run(browser, name, size) {
   const list = JSON.parse(fs.readFileSync(path.join(HERE, `${name}.json`), 'utf8'));
-  const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+  const tall = size[1] > size[0];
+  // (a tall window for a tall video, so preview stills show the whole frame)
+  const page = await browser.newPage({ viewport: tall ? { width: 720, height: 1280 } : { width: 1280, height: 720 } });
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('crash', () => errors.push('the page crashed'));
@@ -281,6 +336,7 @@ async function run(browser, name, size) {
   const q = new URLSearchParams({ director: name, q: 'high', nolock: '', seed: String(list.seed ?? 2027) });
   if (!preview) q.set('record', '1');
   if (size[0] === 1920) q.set('size', '1080');
+  if (tall) q.set('portrait', '1');
   if (flags.has('--noaudio')) q.set('noaudio', '1');
   if (opt('--capture')) q.set('capture', opt('--capture'));
   await page.goto(`${BASE}/?${q}`);
@@ -291,7 +347,7 @@ async function run(browser, name, size) {
   if (preview) {
     for (const at of preview.split(',').map(Number)) {
       await until((a) => window.__director.t >= a || window.__director.state === 'done', at, 300_000);
-      const f = path.join(OUT, 'preview', `${name}-${String(at).replace('.', '_')}s.jpg`);
+      const f = path.join(OUT, 'preview', `${name}${tall && !list.portrait ? '-portrait' : ''}-${String(at).replace('.', '_')}s.jpg`);
       fs.mkdirSync(path.dirname(f), { recursive: true });
       await page.screenshot({ path: f, type: 'jpeg', quality: 85 });
       stills.push(path.relative(ROOT, f));
@@ -311,7 +367,11 @@ async function run(browser, name, size) {
   const report = { name, size, stills, page: st, errors: [...errors, ...(st.errors || [])] };
   if (!preview && st.mode === 'webcodecs') writeMp4(st.file.replace(/\.mp4$/, ''));
   if (!preview && st.file) {
-    report.check = frameCheck(path.join(OUT, st.file));
+    const master = path.join(OUT, st.file);
+    if (FFMPEG && frameCheck(master).audio) {
+      try { report.loudness = normaliseLoudness(master); } catch (e) { report.errors.push(`loudnorm: ${e.message}`); }
+    } else report.loudness = FFMPEG ? 'no audio' : 'skipped: ffmpeg not found';
+    report.check = frameCheck(master);
     // frames the page skipped (a hitch that advanced the game two steps in one frame) are not
     // gaps in the file's timing, but they are missing from the video: count them against the list
     report.check.listFrames = Math.round(list.duration * 60);
@@ -320,8 +380,15 @@ async function run(browser, name, size) {
     // for much longer than the game-time video)
     report.check.avSkew = report.check.audio ? +(report.check.audio.length - report.check.length).toFixed(3) : null;
     report.check.ok = report.check.ok && report.check.skippedFrames <= 2 && (report.check.avSkew === null || Math.abs(report.check.avSkew) < 0.3);
+    if (FFMPEG) {
+      try {
+        const del = deliveryCopy(master);
+        const dc = frameCheck(del);
+        report.delivery = { file: path.basename(del), mbps: +((fs.statSync(del).size * 8) / dc.length / 1e6).toFixed(1), check: dc };
+      } catch (e) { report.errors.push(`delivery copy: ${e.message}`); }
+    }
   }
-  if (!preview) fs.writeFileSync(path.join(OUT, `${name}${size[0] === 1920 ? '-1080' : ''}.json`), JSON.stringify(report, null, 2));
+  if (!preview) fs.writeFileSync(path.join(OUT, `${st.tag || name}.json`), JSON.stringify(report, null, 2));
   return report;
 }
 
@@ -338,7 +405,8 @@ if (flags.has('--phase1')) {
 const rows = [];
 try {
   for (const name of names) {
-    let size = opt('--size') === '1080' ? [1920, 1080] : [2560, 1440];
+    const portrait = flags.has('--portrait') || !!JSON.parse(fs.readFileSync(path.join(HERE, `${name}.json`), 'utf8')).portrait;
+    let size = portrait ? [1080, 1920] : opt('--size') === '1080' ? [1920, 1080] : [2560, 1440];
     if (name === 'before-after' && (flags.has('--fresh') || !fs.existsSync(path.join(OUT, 'phase1-orbit.video.h264')))) {
       const r = await recordPhase1(browser, size);
       console.log(`phase1-orbit: ${r.frames} frames from a ${r.canvas.join('x')} canvas, saved ${r.saved}`);
@@ -360,6 +428,6 @@ try {
   await browser.close();
 }
 if (!preview) {
-  console.log('\n| Video | File | Length | Resolution | Frames | Frame check |\n|---|---|---|---|---|---|');
-  for (const r of rows) { const c = r.check; console.log(`| ${r.name} | recordings/${r.page.file} | ${c.length} s | ${c.width}x${c.height} | ${c.frames} of ${c.listFrames} | ${c.missingFrames || c.doubledFrames ? `${c.missingFrames} dropped, ${c.doubledFrames} doubled` : 'no dropped or doubled frames'}${c.skippedFrames ? `, ${c.skippedFrames} skipped by the page` : ''}${c.avSkew !== null && Math.abs(c.avSkew) >= 0.3 ? `, AUDIO ${c.avSkew} s OFF` : ''}${r.fellBackFrom ? ' (fell back to 1080p)' : ''} |`); }
+  console.log('\n| Video | File | Length | Resolution | Frames | Frame check | Loudness | Delivery copy |\n|---|---|---|---|---|---|---|---|');
+  for (const r of rows) { const c = r.check; console.log(`| ${r.name} | recordings/${r.page.file} | ${c.length} s | ${c.width}x${c.height} | ${c.frames} of ${c.listFrames} | ${c.missingFrames || c.doubledFrames ? `${c.missingFrames} dropped, ${c.doubledFrames} doubled` : 'no dropped or doubled frames'}${c.skippedFrames ? `, ${c.skippedFrames} skipped by the page` : ''}${c.avSkew !== null && Math.abs(c.avSkew) >= 0.3 ? `, AUDIO ${c.avSkew} s OFF` : ''}${r.fellBackFrom ? ' (fell back to 1080p)' : ''} | ${r.loudness?.after ? `${r.loudness.after.I} LUFS, ${r.loudness.after.TP} dBTP (was ${r.loudness.before.I})` : r.loudness || ''} | ${r.delivery ? `recordings/${r.delivery.file}, ${r.delivery.mbps} Mbit/s, ${r.delivery.check.frames} frames${r.delivery.check.missingFrames || r.delivery.check.doubledFrames ? ' (TIMING OFF)' : ''}` : ''} |`); }
 }
