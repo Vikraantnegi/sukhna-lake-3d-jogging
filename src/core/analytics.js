@@ -6,8 +6,9 @@
  *                banner is needed; no session recording, no autocapture,
  *                no surveys, no feature flags
  *   never        in dev, the playtest or the director (all dev-server
- *                runs), in automated browsers, or with Do Not Track /
- *                Global Privacy Control on
+ *                runs), with ?notrack in the URL (the owner's own testing),
+ *                in automated browsers or crawlers and link-preview bots,
+ *                or with Do Not Track / Global Privacy Control on
  *   late         PostHog's script loads when the browser is idle after
  *                the page has loaded, so it never competes with the
  *                game's own download or its world build
@@ -24,9 +25,15 @@
 const KEY = import.meta.env.VITE_POSTHOG_KEY || '';
 const HOST = import.meta.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.com';
 
+// crawlers, link-preview fetchers and headless browsers (most never run the page's scripts,
+// but the ones that do would count as visits)
+const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|facebookcatalog|twitterbot|slackbot|discordbot|whatsapp|telegrambot|linkedinbot|embedly|headlesschrome|phantomjs|lighthouse|pagespeed/i;
 const optedOut = () => {
-  try { return navigator.webdriver || navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl === true; }
-  catch { return true; }
+  try {
+    return new URLSearchParams(location.search).has('notrack') // (this page load only)
+      || navigator.webdriver || (BOT.test(navigator.userAgent || '') && !/cubot/i.test(navigator.userAgent)) // (Cubot: a phone brand)
+      || navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl === true;
+  } catch { return true; }
 };
 const ON = import.meta.env.PROD && !!KEY && !optedOut();
 
