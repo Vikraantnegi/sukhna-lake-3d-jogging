@@ -347,7 +347,8 @@ export function createBoat({ scene, world, collider }) {
         if (v > 0.3 && foamT <= 0) {
           foamT = 0.3 * THREE.MathUtils.clamp(1.5 / v, 0.4, 1);
           const fe = -Math.sin(s.h), fn = Math.cos(s.h);
-          world.rowing?.foam(s.e - fe * 1.7 * Math.sign(s.speed), s.n - fn * 1.7 * Math.sign(s.speed), 0.25 + 0.1 * v);
+          // (small and short-lived: a pedal boat stirs the water, it doesn't leave a long trail)
+          world.rowing?.foam(s.e - fe * 1.7 * Math.sign(s.speed), s.n - fn * 1.7 * Math.sign(s.speed), 0.16 + 0.05 * v, 3.5);
         }
         // a splash on each pedal stroke (twice a turn of the pedals), louder with the speed
         const stroke = Math.floor(s.legs / Math.PI);
