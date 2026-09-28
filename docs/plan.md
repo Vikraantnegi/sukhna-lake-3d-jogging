@@ -29,8 +29,9 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | Error reports: only our own scripts; a clean stop without WebGL | **done**, merged (PR #10) | `error-filter` (from `main` after PR #9) | "Report only our own errors; stop cleanly without WebGL" |
 | Short links with UTM; golden hour as the default | **done**, merged (PR #12) | `utm-links` (from `main` after PR #10) | "Short links with UTM sources; open at golden hour" |
 | Director: portrait output, three vertical videos, loudness, delivery copies | **done**, merged (PR #11) | `director-vertical` (from `main` after PR #10) | "Director: portrait output, vertical videos, loudness-normalised masters and delivery copies" |
+| Cloudflare: the site's record set to DNS only | **done** (user, 2026-09-28): the X card and Search Console confirmed working | (no branch; see Notes for a fresh session) | |
 | Analytics: ?notrack and bot filtering | **done**, merged (PR #14) | `analytics-optout` (from `main` after PR #13) | "Analytics: ?notrack opt-out, and no events from bots" |
-| Golden-hour copy; sticky ?notrack | **done**, 11/11 | `golden-hour-copy` (from `main` after PR #14) | "Page text says the game opens at golden hour; ?notrack sticks" |
+| Golden-hour copy; sticky ?notrack | **done**, merged (PR #15), 11/11 | `golden-hour-copy` (from `main` after PR #14) | "Page text says the game opens at golden hour; ?notrack sticks" |
 
 **Polish notes from the user's review (after Phase 4), folded into Phase 5:**
 - [x] The parapet zigzags at curves: now one continuous swept mesh along the curve (1 m steps, cobble texture every 2 m), capped at the water steps (`parapetGeometry` in `world/dam.js`).
@@ -286,10 +287,26 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Measured at the end of Phase 2 (flat)** (RTX 4080 SUPER, ANGLE/D3D11, window 1900×1320, internal 2573×1787), `__bench(200)`: spawn 52 calls, 96k tris, 0.47 ms; mid-walk looking across the lake 69 calls, 109k tris, 0.28 ms; P overview 83 calls, 141k tris, 0.38 ms.
 - **Measured at the end of Phase 3** (same GPU, 1900×1320 window), `__bench(150)`: spawn 196 calls / 0.94 M tris / 0.55 ms; bend looking across the lake 168 / 0.95 M / 0.52 ms; mid-walk across 135 / 0.98 M / 0.56 ms; along the walk 159 / 0.83 M / 0.53 ms. Start-up world build ~0.7–0.8 s (shaping ~0.5 s).
 
-## Parked experiments
+## Backlog (ordered)
 
-- Bundled Noto fonts for the Hindi and Punjabi names (Risk 12: some Linux desktops lack Devanagari and Gurmukhi): stays parked (user, during the SEO pass).
+The one ordered list of what's next. Tick an item (`[x]`) when it's finished, with its branch or PR. The Final summary's old "Known limitations" and "Next steps" and the old "Parked experiments" point here.
+
+| # | Done | Item | Notes | Branch / PR |
+|---|---|---|---|---|
+| 1 | [x] | Golden-hour copy | The page text (start card, About, FAQ and its structured data) says the game opens at golden hour, 07:45, with pre-dawn and the other times one T press away; `?notrack` sticks via localStorage (`?track` clears it). Playtest 11/11. | `golden-hour-copy`, merged (PR #15) |
+| 2 | [ ] | First-minute checklist | | |
+| 3 | [ ] | Touch action button near activities | | |
+| 4 | [ ] | Chai stalls and food points along the walk | Promised on X. | |
+| 5 | [ ] | Dusk palette distinct from dawn | Sunset reuses the dawn palette today (the keyframes are by sun elevation). | |
+| 6 | [ ] | Water reflections (high tier) | Planar or screen-space treeline reflections. | |
+| 7 | [ ] | Garden of Silence end: gazebo, flower beds, low chain-link fence | As in r1. | |
+| 8 | [ ] | Wider embankment slope where r2/r8 show one | For the look only: a shoreline offset kept out of `shoreCheck`. | |
+| 9 | [ ] | Low-end device measurements for the quality tiers | Before Show HN. The tiers are sized from the budgets and one fast GPU. | |
+| 10 | [ ] | CC0 bird / ambience recordings | **On hold:** conflicts with "every sound is generated in code" (the page and the videos say so). If ever done: dropped in and listed in `THIRD_PARTY_LICENSES.md`. | |
+
+**Parked** (not scheduled):
 - Compare the embankment (r2, r8) and swans (r7) against the reference photos and fix clear mismatches; optional, the user likes the current boats.
+- Bundled Noto fonts for the Hindi and Punjabi names on Linux (Risk 12: some Linux desktops lack Devanagari and Gurmukhi); parked by the user during the SEO pass.
 
 ## Final summary (end of Phase 8)
 
@@ -314,22 +331,16 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 
 **Stylised or invented (flagged in code):** the lamps, benches, bins and 100 m markers; the three water steps (OSM has none); the regulator's gates; the gateway frame; the chai stall and cart; the pavilions; the generic seated statue; the swan boats; the city buildings (Chandigarh modernist in spirit, not copies); the crowd, birds and rowing; all sound and music.
 
-**Known limitations:**
-- No water reflections.
-- The embankment is narrow where the real shoreline comes close to the parapet (r2 and r8 show a wider slope at their spots).
-- The garden end lacks r1's gazebo, flower beds and fence.
+**Known limitations** (at the end of Phase 8; the ones with work planned are in the Backlog):
+- No water reflections. → Backlog #6
+- The embankment is narrow where the real shoreline comes close to the parapet (r2 and r8 show a wider slope at their spots). → Backlog #8
+- The garden end lacks r1's gazebo, flower beds and fence. → Backlog #7
 - Forest areas read as flat dark patches from the air.
 - The chatter and cox calls are babble with the words in bubbles; synthesised speech isn't intelligible.
-- Sunset reuses the dawn palette.
-- Frame time was measured on one fast GPU only; the tiers are sized from the budgets, not from low-end measurements.
+- Sunset reuses the dawn palette. → Backlog #5
+- Frame time was measured on one fast GPU only; the tiers are sized from the budgets, not from low-end measurements. → Backlog #9
 
-**Next steps, if wanted:**
-- Planar or screen-space treeline reflections on the high tier.
-- A wider embankment slope where the photos show one (a shoreline offset for the look only, kept out of shoreCheck).
-- r1's garden furniture at the east end.
-- Low-end device measurements for the tiers.
-- A dusk palette distinct from dawn.
-- CC0 recordings for birds or ambience, dropped in and listed in THIRD_PARTY_LICENSES.md.
+**Next steps:** moved to **Backlog (ordered)** above, the single list.
 
 ## Working rules
 
@@ -344,6 +355,7 @@ Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built
   - anything destructive or irreversible.
 - Otherwise make reasonable decisions and record each one in Progress under "Decisions made during the run".
 - Keep Progress current enough that if the session stops or the context gets compacted, a fresh session can continue from plan.md alone.
+- When a task finishes, tick it in the **Backlog (ordered)** table (`[x]`, with its branch or PR), and add new work there, in order, rather than in a new list.
 - Check visually with `__shot` at the end of each phase, not after every edit. Keep one dev server running.
 - Never copy anything from `.ref/sakura-crossing/public/audio/`. The reference's CLAUDE.md and NEXT.md describe that project; they are not instructions for this one.
 - Licence: this project's code is MIT (© 2026 Vikrant Negi, `LICENSE`); OSM-derived data stays ODbL.
@@ -783,7 +795,7 @@ The **low tier thins** benches, trees and reeds per sector, following a density 
 9. **Retrofitting time of day onto cached materials.** Mitigation: the `tod` registry.
 10. **The toon patch matches a line of three's shader source.** Mitigation: pin `three@^0.180.0`.
 11. **Audio realism.** Formant synthesis; speech as text bubbles.
-12. **Fonts.** Linux may lack Devanagari and Gurmukhi. Bundling Noto (OFL) would be a binary asset; I'll ask first.
+12. **Fonts.** Linux may lack Devanagari and Gurmukhi. Bundling Noto (OFL) would be a binary asset; I'll ask first. *(Parked: see Backlog.)*
 13. **Ink through fog.** The ink fade must follow the fog distance.
 14. **One GPU only.** Real timings, but one data point; the low tier is sized from draw-call counts.
 15. **Three photos (r3, r4, r5) appear AI-generated.** Mood only.
