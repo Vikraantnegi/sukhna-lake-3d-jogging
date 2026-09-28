@@ -3,8 +3,38 @@
   "redirects": [
     {
       "source": "/:path*",
-      "has": [{ "type": "host", "value": "sukhna-lake-3d-jogging.vercel.app" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "sukhna-lake-3d-jogging.vercel.app"
+        }
+      ],
       "destination": "https://sukhna-lake.trymurmur.studio/:path*",
+      "statusCode": 301
+    },
+    {
+      "source": "/x",
+      "destination": "/?utm_source=x",
+      "statusCode": 301
+    },
+    {
+      "source": "/r",
+      "destination": "/?utm_source=reddit",
+      "statusCode": 301
+    },
+    {
+      "source": "/yt",
+      "destination": "/?utm_source=youtube",
+      "statusCode": 301
+    },
+    {
+      "source": "/ig",
+      "destination": "/?utm_source=instagram",
+      "statusCode": 301
+    },
+    {
+      "source": "/in",
+      "destination": "/?utm_source=linkedin",
       "statusCode": 301
     }
   ]
