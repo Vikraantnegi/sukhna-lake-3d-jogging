@@ -92,7 +92,7 @@ function lookAt(el, out) {
 const _cb = new THREE.Color();
 const _c = new THREE.Color();
 
-export function createTod({ date, lat, lon, presets, start = 'predawn', rate = 4 }) {
+export function createTod({ date, lat, lon, presets, start = 'golden', rate = 4 }) {
   const [Y, M, D] = date;
   const look = {};
   const state = {

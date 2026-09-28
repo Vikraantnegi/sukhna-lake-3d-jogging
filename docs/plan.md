@@ -29,7 +29,8 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 | Error reports: only our own scripts; a clean stop without WebGL | **done**, merged (PR #10) | `error-filter` (from `main` after PR #9) | "Report only our own errors; stop cleanly without WebGL" |
 | Short links with UTM; golden hour as the default | **done**, merged (PR #12) | `utm-links` (from `main` after PR #10) | "Short links with UTM sources; open at golden hour" |
 | Director: portrait output, three vertical videos, loudness, delivery copies | **done**, merged (PR #11) | `director-vertical` (from `main` after PR #10) | "Director: portrait output, vertical videos, loudness-normalised masters and delivery copies" |
-| Analytics: ?notrack and bot filtering | **done** | `analytics-optout` (from `main` after PR #13) | "Analytics: ?notrack opt-out, and no events from bots" |
+| Analytics: ?notrack and bot filtering | **done**, merged (PR #14) | `analytics-optout` (from `main` after PR #13) | "Analytics: ?notrack opt-out, and no events from bots" |
+| Golden-hour copy; sticky ?notrack | **done**, 11/11 | `golden-hour-copy` (from `main` after PR #14) | "Page text says the game opens at golden hour; ?notrack sticks" |
 
 **Polish notes from the user's review (after Phase 4), folded into Phase 5:**
 - [x] The parapet zigzags at curves: now one continuous swept mesh along the curve (1 m steps, cobble texture every 2 m), capped at the water steps (`parapetGeometry` in `world/dam.js`).
@@ -51,7 +52,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 
 **Additions from the user's Phase 6 review (done before Phase 7, at the user's request):**
 - [x] Conditions card, top right, in the jog card's style: the clock with the time-of-day label (T), the weather (K: Clear / Rain / Fog) and sound on/off (M), updated live; H hides it with the rest. The clock row moved here from the jog card. The `?stats=1` readout moved to the bottom left. The hint bar is unchanged.
-- [x] Time after the morning: past the bright-morning window the screen fades to black, a short "Next morning · 06:55 · pre-dawn · 15 January" card shows, and the clock restarts at 06:55, still at 4×. (Loop point under Decisions.)
+- [x] Time after the morning: past the bright-morning window the screen fades to black, a short "Next morning · 06:55 · pre-dawn · 15 January" card shows, and the clock restarts at 06:55, still at 4×. (Loop point under Decisions.) *(Since changed: the next morning now starts at golden hour, 07:45.)*
 - [x] Lamps follow time and weather: the lanterns glow before sunrise, fade out between −3° and +3° of sun (gone by ~07:38), come back on at dusk, and glow in rain (85%) and fog (100%) at any hour.
 - [x] Sunset preset on T at the real sunset for 15 Jan (17:45, sun at 246°), with the lamps coming on at dusk. It was cheap: the look is keyed to sun elevation, so dusk runs the dawn palette with the sun in the WSW.
 - M only toggles a stored on/off preference (shown on the card) until the sound itself arrives in Phase 7.
@@ -215,6 +216,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 - **Then at golden hour** (user: it gets the most traction): the game, and the next-morning loop, open at the golden preset, 07:45, just after the 07:19 sunrise. T from there: bright morning → sunset → pre-dawn → sunrise → golden hour; `?t=` still picks any preset. The HUD placeholder, the next-morning card, the About and FAQ text and the README follow.
 - **Short links with UTM** (user): `vercel.json` sends `/x`, `/r`, `/yt`, `/ig` and `/in` to `/?utm_source=` `x`, `reddit`, `youtube`, `instagram` and `linkedin` with a **301**. PostHog reads `utm_*` off the URL for its pageview, and `analytics.js` also registers them for the visit (memory persistence would otherwise keep them on the pageview only), so every event carries `utm_source`. Checked on a production build opened at `/?utm_source=x`: `$pageview`, `game_started` and `weather_changed` all arrived with `utm_source: "x"`. (The redirects themselves run on Vercel only: check with `curl -I https://sukhna-lake.trymurmur.studio/x` after the deploy.)
 - **Analytics opt-out and bots** (user): PostHog isn't loaded at all when the URL has `?notrack` (that page load only; the owner's testing bookmark is `https://sukhna-lake.trymurmur.studio/?notrack`), when `navigator.webdriver` is set, or when the user agent looks like a crawler, link-preview fetcher or headless browser (bot, crawl, spider, preview, facebookexternalhit, Twitterbot, Slackbot, Discordbot, WhatsApp, Telegram, LinkedIn, HeadlessChrome, Lighthouse...; "Cubot", a phone brand, excepted). Checked on a production build: `?notrack`, a HeadlessChrome UA, Twitterbot, WhatsApp and Googlebot made no PostHog request; a normal visit and a Cubot phone did.
+- **Golden-hour copy and a sticky ?notrack** (user): the page no longer describes the old 06:55 pre-dawn start. The start card's kicker reads "Golden hour · Chandigarh" and its line puts the jog in the golden hour of a mid-January morning; the About bullet ("Follow the real sun") and the FAQ answer say the game opens at golden hour, 07:45, just after the real 07:19 sunrise, with pre-dawn and the other times one press of T away (the time button on touch). The FAQPage structured data follows the FAQ markup. Searched the whole repo for "06:55", "pre-dawn" and "before sunrise": what's left is the pre-dawn preset itself (still on T), code comments about the sky and lamps at pre-dawn, the original brief, `docs/compare.md` (the Phase 8 shots) and this plan's history, where the §0 opening time and the Phase 6 next-morning line are annotated as since changed. `createTod`'s default start is golden too. `?notrack` now sets a `sukhna-notrack` flag in localStorage, so every later visit from that browser skips PostHog until a visit with `?track` clears it (storage access in try/catch; if storage is blocked, `?notrack` still covers that page load). Checked on a production build over six visits in one browser.
 
 **What Phase 2 (planet version, `27ca69a`) leaves for reuse:**
 
@@ -293,7 +295,7 @@ Source of truth: `docs/brief.md` (the user's brief, verbatim, plus the flat-worl
 
 **What was built.** Sukhna Lake at its real shape and 1:1 scale, as a three.js cel-shaded jog:
 - **The world:** the 2.5 km dam promenade on the real OSM curve, the real lake and its islands, the city side, and the Shivaliks from DEM terrain to 45 km.
-- **The morning:** the real sun on 15 Jan 2027, running at 4× from civil dawn, with the look keyed to sun elevation. Mist, rain and fog; lamps that follow the light. A loop to the next morning, and a sunset preset.
+- **The morning:** the real sun on 15 Jan 2027, running at 4× from civil dawn (now from golden hour, 07:45), with the look keyed to sun elevation. Mist, rain and fog; lamps that follow the light. A loop to the next morning, and a sunset preset.
 - **Life:** a 200-strong part-instanced crowd with stationary groups, a jogger with stamina, auto-jog and E interactions, the eight and sculls on real-lake lanes, and 175 birds.
 - **Signs and sound:** trilingual signs, and WebAudio sound synthesised in code, with a generated lo-fi loop when you sit on a bench or the water steps.
 - **Around the game:** quality tiers with a run-time fallback, touch controls, and six self-checks.
@@ -363,7 +365,7 @@ Continuous run (from the user, after Phase 1 was merged): phases 2–8 are built
   - On the low tier, dressing and NPC density are thinned and draw distances shortened.
 - **Default time: a winter date with the real clock.**
   - The date is 15 January (2027, one constant in `scripts/sukhna/config.mjs` and the data).
-  - The session opens at 06:55 (civil dawn), 24 min before the real sunrise at 07:19, azimuth 114.1° (ESE).
+  - The session opens at 06:55 (civil dawn), 24 min before the real sunrise at 07:19, azimuth 114.1° (ESE). *(Since changed: it opens at golden hour, 07:45; see "Then at golden hour" under Decisions.)*
   - The brief's "5:45 AM" is dropped, because in winter the sun is at −20° at that time.
 - **OSM data:** fetched from Overpass directly (overpass-api.de; fallback mirror overpass.kumi.systems).
 
