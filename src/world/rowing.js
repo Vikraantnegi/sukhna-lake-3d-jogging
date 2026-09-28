@@ -189,15 +189,17 @@ export function buildRowing(scene, world) {
   // wake: foam discs that spread and shrink away
   const WAKE = 160;
   const wakeGeo = new THREE.CircleGeometry(1, 10); wakeGeo.rotateX(-Math.PI / 2);
-  const wake = new THREE.InstancedMesh(wakeGeo, flat({ color: 0xf4f6f8, transparent: true, opacity: 0.45, depthWrite: false }), WAKE);
+  // (faint: overlapping discs build up, and a trail seen end-on from ahead of a boat stood up
+  // behind the pedal boat like a tall white fin at 0.45)
+  const wake = new THREE.InstancedMesh(wakeGeo, flat({ color: 0xf4f6f8, transparent: true, opacity: 0.26, depthWrite: false }), WAKE);
   wake.frustumCulled = false;
   wake.userData.noOutline = true;
-  const wakeLife = new Float32Array(WAKE).fill(99), wakePos = new Float32Array(WAKE * 3), wakeSize = new Float32Array(WAKE).fill(1);
+  const wakeLife = new Float32Array(WAKE).fill(99), wakePos = new Float32Array(WAKE * 3), wakeSize = new Float32Array(WAKE).fill(1), wakeSpan = new Float32Array(WAKE).fill(7);
   let wakeNext = 0;
-  /** Drop a foam disc at (e, n); `size` scales how far it spreads (the player's pedal boat: ~0.4). */
-  const foam = (e, n, size = 1) => {
+  /** Drop a foam disc at (e, n); `size` scales how far it spreads, `span` how many seconds it lasts. */
+  const foam = (e, n, size = 1, span = 7) => {
     const k = wakeNext++ % WAKE;
-    wakeLife[k] = 0; wakeSize[k] = size;
+    wakeLife[k] = 0; wakeSize[k] = size; wakeSpan[k] = span;
     wakePos[k * 3] = e; wakePos[k * 3 + 1] = n;
   };
   group.add(wake);
@@ -280,7 +282,7 @@ export function buildRowing(scene, world) {
       }
       for (let k = 0; k < WAKE; k++) {
         wakeLife[k] += dt;
-        const life = wakeLife[k], sc = life < 7 ? (0.6 + life * 0.9) * (1 - life / 7) * wakeSize[k] : 0;
+        const life = wakeLife[k], span = wakeSpan[k], sc = life < span ? (0.6 + life * 0.9) * (1 - life / span) * wakeSize[k] : 0;
         M.compose(V.set(wakePos[k * 3], 0.05, -wakePos[k * 3 + 1]), Q.identity(), new THREE.Vector3(sc, 1, sc * 0.6));
         wake.setMatrixAt(k, M);
       }

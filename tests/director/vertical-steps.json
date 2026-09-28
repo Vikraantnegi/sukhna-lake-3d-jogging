@@ -1,0 +1,171 @@
+{
+  "name": "vertical-steps",
+  "about": "Rain at sunset in portrait: down a water step to the lowest dry one and sit; the camera settles into the seated view as the lo-fi fades in; then a slow pull back up the steps to the parapet and the lamps.",
+  "portrait": true,
+  "seed": 7,
+  "duration": 20,
+  "captionY": 0.17,
+  "start": {
+    "time": "sunset",
+    "weather": "rain"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 820,
+      "d": 3,
+      "face": "lake"
+    },
+    {
+      "at": 0.4,
+      "do": "sitSteps",
+      "flight": 820
+    },
+    {
+      "at": 8.0,
+      "do": "weather",
+      "value": "clear"
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "walk": [
+              820.4,
+              10.4
+            ],
+            "h": 1.3
+          },
+          "look": {
+            "player": [
+              0,
+              0.9,
+              0
+            ]
+          }
+        },
+        {
+          "t": 6.8,
+          "pos": {
+            "walk": [
+              820.6,
+              11.6
+            ],
+            "h": 1.3
+          },
+          "look": {
+            "player": [
+              0,
+              0.7,
+              0
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 7.0,
+      "mode": "keys",
+      "blend": 2.6,
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              -0.2,
+              1.8,
+              -2.8
+            ]
+          },
+          "look": {
+            "player": [
+              -1.0,
+              -0.6,
+              5
+            ]
+          }
+        },
+        {
+          "t": 7.2,
+          "pos": {
+            "player": [
+              -0.3,
+              1.9,
+              -3.1
+            ]
+          },
+          "look": {
+            "player": [
+              -1.0,
+              -0.6,
+              5
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 14.2,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": "current",
+          "look": "current"
+        },
+        {
+          "t": 2.8,
+          "pos": {
+            "walk": [
+              822,
+              17
+            ],
+            "y": 4.4
+          },
+          "look": {
+            "player": [
+              0,
+              0.3,
+              0
+            ]
+          }
+        },
+        {
+          "t": 5.2,
+          "pos": {
+            "walk": [
+              822,
+              27
+            ],
+            "y": 7.5
+          },
+          "look": {
+            "walk": [
+              820,
+              3
+            ],
+            "h": -1.5
+          }
+        }
+      ]
+    }
+  ],
+  "captions": [
+    {
+      "from": -0.35,
+      "to": 4.6,
+      "text": "sound on 🔊"
+    },
+    {
+      "from": 9.6,
+      "to": 13.6,
+      "text": "every sound is generated in code"
+    }
+  ]
+}

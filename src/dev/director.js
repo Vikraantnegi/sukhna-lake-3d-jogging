@@ -54,9 +54,20 @@ export async function runDirector(ctx) {
   const name = params.get('director');
   const list = await (await fetch(`/tests/director/${name}.json`, { cache: 'no-store' })).json();
   const recording = params.get('record') === '1';
-  const size = params.get('size') === '1080' ? [1920, 1080] : list.size || [2560, 1440];
+  // portrait (1080 x 1920, for Shorts, Reels and TikTok): ?portrait, or a list made for it
+  // ("portrait": true).  Shots, captions and events may carry a "portrait" block whose fields
+  // replace theirs in portrait, so a shot gets its own framing instead of a crop of the landscape one.
+  const PORTRAIT = params.has('portrait') || !!list.portrait;
+  const size = PORTRAIT ? [1080, 1920] : params.get('size') === '1080' ? [1920, 1080] : list.size || [2560, 1440];
   const [W, H] = size;
-  const status = { name, state: 'loading', t: 0, duration: list.duration, size, frames: [], renders: 0, lateTicks: 0, maxGapMs: 0, errors: [] };
+  const framed = (o) => (PORTRAIT && o.portrait ? { ...o, ...o.portrait } : o);
+  for (const k of ['events', 'shots', 'captions']) if (list[k]) list[k] = list[k].map(framed);
+  // the camera's vertical field of view: the game's 55 degrees, or wider in portrait (a tall frame
+  // at 55 is only ~32 degrees across); a shot's "fov" overrides it
+  const BASE_FOV = PORTRAIT ? list.portraitFov ?? 68 : camera.fov;
+  // recordings/<tag>.mp4: -1080 for the smaller landscape size, -portrait for a landscape list shot tall
+  const TAG = `${name}${W === 1920 ? '-1080' : ''}${PORTRAIT && !list.portrait ? '-portrait' : ''}`;
+  const status = { name, state: 'loading', t: 0, duration: list.duration, size, portrait: PORTRAIT, tag: TAG, frames: [], renders: 0, lateTicks: 0, maxGapMs: 0, errors: [] };
   window.__director = status;
 
   /* ------------------------------ the stage ------------------------------ */
@@ -245,7 +256,8 @@ export async function runDirector(ctx) {
     timeLapse: (e) => { const from = tod.state.hours, to = e.to, over = e.over; let t = 0; lapses.push((dt) => { t += dt; tod.state.hours = from + (to - from) * EASE[e.ease || 'inOut'](Math.min(1, t / over)); return t >= over; }); },
     weather: (e) => { weather.set(e.value, !!e.instant); hud.setWeather(e.value); if (e.instant) { tod.set(); updateTime(0, false); } },
     key: (e) => press(e.key),
-    place: (e) => { const [pe, pn] = spot(e.spot || { walk: [e.s, e.d ?? -1.6] }); place(pe, pn, faceYaw(e.face ?? 'west', e.s ?? nearestS(pe, pn).s)); },
+    // ("speed": already moving at that speed, so a video can open mid-stride rather than from a standstill)
+    place: (e) => { const [pe, pn] = spot(e.spot || { walk: [e.s, e.d ?? -1.6] }); place(pe, pn, faceYaw(e.face ?? 'west', e.s ?? nearestS(pe, pn).s)); if (e.speed) jogger.speed = e.speed; },
     walkTo: (e) => { task = walkPath((e.path || [e.to]).map(spot), { walk: e.pace !== 'jog', tol: e.tol ?? 0.35 }); },
     auto: () => { if (!jogger.auto) press('V'); },
     hold: (e) => { for (const k of e.keys) keys.add(k); },
@@ -293,7 +305,7 @@ export async function runDirector(ctx) {
   let shot = null, shotStart = 0;
   const from = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() }, last = { pos: new THREE.Vector3(), quat: new THREE.Quaternion() };
   const _p = new THREE.Vector3(), _l = new THREE.Vector3(), _q = new THREE.Quaternion(), _m = new THREE.Matrix4(), UP = new THREE.Vector3(0, 1, 0);
-  let keyFrom = null; // the camera pose when a keyframed shot starts, for a key at "current"
+  let keyFrom = null, fovFrom = BASE_FOV, lastFov = BASE_FOV; // the camera pose when a keyframed shot starts, for a key at "current"
   let first = true; // the first shot has nothing to blend from
   function keyPose(sh, tt) {
     const ks = sh.keys;
@@ -305,21 +317,23 @@ export async function runDirector(ctx) {
     const la = a.look === 'current' ? keyFrom.look.clone() : point(a.look), lb = b.look === 'current' ? keyFrom.look.clone() : point(b.look);
     return { pos: pa.lerp(pb, k), look: la.lerp(lb, k) };
   }
+  function setFov(fov) { lastFov = fov; if (Math.abs(camera.fov - fov) > 1e-4) { camera.fov = fov; camera.updateProjectionMatrix(); } }
   // called by main.js's tick() right after the rig has placed the camera: the director's
   // camera replaces it (so sound, bubbles and shadows follow what the video shows)
   setCameraHook(() => {
     const now = t;
     while (shots.length && shots[0].at <= now + 1e-6) {
       shot = shots.shift(); shotStart = shot.at;
-      from.pos.copy(last.pos); from.quat.copy(last.quat);
+      from.pos.copy(last.pos); from.quat.copy(last.quat); fovFrom = lastFov;
       const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(last.quat);
       keyFrom = { pos: last.pos.clone(), look: last.pos.clone().addScaledVector(fwd, 20) };
       if (shot.mode === 'overview' && rig.mode !== 'overview') rig.setOverview(true);
       if (shot.mode !== 'overview' && rig.mode === 'overview') rig.setOverview(false);
       if (shot.orbit !== undefined) rig.orbit = shot.orbit;
     }
-    if (!shot) { last.pos.copy(camera.position); last.quat.copy(camera.quaternion); return; }
+    if (!shot) { last.pos.copy(camera.position); last.quat.copy(camera.quaternion); setFov(BASE_FOV); return; }
     const tt = now - shotStart;
+    let fov = shot.fov ?? BASE_FOV;
     if (shot.mode === 'keys') {
       const p = keyPose(shot, tt);
       camera.position.copy(p.pos);
@@ -333,7 +347,9 @@ export async function runDirector(ctx) {
       _p.copy(camera.position); _q.copy(camera.quaternion);
       camera.position.copy(from.pos).lerp(_p, k);
       camera.quaternion.copy(from.quat).slerp(_q, k);
+      fov = THREE.MathUtils.lerp(fovFrom, fov, k);
     }
+    setFov(fov);
     camera.updateMatrixWorld();
     last.pos.copy(camera.position); last.quat.copy(camera.quaternion);
     if (tt >= (shot.blend ?? 0)) first = false;
@@ -379,12 +395,47 @@ export async function runDirector(ctx) {
     return f;
   }
 
-  function caption(text, alpha) {
-    const c = CAPTION, px = Math.round(H * c.size), x = W / 2, y = H * c.y;
+  // In portrait the apps draw their own buttons and text over the bottom ~20 % and the right-hand
+  // ~15 % of the frame, so the caption sits in the rest: centred in the left 85 %, the block's
+  // middle at 0.73 H (two lines still end above 0.78 H), wrapped to 74 % of the width, 6.2 % of
+  // the width tall; subjects are framed above it, in the upper two thirds.
+  const CAP = PORTRAIT ? { px: Math.round(W * 0.062), x: W * 0.455, y: H * 0.73, maxW: W * 0.74 } : { px: Math.round(H * CAPTION.size), x: W / 2, y: H * CAPTION.y, maxW: W * 0.9 };
+  function wrap(text, maxW) {
+    const lines = [];
+    for (const word of text.split(' ')) {
+      const joined = lines.length ? `${lines[lines.length - 1]} ${word}` : null;
+      if (joined && g.measureText(joined).width <= maxW) lines[lines.length - 1] = joined;
+      else lines.push(word);
+    }
+    // two lines: break where they come out most even ("I rebuilt Sukhna / Lake in 3D", not
+    // "I rebuilt Sukhna Lake in / 3D")
+    if (lines.length === 2) {
+      const words = text.split(' ');
+      let best = lines, worst = Infinity;
+      for (let i = 1; i < words.length; i++) {
+        const a = words.slice(0, i).join(' '), b = words.slice(i).join(' ');
+        const wide = Math.max(g.measureText(a).width, g.measureText(b).width);
+        if (wide <= maxW && wide < worst) { worst = wide; best = [a, b]; }
+      }
+      return best;
+    }
+    return lines;
+  }
+  // where a caption sits: its own "y" (a fraction of the height), else the list's "captionY",
+  // else the default above (a list can put its captions in the sky, say, clear of the subject)
+  function caption(text, alpha, yFrac) {
+    const c = CAPTION, x = CAP.x;
+    let px = CAP.px;
     g.save();
-    g.font = `${c.weight} ${px}px ${c.family}`;
-    g.letterSpacing = `${c.track * px}px`;
-    const rx = g.measureText(text).width / 2 + px * 2.4, ry = px * 1.6;
+    const setFont = () => { g.font = `${c.weight} ${px}px ${c.family}`; g.letterSpacing = `${c.track * px}px`; };
+    setFont();
+    const y = yFrac !== undefined ? H * yFrac : CAP.y;
+    const lines = wrap(text, CAP.maxW);
+    // a line that can't break (a web address) and is wider than the safe width: smaller, to fit
+    const widest = Math.max(...lines.map((l) => g.measureText(l).width));
+    if (widest > CAP.maxW) { px = Math.floor((px * CAP.maxW) / widest); setFont(); }
+    const lineH = px * 1.22, top = y - ((lines.length - 1) * lineH) / 2;
+    const rx = Math.max(...lines.map((l) => g.measureText(l).width)) / 2 + px * 2.4, ry = px * 1.6 + ((lines.length - 1) * lineH) / 2;
     // a bright background (fog, pale water, sky) fades in a soft dark gradient behind the text:
     // an ellipse that falls off to nothing, no edge and no plate
     const fresh = scrim.n === 0;
@@ -416,9 +467,9 @@ export async function runDirector(ctx) {
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.fillStyle = c.color;
     g.shadowColor = 'rgba(30,18,8,0.5)'; g.shadowBlur = px * 0.6; g.shadowOffsetY = px * 0.04;
-    g.fillText(text, x, y);
+    lines.forEach((l, i) => g.fillText(l, x, top + i * lineH));
     g.shadowColor = 'rgba(0,0,0,0.35)'; g.shadowBlur = px * 0.08; g.shadowOffsetY = px * 0.02;
-    g.fillText(text, x, y);
+    lines.forEach((l, i) => g.fillText(l, x, top + i * lineH));
     g.restore();
   }
   function endCard(text, k) {
@@ -464,7 +515,7 @@ export async function runDirector(ctx) {
   }
   /** The start card, as the game draws it (read from its DOM), over the frame. */
   function startCard() {
-    const s = H / 900, cw = 760 * s, ch = 400 * s, x = (W - cw) / 2, y = (H - ch) / 2;
+    const s = Math.min(H / 900, W / 820), cw = 760 * s, ch = 400 * s, x = (W - cw) / 2, y = (H - ch) / 2;
     const q = (sel) => document.querySelector(sel);
     const grad = g.createLinearGradient(0, 0, W, H);
     grad.addColorStop(0, 'rgba(40,48,78,.55)'); grad.addColorStop(0.55, 'rgba(231,163,90,.28)'); grad.addColorStop(1, 'rgba(201,224,247,.35)');
@@ -543,7 +594,7 @@ export async function runDirector(ctx) {
     for (const c of captions) {
       if (t < c.from || t > c.to) continue;
       const k = Math.min(1, (t - c.from) / 0.35, (c.to - t) / 0.35);
-      caption(c.text, Math.max(0, k));
+      caption(c.text, Math.max(0, k), c.y ?? list.captionY);
     }
     if (list.endCard && t >= list.endCard.at) endCard(list.endCard.text, Math.min(1, (t - list.endCard.at) / (list.endCard.fade ?? 0.8)));
   }
@@ -566,7 +617,7 @@ export async function runDirector(ctx) {
     const n = (parts[name] = (parts[name] ?? -1) + 1);
     uploads = uploads.then(() => fetch(`/__recording?name=${encodeURIComponent(name)}&part=${n}`, { method: 'POST', body: blob })).catch((e) => status.errors.push(String(e)));
   };
-  const flushVideo = () => { if (pending.length) { upload(`${name}${W === 1920 ? '-1080' : ''}.video.h264`, new Blob(pending)); pending = []; pendingBytes = 0; } };
+  const flushVideo = () => { if (pending.length) { upload(`${TAG}.video.h264`, new Blob(pending)); pending = []; pendingBytes = 0; } };
   const frameWait = () => new Promise((r) => setTimeout(r, 16));
   const b64 = (u8) => { let s = ''; for (let i = 0; i < u8.length; i++) s += String.fromCharCode(u8[i]); return btoa(s); };
   function audioStream() {
@@ -576,7 +627,7 @@ export async function runDirector(ctx) {
     return dest.stream;
   }
   async function startRecording() {
-    const tag = `${name}${W === 1920 ? '-1080' : ''}`;
+    const tag = TAG;
     if (MODE === 'mediarecorder') {
       const stream = comp.captureStream(60);
       for (const tr of audioStream()?.getAudioTracks() || []) stream.addTrack(tr);
@@ -645,7 +696,7 @@ export async function runDirector(ctx) {
     if (audioRec) await new Promise((res) => { audioRec.onstop = res; audioRec.stop(); });
     await encoder.flush(); encoder.close();
     flushVideo();
-    const tag = `${name}${W === 1920 ? '-1080' : ''}`;
+    const tag = TAG;
     upload(`${tag}.video.json`, new Blob([JSON.stringify({ width: W, height: H, fps: 60, codec: status.codec, avcC: video.avcC, samples: video.samples, frames: recFrames, audio: !!audioRec })]));
     await uploads;
     Object.assign(status, { encoded: video.samples.length, encoderMaxQueue: video.maxQueue, videoBytes: video.bytes });
