@@ -25,6 +25,7 @@ import { Q, TIERS, lower } from './core/quality.js';
 import { createBoat } from './core/boat.js';
 import { mulberry32 } from './core/util.js';
 import { OUTFITS } from './people/body.js';
+import { showNoWebGL } from './core/nowebgl.js';
 
 /* ------------------------------------------------------------------ *
  * Sukhna -- entry point.
@@ -53,10 +54,11 @@ let renderer;
 try {
   renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', stencil: false });
 } catch (err) {
-  // no WebGL: say so on the (static) start card instead of leaving it on "Loading"
+  // boot.js checked for WebGL 2, but the real context can still fail: the same card, and a
+  // stop that boot.js catches (so it isn't an uncaught error)
   track('webgl_unavailable', { device_type: deviceType(TOUCH) });
-  const go = document.querySelector('.overlay .go');
-  if (go) go.textContent = "This browser can't show 3D (WebGL is off or unsupported)";
+  showNoWebGL();
+  err.noWebGL = true;
   throw err;
 }
 renderer.setPixelRatio(1);
