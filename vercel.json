@@ -15,27 +15,27 @@
     {
       "source": "/x",
       "destination": "/?utm_source=x",
-      "statusCode": 301
+      "statusCode": 302
     },
     {
       "source": "/r",
       "destination": "/?utm_source=reddit",
-      "statusCode": 301
+      "statusCode": 302
     },
     {
       "source": "/yt",
       "destination": "/?utm_source=youtube",
-      "statusCode": 301
+      "statusCode": 302
     },
     {
       "source": "/ig",
       "destination": "/?utm_source=instagram",
-      "statusCode": 301
+      "statusCode": 302
     },
     {
       "source": "/in",
       "destination": "/?utm_source=linkedin",
-      "statusCode": 301
+      "statusCode": 302
     }
   ]
 }
