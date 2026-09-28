@@ -60,6 +60,12 @@ function load() {
       mask_all_text: true,
       mask_all_element_attributes: true,
     });
+    // the campaign a visit came from (the short links in vercel.json: /x -> /?utm_source=x, ...):
+    // PostHog reads these off the URL for its pageview; registered here, every event of the visit
+    // carries them too (game_started, heartbeat, ...), which memory persistence wouldn't otherwise
+    const campaign = {};
+    for (const [k, v] of new URLSearchParams(location.search)) if (/^utm_(source|medium|campaign|content|term)$/.test(k) && v) campaign[k] = v.slice(0, 80);
+    if (Object.keys(campaign).length) window.posthog.register(campaign);
     for (const [name, props] of early.splice(0)) window.posthog.capture(name, props);
   } catch { /* the game never depends on this */ }
 }

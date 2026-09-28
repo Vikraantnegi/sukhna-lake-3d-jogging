@@ -92,11 +92,12 @@ const hemi = new THREE.HemisphereLight(PAL.hemiSky, PAL.hemiGround, 1.12);
 for (const l of [sun, fill, bounce, hemi]) { l.layers.enableAll(); scene.add(l); }
 scene.add(sun.target, fill.target, bounce.target);
 
-// the clock: opens at sunrise, 07:19 (the user's call; it was civil dawn, 06:55, in plan §0);
+// the clock: opens at golden hour, 07:45 (the user's call: it gets the most traction; it was
+// sunrise before that, and civil dawn, 06:55, in plan §0);
 // ?t=predawn|sunrise|golden|bright|sunset overrides
 // the four morning presets plus the real sunset (17:45 on 15 Jan)
 const PRESET_HOURS = { ...data.sun.presets, sunset: data.sun.sunset };
-const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'sunrise' });
+const tod = createTod({ date: data.sun.date, lat: data.sun.lat, lon: data.sun.lon, presets: PRESET_HOURS, start: PRESET_HOURS[params.get('t')] ? params.get('t') : 'golden' });
 const weather = createWeather(scene, { drops: Q.rain });
 if (['rain', 'fog'].includes(params.get('w'))) weather.set(params.get('w'), true);
 
@@ -241,10 +242,10 @@ function updateTime(dt, running) {
   tod.state.running = running && !looping;
   weather.update(dt, camera.position);
   // the loop (plan: Decisions): past the morning window, or half an hour after sunset,
-  // fade to black and start the next morning at sunrise, as the game does
+  // fade to black and start the next morning at golden hour, as the game does
   if (running && !looping && tod.pastWindow(SUNSET)) {
     looping = true;
-    hud.nextMorning(() => { tod.set('sunrise'); hud.flash(`${tod.clock()} · sunrise`); }, () => { looping = false; });
+    hud.nextMorning(() => { tod.set('golden'); hud.flash(`${tod.clock()} · golden hour`); }, () => { looping = false; });
   }
   if (tod.update(dt, weather.state)) {
     applyLook(tod.look, tod.state, LOOK_TARGETS);

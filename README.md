@@ -12,8 +12,8 @@ mid-January.
 
 You jog, or walk, or sit, among the morning crowd: joggers, walkers, a laughter
 club, yoga on the grass, Sikh uncles in turbans, a chai stall; the eight and the
-sculls on the water, egrets and parakeets. The clock runs from sunrise
-(07:19) at 4×, through golden hour to bright morning, then fades to
+sculls on the water, egrets and parakeets. The clock runs from golden hour
+(07:45, just after the 07:19 sunrise) at 4× to bright morning, then fades to
 the next morning. Rain and winter fog come on K. Every sound is synthesised in
 the browser; sit on a bench or the steps down to the water and a lo-fi loop
 plays.
