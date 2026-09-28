@@ -6,7 +6,8 @@
  *                banner is needed; no session recording, no autocapture,
  *                no surveys, no feature flags
  *   never        in dev, the playtest or the director (all dev-server
- *                runs), with ?notrack in the URL (the owner's own testing),
+ *                runs), in a browser opted out with ?notrack (sticky, until a
+ *                visit with ?track; the owner's own testing),
  *                in automated browsers or crawlers and link-preview bots,
  *                or with Do Not Track / Global Privacy Control on
  *   late         PostHog's script loads when the browser is idle after
@@ -28,9 +29,19 @@ const HOST = import.meta.env.VITE_POSTHOG_HOST || 'https://eu.i.posthog.com';
 // crawlers, link-preview fetchers and headless browsers (most never run the page's scripts,
 // but the ones that do would count as visits)
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|facebookcatalog|twitterbot|slackbot|discordbot|whatsapp|telegrambot|linkedinbot|embedly|headlesschrome|phantomjs|lighthouse|pagespeed/i;
+// ?notrack opts this browser out for good (the owner's own testing): a flag in localStorage,
+// set by ?notrack and cleared by ?track.  (A flag the visitor asked for, not a tracking id.)
+const NOTRACK = 'sukhna-notrack';
+function notrack(params) {
+  try {
+    if (params.has('track')) localStorage.removeItem(NOTRACK);
+    else if (params.has('notrack')) localStorage.setItem(NOTRACK, '1');
+  } catch { /* storage blocked: ?notrack still covers this page load */ }
+  try { return params.has('notrack') || localStorage.getItem(NOTRACK) === '1'; } catch { return params.has('notrack'); }
+}
 const optedOut = () => {
   try {
-    return new URLSearchParams(location.search).has('notrack') // (this page load only)
+    return notrack(new URLSearchParams(location.search))
       || navigator.webdriver || (BOT.test(navigator.userAgent || '') && !/cubot/i.test(navigator.userAgent)) // (Cubot: a phone brand)
       || navigator.doNotTrack === '1' || window.doNotTrack === '1' || navigator.globalPrivacyControl === true;
   } catch { return true; }

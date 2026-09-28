@@ -60,7 +60,8 @@ export const SPINE_STEP = 4;
 
 /**
  * The default morning (the user's decision): mid-January, the real clock,
- * the session opening at civil dawn, ~25 minutes before the real sunrise.
+ * the session opening at civil dawn, ~25 minutes before the real sunrise (the game now opens at
+ * the golden preset, 07:45; civil dawn stays the pre-dawn preset, one T press away).
  * One constant; change the date here and re-run the build.
  */
 export const DATE = { y: 2027, m: 1, d: 15 };
