@@ -103,15 +103,30 @@ export function heartbeat(playing, props = () => ({})) {
   }, 1000);
 }
 
-/** Uncaught errors (a few per visit): message and script file name only. */
+/**
+ * Uncaught errors (a few per visit): message and script file name only, and only from this
+ * site's own scripts.  Browser extensions throw into every page (a wallet's "Failed to connect
+ * to MetaMask" from inpage.js, from chrome-extension://, moz-extension://,
+ * safari-web-extension://...), as do other sites' scripts and inline or eval'd code with no
+ * file at all; none of that is the game's, so none of it is sent.
+ */
 if (ON) {
   let errors = 0;
-  const report = (message, source, line) => {
+  const base = `${location.origin}/`;
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // one of our scripts in a stack: "at f (https://site/assets/index-x.js:12:3)" or "f@https://site/assets/index-x.js:12:3"
+  const OUR_FRAME = new RegExp(`${esc(base)}[^\\s()]*?\\.m?js(?:\\?[^\\s():]*)?:(\\d+)`);
+  const ours = (file) => typeof file === 'string' && file.startsWith(base) && /\.m?js(?:[?#]|$)/.test(file);
+  const fileName = (url) => url.split(/[?#]/)[0].split('/').pop().slice(0, 80);
+  const report = (message, file, line) => {
     if (++errors > 5) return;
-    track('error', { message: String(message || '').slice(0, 200), source: String(source || '').split('/').pop().split('?')[0].slice(0, 80), line: line || 0 });
+    track('error', { message: String(message || '').slice(0, 200), source: fileName(file), line: line || 0 });
   };
-  // only the game's own scripts (not PostHog's, an extension's or anything else on the page)
-  const ours = (file) => !file || file.startsWith(location.origin);
   window.addEventListener('error', (e) => { if (ours(e.filename)) report(e.message, e.filename, e.lineno); });
-  window.addEventListener('unhandledrejection', (e) => report(e.reason?.message || e.reason, e.reason?.stack?.match(/\/([^/]+?\.js)/)?.[1], 0));
+  window.addEventListener('unhandledrejection', (e) => {
+    // a rejection carries no file of its own: report it only if its stack runs through our code
+    const stack = typeof e.reason?.stack === 'string' ? e.reason.stack : '';
+    const frame = stack.match(OUR_FRAME);
+    if (frame) report(e.reason.message || String(e.reason), frame[0].replace(/:\d+$/, ''), +frame[1]);
+  });
 }
