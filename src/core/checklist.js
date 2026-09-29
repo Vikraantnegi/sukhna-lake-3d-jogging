@@ -22,7 +22,7 @@ export const TODO = [
 ];
 const FOLD_AFTER = 20; // seconds of play before the open list folds into the pill
 
-export function createChecklist({ hud, onDone }) {
+export function createChecklist({ hud, onDone, onToggle }) {
   const box = document.createElement('div');
   box.className = 'todo waiting';
   box.setAttribute('role', 'region');
@@ -39,14 +39,16 @@ export function createChecklist({ hud, onDone }) {
   const done = new Set(), toasts = [];
   let shown = false, open = false, played = 0, touched = false, startedAt = 0;
   const count = () => `${done.size}/${TODO.length}`;
-  const setOpen = (o) => {
+  // (via: 'L', 'tap' or 'auto' when the player opens or folds it, or it folds itself; none at Start)
+  const setOpen = (o, via) => {
     open = o;
+    if (via) onToggle?.(o, via);
     box.classList.toggle('open', o);
     box.querySelector('.todo-pill').setAttribute('aria-expanded', String(o));
   };
   // a click or tap: the pill opens the list, the open list folds (and the game never sees it)
   box.addEventListener('pointerdown', (e) => e.stopPropagation());
-  box.addEventListener('click', (e) => { e.stopPropagation(); touched = true; setOpen(!open); });
+  box.addEventListener('click', (e) => { e.stopPropagation(); touched = true; setOpen(!open, 'tap'); });
 
   const api = {
     /** At Start: open, and the 20 s count begins. */
@@ -57,7 +59,7 @@ export function createChecklist({ hud, onDone }) {
       setOpen(true);
     },
     /** L: open or fold it. */
-    toggle() { if (!shown) return; touched = true; setOpen(!open); },
+    toggle() { if (!shown) return; touched = true; setOpen(!open, 'L'); },
     get open() { return open; },
     get shown() { return shown; },
     get count() { return done.size; },
@@ -80,7 +82,7 @@ export function createChecklist({ hud, onDone }) {
       if (!shown) return;
       if (playing) {
         played += dt;
-        if (open && !touched && played >= FOLD_AFTER) setOpen(false);
+        if (open && !touched && played >= FOLD_AFTER) setOpen(false, 'auto');
       }
       if (toasts.length && !hud.toastOn) hud.flash(toasts.shift(), 2200);
     },

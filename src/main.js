@@ -130,11 +130,12 @@ jogger.avoid = world.crowd.avoid;
 const boat = createBoat({ scene, world, collider });
 const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world, boat, weather });
 // things to do at Sukhna (core/checklist.js): open at Start, ticked from the game's own state
-// in countMoments() below, each tick reported (anonymously, and never with ?notrack or from a bot)
+// in countMoments() below, each tick and each open or fold reported (anonymously, and never
+// with ?notrack or from a bot)
 const checklist = createChecklist({ hud, onDone: (item, n, secs, all) => {
   track('checklist_done', { item, done_count: n, seconds_since_start: secs });
   if (all) track('checklist_complete', { seconds_since_start: secs });
-} });
+}, onToggle: (open, via) => track('checklist_toggled', { open, via }) });
 
 /* -------------------------------- actions -------------------------------- */
 /* One table for keys and touch buttons.  T, K and M are wired by the time

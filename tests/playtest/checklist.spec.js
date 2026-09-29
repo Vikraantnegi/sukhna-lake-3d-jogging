@@ -1,7 +1,8 @@
 // 12. The first-minute checklist ("Things to do at Sukhna", core/checklist.js): open at Start,
 // two items ticked for real (a chai, the laughter club) with their toasts and the counter,
 // folded into the pill after 20 s of play, L and the pill to open and fold it, H to hide it,
-// and the analytics events it sends (the dev build's window.__analytics log).
+// and the analytics events it sends (checklist_done, checklist_toggled; the dev build's
+// window.__analytics log).
 import { test, expect } from '@playwright/test';
 import { openGame, T, reporter, checks } from './helpers.js';
 
@@ -61,9 +62,10 @@ test('checklist', async ({ page }) => {
 
   // the analytics: one checklist_done per item, with its count and time
   s = await state(page);
-  const ev = s.events.map(([n, p]) => `${n}:${p.item}:${p.done_count}`);
+  const ev = s.events.filter(([n]) => n === 'checklist_done').map(([n, p]) => `${n}:${p.item}:${p.done_count}`);
   c.ok(ev.join(',') === 'checklist_done:chai:1,checklist_done:laugh:2', `checklist events: ${JSON.stringify(s.events)}`);
-  c.ok(s.events.every(([, p]) => Number.isFinite(p.seconds_since_start)), 'seconds_since_start missing');
+  c.ok(s.events.filter(([n]) => n === 'checklist_done').every(([, p]) => Number.isFinite(p.seconds_since_start)), 'seconds_since_start missing');
+  c.ok(!s.events.some(([n]) => n === 'checklist_toggled'), `a checklist_toggled before any toggle: ${JSON.stringify(s.events)}`);
 
   // folds into the pill after 20 s of play
   await api.advance(21, { dt: 1 / 30 });
@@ -85,6 +87,10 @@ test('checklist', async ({ page }) => {
   c.ok((await state(page)).hidden, 'H did not hide it');
   await page.keyboard.press('KeyH'); await api.advance(0.05, { dt: 1 / 60 });
   c.ok(!(await state(page)).hidden, 'H did not bring it back');
+
+  // checklist_toggled: the fold after 20 s (auto), L open and fold, the pill (tap)
+  const toggles = (await state(page)).events.filter(([n]) => n === 'checklist_toggled').map(([, p]) => `${p.open ? 'open' : 'fold'}:${p.via}`);
+  c.ok(toggles.join(',') === 'fold:auto,open:L,fold:L,open:tap', `checklist_toggled events: ${JSON.stringify(toggles)}`);
 
   const errors = await api.consoleErrors();
   c.ok(errors.length === 0, `console errors: ${errors.slice(0, 3).join(' | ')}`);
