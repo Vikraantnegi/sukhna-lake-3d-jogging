@@ -45,7 +45,7 @@ const NODS = ['Haan ji!', 'Sahi baat hai.', 'Bilkul!', 'Hmm, haan.'];
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
 export const HINTS = {
-  boat: 'W/S pedal · A/D steer · Shift pedal hard · E dock · T time · K rain · P overview · M sound · H hide · Esc pause',
+  boat: 'W/S pedal · A/D steer · Shift pedal hard · E dock · T time · K rain · P overview · M sound · L list · H hide · Esc pause',
   group: 'Esc · leave the group · WASD leave · T time · K rain · M sound · H hide',
 };
 

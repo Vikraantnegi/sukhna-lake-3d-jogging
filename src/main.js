@@ -11,6 +11,7 @@ import { createPerf } from './core/perf.js';
 import { Jogger } from './core/jogger.js';
 import { createCameraRig } from './core/camera.js';
 import { createHud } from './core/hud.js';
+import { createChecklist } from './core/checklist.js';
 import { createTouch, isTouch } from './core/touch.js';
 import { data, L, spineAt, azimuthDir, yawForAzimuth, azimuthForYaw, nearestS, LAKE_CENTRE } from './world/frame.js';
 import { groundAt } from './world/terrain.js';
@@ -128,6 +129,12 @@ jogger.avoid = world.crowd.avoid;
 // the pedal boat you can take out from the jetty (core/boat.js)
 const boat = createBoat({ scene, world, collider });
 const interact = createInteractions({ crowd: world.crowd, jogger, hud, camera, world, boat, weather });
+// things to do at Sukhna (core/checklist.js): open at Start, ticked from the game's own state
+// in countMoments() below, each tick reported (anonymously, and never with ?notrack or from a bot)
+const checklist = createChecklist({ hud, onDone: (item, n, secs, all) => {
+  track('checklist_done', { item, done_count: n, seconds_since_start: secs });
+  if (all) track('checklist_complete', { seconds_since_start: secs });
+} });
 
 /* -------------------------------- actions -------------------------------- */
 /* One table for keys and touch buttons.  T, K and M are wired by the time
@@ -147,6 +154,7 @@ const actions = {
     if (rig.mode === 'overview') track('overview_opened');
   },
   M: () => { const on = sound.toggle(); hud.flash(on ? 'sound on' : 'sound off'); },
+  L: () => checklist.toggle(),
   H: () => hud.toggleHidden(),
 };
 let coordsOn = false;
@@ -204,6 +212,7 @@ hud.onStart = () => {
   if (sound.enabled) sound.start();
   if (!TOUCH) lockPointer();
   world.onStart?.();
+  checklist.show();
 };
 if (TOUCH) {
   createTouch({ keys: jogger.keys, onLook: (dx, dy) => rig.look(dx, dy), onZoom: (d) => rig.zoom(d), onButton: (k) => actions[k]?.() });
@@ -311,18 +320,24 @@ function countMoments() {
   const s = interact.state;
   if (s !== seen.state) {
     if (seen.state === 'boat' && seen.ride?.docking) track('boat_docked', { ride_seconds: Math.round(seen.ride.time), ride_metres: Math.round(seen.ride.distance) });
-    if (s === 'steps') track('sat_on_steps');
+    if (s === 'steps') { track('sat_on_steps'); checklist.done('steps'); }
     else if (s === 'bench') track('sat_on_bench');
-    else if (s === 'group') track('joined_group', { group: interact.group?.kind === 'laugh' ? 'laughter_club' : 'chat' });
-    else if (s === 'chai') track('chai');
+    else if (s === 'group') { track('joined_group', { group: interact.group?.kind === 'laugh' ? 'laughter_club' : 'chat' }); if (interact.group?.kind === 'laugh') checklist.done('laugh'); }
+    else if (s === 'chai') { track('chai'); checklist.done('chai'); }
     else if (s === 'boat') track('boat_boarded');
+    else if (s === 'five') checklist.done('five');
     seen.state = s;
     seen.ride = null;
   }
   if (s === 'boat') seen.ride = { time: boat.state.time, distance: boat.state.distance, docking: boat.phase === 'docking' || !!seen.ride?.docking };
+  // a ride, not just a seat: 25 m pedalled
+  if (s === 'boat' && boat.state.distance > 25) checklist.done('boat');
   if (interact.ticket && !seen.ticket) track('boat_ticket');
   seen.ticket = interact.ticket;
   if (jogger.lengths > seen.lengths) { seen.lengths = jogger.lengths; track('length_completed', { lengths: jogger.lengths, run_seconds: Math.round(jogger.elapsed) }); }
+  // the full length of the dam: one of the jogger's lengths (core/jogger.js): arriving within 25 m
+  // of one end of the walk (s = 0 or s = L, 2 494.9 m) after touching within 25 m of the other
+  if (jogger.lengths > 0) checklist.done('length');
 }
 heartbeat(() => hud.started && !hud.paused, () => ({ quality_tier: tier, device_type: DEVICE }));
 
@@ -344,6 +359,7 @@ function tick(dt) {
   cameraHook?.(dt);
   if (playing) interact.update(dt); else hud.setPrompt('');
   if (playing) countMoments();
+  checklist.update(dt, playing);
   sound.update(dt, camera, playing);
   placeLights();
   hud.setRun(jogger, boat.active ? boat : null);

@@ -17,10 +17,10 @@ import { OUTFITS } from '../people/body.js';
  *
  *   next-morning fade  black, a short card, and back at golden hour
  *
- * H hides the hint bar and both HUD cards together.
+ * H hides the hint bar, both HUD cards and the things-to-do list together.
  * ------------------------------------------------------------------ */
 
-export const HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide';
+export const HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · L list · H hide';
 
 const hex = (n) => '#' + n.toString(16).padStart(6, '0');
 
@@ -38,7 +38,9 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   const bubble = el('div', 'bubble', root, '');
 
   // ---------------------------- jog HUD ----------------------------
-  const jog = el('div', 'jog', root);
+  // (in a top-left column with the things-to-do list under it: core/checklist.js)
+  const corner = el('div', 'corner', root);
+  const jog = el('div', 'jog', corner);
   jog.innerHTML = `
     <div class="jog-grid">
       <div><i data-l="dist">distance</i><b data-k="dist">0.00</b><small data-u="dist">km</small></div>
@@ -81,7 +83,7 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   const overlay = document.querySelector('.overlay');
   root.appendChild(overlay);
   overlay.querySelector('.outfits').innerHTML = OUTFITS.map((o, i) => `<button type="button" role="radio" data-outfit="${i}" aria-checked="${i === outfit}"><span style="background:${hex(o.row.top)}"></span><span style="background:${hex(o.row.bottom)}"></span>${o.row.headwear === 'patka' ? `<span style="background:${hex(o.row.headwearColor)}"></span>` : ''}<em>${o.name.replace('&', '&amp;')}</em></button>`).join('');
-  overlay.querySelector('.controls').textContent = touch ? 'Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H' : 'WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · H hide · Esc pause';
+  overlay.querySelector('.controls').textContent = touch ? 'Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H' : 'WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · L things to do · H hide · Esc pause';
   const go = overlay.querySelector('.go');
   go.textContent = touch ? 'Tap to start' : 'Start jogging';
   go.disabled = false;
@@ -152,7 +154,12 @@ export function createHud({ outfit = 0, touch = false } = {}) {
       bubble.classList.toggle('on', !!text);
       if (text) { bubble.style.left = `${x}px`; bubble.style.top = `${y}px`; }
     },
-    setHidden(h) { api.hidden = h; for (const n of [jog, cond, hint]) n.classList.toggle('off', h); },
+    setHidden(h) { api.hidden = h; for (const n of [jog, cond, hint, ...api.alsoHide]) n.classList.toggle('off', h); },
+    /** The top-left column (the jog card, then the checklist), and what else H hides. */
+    corner,
+    alsoHide: [],
+    /** A toast is showing (so the checklist's ticks wait their turn). */
+    get toastOn() { return toast.classList.contains('on'); },
     toggleHidden() { api.setHidden(!api.hidden); return api.hidden; },
     setCoords(text) { coords.textContent = text; coords.classList.toggle('on', !!text); },
     setPaused(paused) {

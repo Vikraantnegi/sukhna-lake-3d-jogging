@@ -7,8 +7,8 @@
 import { test, expect } from '@playwright/test';
 import { openGame, T, reporter, checks } from './helpers.js';
 
-const BOAT_HINT = 'W/S pedal · A/D steer · Shift pedal hard · E dock · T time · K rain · P overview · M sound · H hide · Esc pause';
-const JOG_HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide';
+const BOAT_HINT = 'W/S pedal · A/D steer · Shift pedal hard · E dock · T time · K rain · P overview · M sound · L list · H hide · Esc pause';
+const JOG_HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · L list · H hide';
 
 /** The feet follow the treads, by the stairs scenario's measure: never > 0.1 m into one, never > 0.2 m over, ≤ 0.06 m on average. */
 function treads(tag, samples, c) {

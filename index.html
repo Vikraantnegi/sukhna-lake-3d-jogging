@@ -118,11 +118,41 @@
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     transition: opacity .4s ease;
   }
-  .hintbar.off, .jog.off, .cond.off { opacity: 0; }
+  .hintbar.off, .jog.off, .cond.off, .todo.off { opacity: 0; }
+  .todo.off { pointer-events: none; }
+
+  /* ---------- things to do (core/checklist.js): under the jog card, open at Start, then a pill ---------- */
+  .todo { pointer-events: auto; transition: opacity .4s ease; font-size: 12px; color: #e8eaf0; -webkit-tap-highlight-color: transparent; }
+  .todo.waiting { display: none; }
+  .todo-pill {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 5px 12px;
+    background: rgba(14,16,22,.5); border: 1px solid rgba(255,255,255,.12); border-radius: 999px;
+    color: #e8eaf0; font: inherit; font-weight: 600; cursor: pointer; touch-action: manipulation;
+  }
+  .todo-pill b, .todo-head b { color: #f2c230; font: 600 12px/1 ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+  .todo-card {
+    min-width: 214px; padding: 9px 12px 10px; cursor: pointer;
+    background: rgba(14,16,22,.5); border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
+  }
+  .todo-card, .todo.open .todo-pill { display: none; }
+  .todo.open .todo-card { display: block; }
+  .todo-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 5px; }
+  .todo-head i { font-style: normal; color: #9aa0ad; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+  .todo ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .todo li { display: flex; align-items: center; gap: 8px; line-height: 1.35; }
+  .todo-box { flex: none; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,.45); display: grid; place-items: center; }
+  .todo li.done { color: #9aa0ad; }
+  .todo li.done .todo-box { background: #f2c230; border-color: #f2c230; }
+  .todo li.done .todo-box::after { content: ''; width: 5px; height: 3px; border: solid #2a2d38; border-width: 0 0 1.6px 1.6px; transform: translateY(-1px) rotate(-45deg); }
+  .todo.ticked .todo-pill, .todo.ticked .todo-card { border-color: rgba(242,194,48,.8); }
 
   /* ---------- jog HUD (top left) ---------- */
-  .jog {
+  .corner {
     position: absolute; left: 14px; top: 12px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  }
+  .jog {
+    position: relative;
     min-width: 214px; padding: 9px 12px 10px;
     background: rgba(14,16,22,.5); border: 1px solid rgba(255,255,255,.12); border-radius: 8px;
     color: #e8eaf0; font-size: 12px; transition: opacity .4s ease;
@@ -272,6 +302,8 @@
   .touch { position: fixed; inset: 0; pointer-events: none; transition: opacity .45s ease, visibility .45s ease; }
   /* not over the start / pause card: on a phone the stick and buttons covered its credits */
   body:has(.overlay:not(.hidden)) .touch { opacity: 0; visibility: hidden; }
+  /* on touch, the E prompt sits above the stick and buttons (at 17 % it fell behind them on short phones) */
+  body:has(.touch) .prompt { bottom: calc(196px + env(safe-area-inset-bottom)); }
   .stick { position: absolute; left: 22px; bottom: 56px; width: 130px; height: 130px; border-radius: 50%; background: rgba(14,16,22,.28); border: 1px solid rgba(255,255,255,.3); pointer-events: auto; touch-action: none; }
   .knob { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(255,255,255,.7); }
   .tbuttons { position: absolute; right: 14px; bottom: 56px; display: grid; grid-template-columns: repeat(4, 44px); gap: 8px; pointer-events: auto; }
@@ -286,16 +318,28 @@
   .flatpanel canvas { max-width: 100%; }
   .flatinfo { font: 12px ui-monospace, Consolas, monospace; color: #333; }
 
+  /* a short screen (a phone on its side): the list goes beside the jog card, not under it, so it
+     stays clear of the touch stick in the bottom-left corner */
+  @media (max-height: 520px) {
+    .corner { flex-direction: row; }
+    .toast { top: 46%; } /* (below the list, which is at the top here, and above the E prompt) */
+  }
   @media (max-width: 640px) {
     .card { grid-template-columns: 1fr; }
     .card-art { min-height: 110px; border-right: 0; border-bottom: 2px solid #2f3346; }
     .card-copy { padding: 18px 18px 16px; }
     .card .wordmark { font-size: 36px; }
     .about { padding: 20px 18px 16px; font-size: 14px; }
-    .jog { min-width: 0; left: 8px; top: 8px; padding: 7px 9px; }
+    .corner { left: 8px; top: 8px; gap: 6px; }
+    .jog { min-width: 0; padding: 7px 9px; }
     .jog b { font-size: 14px; }
     .cond { right: 8px; top: 8px; padding: 7px 9px; gap: 3px; }
     .cond b { font-size: 13px; }
+    .todo-card { min-width: 0; padding: 7px 9px 8px; }
+    /* the toast under the conditions card on the right: centred it sat on the jog card */
+    .toast { left: auto; right: 8px; top: 100px; transform: translate(0, 6px); max-width: calc(100% - 16px); white-space: normal; }
+    .toast.on { transform: translate(0, 0); }
+    .todo { font-size: 11.5px; }
     .hintbar { font-size: 10.5px; }
   }
 </style>
@@ -319,7 +363,7 @@
             <button type="button" role="radio" data-outfit="1" aria-checked="false"><span style="background:#2f6fb0"></span><span style="background:#1f2430"></span><span style="background:#f08a2e"></span><em>Patka, tee &amp; shorts</em></button>
             <button type="button" role="radio" data-outfit="2" aria-checked="false"><span style="background:#6b7a5a"></span><span style="background:#3a3f48"></span><em>Hoodie &amp; joggers</em></button>
           </div>
-          <div class="controls"><span class="for-mouse">WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · H hide · Esc pause</span><span class="for-touch">Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H</span></div>
+          <div class="controls"><span class="for-mouse">WASD jog · Shift run · mouse look · wheel zoom · E interact · V auto-jog · T time · K rain · P overview · M sound · L things to do · H hide · Esc pause</span><span class="for-touch">Left stick jog (push to the rim to run) · drag to look · pinch to zoom · buttons for E V T K P M H</span></div>
           <button type="button" class="go" disabled>Loading the lake…</button>
           <noscript><p>Sukhna runs in the browser with JavaScript and WebGL; turn JavaScript on to play.</p></noscript>
           <div class="credits">Map data © OpenStreetMap contributors (ODbL) · terrain: Mapzen / AWS Terrain Tiles · engine after sakura-crossing (MIT)</div>
