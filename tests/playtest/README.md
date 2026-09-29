@@ -3,7 +3,7 @@
 A bot that plays the game in real Chrome on the real GPU and asserts what it finds.
 
 ```bash
-npm run playtest              # all eleven scenarios (~10 min, most of it stairs and sit)
+npm run playtest              # all twelve scenarios (~12 min, most of it stairs and sit)
 npm run playtest -- stairs    # the files whose name matches "stairs"
 ```
 
@@ -47,6 +47,7 @@ production builds (`dist/` has no `__test`). The main calls:
 | `camera` | auto-jog through the busiest stretch: nobody un-faded within 1.5 m of the lens |
 | `boundaries` | water, dam edge, buildings, world edge are all blocked |
 | `ui` | start card, P overview and back, H, M, Esc pause and resume |
+| `checklist` | the "Things to do at Sukhna" list: open at Start, a chai and the laughter club tick (counter, toasts, `checklist_done` events, no double tick), folds into the pill after 20 s of play, L and the pill open it, H hides it |
 | `perf` | draw calls and frame time at the three worst views per tier |
 | `boating` | ticket at the shack → down the jetty stair → E at a swan → a loop past the dam (always ≥ 2 m inside the water, boat and jogger in frame) → E mid-lake refused, Esc only pauses → dock at a free berth → back up the stair; the counter shut in rain, open in fog; no swan without a ticket |
 | `groups` | join the laughter club (a gap opens, on the ring, facing the middle), stay 30 s (still laughing, bubbles), Esc leaves and a second Esc pauses, W leaves; a chatting circle takes turns to talk and you nod along |

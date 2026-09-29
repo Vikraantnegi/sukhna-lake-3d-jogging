@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { openGame, T, reporter, checks } from './helpers.js';
 
-const HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide';
+const HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · L list · H hide';
 
 test('ui', async ({ page }) => {
   const api = T(page), rep = reporter('ui'), c = checks();

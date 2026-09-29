@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 import { openGame, T, reporter, checks } from './helpers.js';
 
 const GROUP_HINT = 'Esc · leave the group · WASD leave · T time · K rain · M sound · H hide';
-const JOG_HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · H hide';
+const JOG_HINT = 'WASD jog · Shift run · E interact · V auto · T time · K rain · P overview · M sound · L list · H hide';
 
 /** Where the player stands in the circle: on the ring, facing the middle, room either side. */
 async function placeIn(api, kind) {

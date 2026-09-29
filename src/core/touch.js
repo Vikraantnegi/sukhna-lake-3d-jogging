@@ -74,7 +74,7 @@ export function createTouch({ keys, onLook, onZoom, onButton }) {
   window.addEventListener('touchcancel', end);
   window.addEventListener('touchstart', (e) => {
     for (const t of e.changedTouches) {
-      if (t.target.closest?.('.stick, .tbuttons, .overlay')) continue;
+      if (t.target.closest?.('.stick, .tbuttons, .overlay, .todo')) continue;
       if (t.clientX > window.innerWidth * 0.4) lookTouches.set(t.identifier, { x: t.clientX, y: t.clientY });
     }
   }, { passive: true });
