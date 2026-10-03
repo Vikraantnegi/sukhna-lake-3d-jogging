@@ -13,7 +13,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "playtest": "playwright test --config tests/playtest/playwright.config.js"
+    "playtest": "playwright test --config tests/playtest/playwright.config.js",
+    "perf": "node tests/perf/run.mjs"
   },
   "dependencies": {
     "three": "^0.180.0"
