@@ -8,6 +8,7 @@ import { Pipeline } from './core/post.js';
 import { buildSky } from './core/sky.js';
 import { setOutlineResolution } from './core/outline.js';
 import { createPerf } from './core/perf.js';
+import { createPerfHud } from './core/perfhud.js';
 import { Jogger } from './core/jogger.js';
 import { createCameraRig } from './core/camera.js';
 import { createHud } from './core/hud.js';
@@ -109,6 +110,8 @@ const collider = createCollider(world);
 const pipeline = new Pipeline(renderer, scene, camera, { farCamera, pixelBudget: Q.pixelBudget });
 console.info(`[quality] ${Q.tier} (${Q.why}): ${(Q.pixelBudget / 1e6).toFixed(1)} MP, shadows ${Q.shadow}, water ${Q.water}, ${Q.npcs} people, ${Q.birds} birds`);
 const perf = createPerf(renderer, { show: params.has('stats') });
+// ?perf: the performance overlay for real phones, and the hooks tests/perf/run.mjs reads (off otherwise)
+const perfHud = params.has('perf') ? createPerfHud({ perf, tier: () => tier, why: Q.why }) : null;
 
 /* ------------------------------ the jogger ------------------------------ */
 // spawn on the walk at the west end, by the plaza, facing east along the dam
@@ -214,6 +217,7 @@ hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setI
 let startedOnce = false;
 hud.onAction = () => actions.E('touch');
 hud.onStart = () => {
+  perfHud?.started();
   if (!startedOnce) { startedOnce = true; track('game_started', { outfit: OUTFITS[outfit]?.name, quality_tier: tier, device_type: DEVICE }); }
   if (sound.enabled) sound.start();
   if (!TOUCH) lockPointer();
@@ -303,6 +307,7 @@ function watchFrameTime(raw) {
   const next = lower(tier);
   if (!next) return;
   track('quality_fallback', { from: tier, to: next, device_type: DEVICE });
+  perfHud?.fallback(tier, next);
   tier = next;
   const T = TIERS[tier];
   pipeline.pixelBudget = T.pixelBudget;
@@ -396,6 +401,7 @@ function frame() {
   tick(dt);
   pipeline.render();
   perf.end(dt);
+  perfHud?.frame(raw);
   flatPanel?.update(camera, dt);
   requestAnimationFrame(frame);
 }

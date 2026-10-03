@@ -243,6 +243,13 @@
   .coords { right: 12px; bottom: 40px; opacity: 0; }
   .coords.on { opacity: 1; }
   .stats { left: 12px; bottom: 40px; }
+  /* ?perf (core/perfhud.js): top centre, small, over everything; never shown without ?perf */
+  .perfhud {
+    position: fixed; left: 50%; top: 6px; transform: translateX(-50%); z-index: 40; pointer-events: none;
+    max-width: calc(100vw - 16px); padding: 5px 9px; border-radius: 6px;
+    background: rgba(8,10,14,.78); color: #d9f2c4; white-space: pre; overflow: hidden;
+    font: 600 10.5px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  }
 
   /* ---------- start / pause card ---------- */
   /* the card is plain HTML in this page, so it (and the About text below it) shows before any
