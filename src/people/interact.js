@@ -73,33 +73,59 @@ export function createInteractions({ crowd, jogger, hud, camera, world, boat = n
     return u > club.jetty.d0 - 0.5 && u < club.jetty.d1 + 0.5 && Math.abs(v) < 3.3;
   };
 
+  // What E does, in a word or two: the touch action button's label and the key prompt's
+  // (core/hud.js), and a stable id for the usage stats.
+  const action = (o) => {
+    if (o.kind === 'join') return o.circle.kind === 'laugh' ? { action: 'Join laughter club', id: 'laughter_club' } : { action: 'Join group', id: 'group' };
+    const a = { ticket: 'Buy ticket', board: 'Board swan', dock: 'Dock', bench: 'Sit', steps: 'Sit', chai: 'Grab chai', yoga: 'Join yoga', five: 'High-five', greet: 'Say hello' }[o.kind];
+    return a ? { action: a, id: o.kind } : {};
+  };
+
+  /**
+   * The thing E would do now.  Places beat people: of the places in range, the nearest (on a
+   * tie, the order below, which was the old fixed priority); people only when no place is in
+   * range.  Places: the ticket counter 1.8 m, a moored swan 2.8 m (from the jetty's deck), a free
+   * bench 1.8 m, a water flight anywhere on its footprint (distance 0: being on it means you came
+   * to sit), the chai kiosk 4.5 m, the yoga group 7 m from its centre (3 m counted off for its
+   * spread), a circle 4 m from its edge.  People: the nearest within 3.2 m (a high five for a
+   * runner coming the other way, else a hello), but not people in a circle or the yoga, whose
+   * own group is the offer.
+   */
   function find() {
     // in the boat: dock near a free berth; anywhere else E only says where to get off
     if (busy?.kind === 'boat') {
       if (boat.phase !== 'on') return null;
       // (not the berth you've only just left: pedal off a few metres first)
       const b = boat.state.distance > 8 ? boat.freeBerth() : null;
-      return b ? { kind: 'dock', label: 'dock', berth: b } : { kind: 'say', text: 'Dock at the jetty to get off', silent: true };
+      return b ? { kind: 'dock', label: 'dock', berth: b, ...action({ kind: 'dock' }) } : { kind: 'say', text: 'Dock at the jetty to get off', silent: true };
     }
     if (busy) return null;
     const e = jogger.e, n = jogger.n;
+    const offers = [];
+    const add = (d, o) => offers.push({ ...o, ...action(o), d });
     // the ticket counter, at the shack's window
     const shack = club?.shack;
-    if (shack && Math.hypot(shack.counter[0] - e, shack.counter[1] - n) < 1.8) {
-      if (weather?.state.kind === 'rain') return { kind: 'say', text: 'Closed · rain' };
-      if (ticket) return { kind: 'say', text: 'Ticket in hand · the jetty is down the steps' };
-      return { kind: 'ticket', label: 'a boat ticket' };
+    if (shack) {
+      const d = Math.hypot(shack.counter[0] - e, shack.counter[1] - n);
+      if (d < 1.8) {
+        if (weather?.state.kind === 'rain') offers.push({ kind: 'say', text: 'Closed · rain', d });
+        else if (ticket) offers.push({ kind: 'say', text: 'Ticket in hand · the jetty is down the steps', d });
+        else add(d, { kind: 'ticket', label: 'a boat ticket' });
+      }
     }
     // a moored swan, from the jetty's deck
     if (boat && onJetty(e, n)) {
       let best = null, bd = 2.8;
       for (const b of club.berths) { if (!b.color) continue; const d = Math.hypot(b.e - e, b.n - n); if (d < bd) { bd = d; best = b; } }
-      if (best) return ticket ? { kind: 'board', label: 'take this swan out', berth: best } : { kind: 'say', text: 'Tickets at the counter, up on the walk' };
+      if (best) {
+        if (ticket) add(bd, { kind: 'board', label: 'take this swan out', berth: best });
+        else offers.push({ kind: 'say', text: 'Tickets at the counter, up on the walk', d: bd });
+      }
     }
     // a bench (a real one on the walk) within 1.8 m, if nobody is on it
     for (const b of BENCHES) {
-      const f = spineAt(b.s), be = f.e + f.ne * b.d, bn = f.n + f.nn * b.d;
-      if (Math.hypot(be - e, bn - n) < 1.8 && !crowd.people.some((p) => p.bench === b)) return { kind: 'bench', label: 'sit on the bench', bench: b, be, bn, f };
+      const f = spineAt(b.s), be = f.e + f.ne * b.d, bn = f.n + f.nn * b.d, d = Math.hypot(be - e, bn - n);
+      if (d < 1.8 && !crowd.people.some((p) => p.bench === b)) add(d, { kind: 'bench', label: 'sit on the bench', bench: b, be, bn, f });
     }
     // a water step: anywhere on its landing or its flight, measured in the flight's own
     // straight frame (it runs straight out from its spine point, not along the curve)
@@ -110,24 +136,24 @@ export function createInteractions({ crowd, jogger, hud, camera, world, boat = n
       if (Math.abs(v) < st.width / 2 + 0.6 && u > st.landing.d0 - 1.2 && u < last + 0.5) {
         // the lowest tread that is dry and that you may stand on (world/dam.js stepSeat)
         const seatPick = stairSeat(st);
-        if (seatPick) return { kind: 'steps', label: 'sit on the steps', st, seat: seatPick.seat, foot: seatPick.foot, f: seatPick.f };
+        if (seatPick) add(0, { kind: 'steps', label: 'sit on the steps', st, seat: seatPick.seat, foot: seatPick.foot, f: seatPick.f });
       }
     }
-    if (plaza?.kiosk && Math.hypot(plaza.kiosk[0] - e, plaza.kiosk[1] - n) < 4.5) return { kind: 'chai', label: 'a cutting chai' };
-    if (yogaCentre && Math.hypot(yogaCentre[0] - e, yogaCentre[1] - n) < 7) return { kind: 'yoga', label: 'join the yoga' };
+    if (plaza?.kiosk) { const d = Math.hypot(plaza.kiosk[0] - e, plaza.kiosk[1] - n); if (d < 4.5) add(d, { kind: 'chai', label: 'a cutting chai' }); }
+    if (yogaCentre) { const d = Math.hypot(yogaCentre[0] - e, yogaCentre[1] - n); if (d < 7) add(Math.max(0, d - 3), { kind: 'yoga', label: 'join the yoga' }); }
     // a standing circle within ~4 m of its edge
     const circle = crowd.circleNear?.(e, n, 4);
-    if (circle) return { kind: 'join', label: circle.kind === 'laugh' ? 'join the laughter club' : 'join the group', circle };
-    const near = crowd.near(e, n, 3.2);
-    for (const p of near) {
-      if (p.mode === 'walk' && p.speed > 2 && jogger.speed > 1.2) {
-        // coming the other way: facing each other
-        const dot = Math.cos(p.yaw - jogger.heading);
-        if (dot < -0.3) return { kind: 'five', label: 'high five', p };
-      }
-    }
-    if (near.length) return { kind: 'greet', label: 'say hello', p: near[0] };
-    return null;
+    if (circle) add(Math.max(0, Math.hypot(circle.ce - e, circle.cn - n) - circle.r), { kind: 'join', label: circle.kind === 'laugh' ? 'join the laughter club' : 'join the group', circle });
+    // places beat people: with any place in range, the nearest place (a stable sort, so on a tie
+    // the order above wins); a hello or a high five only when no place is in range
+    if (offers.length) return offers.sort((a, b) => a.d - b.d)[0];
+    // the nearest person who isn't part of a group: a high five if they're a runner coming the
+    // other way, else a hello
+    const person = crowd.near(e, n, 3.2).find((p) => !['yoga', 'laugh', 'chat'].includes(p.act));
+    if (!person) return null;
+    const d = Math.hypot(person.e - e, person.n - n);
+    if (person.mode === 'walk' && person.speed > 2 && jogger.speed > 1.2 && Math.cos(person.yaw - jogger.heading) < -0.3) return { kind: 'five', label: 'high five', p: person, ...action({ kind: 'five' }), d };
+    return { kind: 'greet', label: 'say hello', p: person, ...action({ kind: 'greet' }), d };
   }
 
   function say(who, text, secs = 2.2, delay = 0) {
@@ -360,7 +386,7 @@ export function createInteractions({ crowd, jogger, hud, camera, world, boat = n
     get ticket() { return ticket; },
     set ticket(v) { ticket = !!v; hud.setTicket(ticket); },
     /** The nearest thing E would do right now. */
-    get current() { return current ? { kind: current.kind, label: current.label ?? null, text: current.text ?? null } : null; },
+    get current() { return current ? { kind: current.kind, label: current.label ?? null, text: current.text ?? null, action: current.action ?? null, id: current.id ?? null } : null; },
     /** Who you last high-fived (a crowd id). */
     get lastFive() { return lastFive; },
     /** Leave the circle you're in (Esc); false if you weren't in one. */
@@ -379,7 +405,8 @@ export function createInteractions({ crowd, jogger, hud, camera, world, boat = n
         else if (busy.kind === 'group') groupTick(dt);
       }
       current = find();
-      hud.setPrompt(current ? (current.label ? `E · ${current.label}` : current.silent ? '' : current.text) : '');
+      // (an action, or a line of text for the ones E only explains; nothing for a silent one)
+      hud.setPrompt(!current || current.silent ? null : current.action ? { action: current.action } : { text: current.text });
       // the newest live bubble wins the one bubble slot
       bubbles = bubbles.filter((b) => b.until > now);
       const live = bubbles.filter((b) => b.from <= now).pop();

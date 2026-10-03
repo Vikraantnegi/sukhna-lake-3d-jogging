@@ -36,7 +36,7 @@ test('boating', async ({ page }) => {
   await step(0.2);
   let h = await api.getHud();
   c.ok((await api.nearestInteractable())?.kind === 'ticket', `the counter doesn't offer a ticket (${JSON.stringify(await api.nearestInteractable())})`);
-  c.ok(h.prompt.visible && h.prompt.text === 'E · a boat ticket', `counter prompt reads "${h.prompt.text}"`);
+  c.ok(h.prompt.visible && h.prompt.text === 'E Buy ticket', `counter prompt reads "${h.prompt.text}"`);
   c.ok(!h.ticket, 'a ticket in the HUD before buying one');
   await page.keyboard.press('KeyE');
   await step(0.6);
@@ -160,7 +160,7 @@ test('boating', async ({ page }) => {
   const dock = await api.nearestInteractable();
   c.ok(dock?.kind === 'dock', `near free berth ${free.i}: E offers ${JSON.stringify(dock)}`);
   h = await api.getHud();
-  c.ok(h.prompt.text === 'E · dock', `dock prompt reads "${h.prompt.text}"`);
+  c.ok(h.prompt.text === 'E Dock', `dock prompt reads "${h.prompt.text}"`);
   await page.keyboard.press('KeyE');
   await step(0.8);
   await rep.shot(page, 'docking');

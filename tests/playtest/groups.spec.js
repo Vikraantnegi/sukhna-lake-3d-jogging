@@ -28,7 +28,7 @@ test('groups', async ({ page }) => {
   await api.toSpot('laugh');
   await step(0.2);
   let h = await api.getHud();
-  c.ok(h.prompt.visible && h.prompt.text === 'E · join the laughter club', `near the club the prompt reads "${h.prompt.text}"`);
+  c.ok(h.prompt.visible && h.prompt.text === 'E Join laughter club', `near the club the prompt reads "${h.prompt.text}"`);
   await page.keyboard.press('KeyE');
   await step(6); // they shuffle round to make room, and you step in
   let at = await placeIn(api, 'laugh');
@@ -92,7 +92,7 @@ test('groups', async ({ page }) => {
   if (spot) {
     await step(0.2);
     h = await api.getHud();
-    c.ok(h.prompt.text === 'E · join the group', `near a chatting circle the prompt reads "${h.prompt.text}"`);
+    c.ok(h.prompt.text === 'E Join group', `near a chatting circle the prompt reads "${h.prompt.text}"`);
     await page.keyboard.press('KeyE');
     await step(5);
     at = await placeIn(api, 'chat');
