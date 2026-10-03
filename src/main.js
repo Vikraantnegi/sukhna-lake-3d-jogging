@@ -140,7 +140,12 @@ const checklist = createChecklist({ hud, onDone: (item, n, secs, all) => {
 /* One table for keys and touch buttons.  T, K and M are wired by the time
  * of day (Phase 6), weather (Phase 6) and sound (Phase 7). */
 const actions = {
-  E: () => interact.activate(),
+  // (input: 'keyboard' for the E key, 'touch' for the action button or the touch E button)
+  E: (input = 'keyboard') => {
+    const c = interact.current;
+    if (c?.id) track('action_prompt_used', { action: c.id, input });
+    interact.activate();
+  },
   V: () => {
     // (no auto-jog in a boat, or standing in a circle)
     if (interact.state === 'boat' || interact.state === 'group') { hud.flash(interact.state === 'boat' ? 'no auto-jog in a boat' : 'leave the group first'); return; }
@@ -207,6 +212,7 @@ canvas.addEventListener('pointermove', (e) => { if (dragging && !locked() && !TO
 window.addEventListener('wheel', (e) => { if (hud.started) rig.zoom(Math.sign(e.deltaY) * 0.8); }, { passive: true });
 hud.onOutfit = (i) => { outfit = i; jogger.setOutfit(i); try { localStorage.setItem('sukhna-outfit', String(i)); } catch { /* optional */ } };
 let startedOnce = false;
+hud.onAction = () => actions.E('touch');
 hud.onStart = () => {
   if (!startedOnce) { startedOnce = true; track('game_started', { outfit: OUTFITS[outfit]?.name, quality_tier: tier, device_type: DEVICE }); }
   if (sound.enabled) sound.start();
@@ -215,7 +221,7 @@ hud.onStart = () => {
   checklist.show();
 };
 if (TOUCH) {
-  createTouch({ keys: jogger.keys, onLook: (dx, dy) => rig.look(dx, dy), onZoom: (d) => rig.zoom(d), onButton: (k) => actions[k]?.() });
+  createTouch({ keys: jogger.keys, onLook: (dx, dy) => rig.look(dx, dy), onZoom: (d) => rig.zoom(d), onButton: (k) => actions[k]?.('touch') });
 }
 
 /* -------------------------------- lights -------------------------------- */
@@ -340,6 +346,19 @@ function countMoments() {
   if (jogger.lengths > 0) checklist.done('length');
 }
 heartbeat(() => hud.started && !hud.paused, () => ({ quality_tier: tier, device_type: DEVICE }));
+// an action offered (the touch button or the E prompt): once when it appears, and not again for
+// the same action within 20 s (a jog past people would otherwise send a hello every few metres)
+const PROMPT_INPUT = TOUCH ? 'touch' : 'keyboard';
+let promptId = null;
+const promptAt = {};
+function promptShown() {
+  const id = interact.current?.id ?? null;
+  if (id && id !== promptId && performance.now() - (promptAt[id] ?? -1e9) > 20000) {
+    promptAt[id] = performance.now();
+    track('action_prompt_shown', { action: id, input: PROMPT_INPUT });
+  }
+  promptId = id;
+}
 
 /* --------------------------------- loop --------------------------------- */
 const clock = new THREE.Clock();
@@ -357,7 +376,7 @@ function tick(dt) {
   updateTime(dt, playing);
   rig.update(dt, jogger, { bench: interact.benchView() });
   cameraHook?.(dt);
-  if (playing) interact.update(dt); else hud.setPrompt('');
+  if (playing) { interact.update(dt); promptShown(); } else hud.setPrompt(null);
   if (playing) countMoments();
   checklist.update(dt, playing);
   sound.update(dt, camera, playing);

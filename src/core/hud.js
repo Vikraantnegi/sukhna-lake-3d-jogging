@@ -34,6 +34,14 @@ export function createHud({ outfit = 0, touch = false } = {}) {
   };
   const root = el('div', 'hud');
   const prompt = el('div', 'prompt', root, '');
+  // touch has no E key: one big action button, bottom right above the touch buttons, labelled
+  // with what E would do ("Grab chai"); a tap on it is E.  (On a desktop, the prompt pill.)
+  const act = touch ? el('button', 'act', root, '') : null;
+  if (act) {
+    act.type = 'button';
+    act.addEventListener('touchstart', (e) => { e.preventDefault(); api.onAction?.(); }, { passive: false });
+    act.addEventListener('click', (e) => { e.preventDefault(); api.onAction?.(); });
+  }
   const toast = el('div', 'toast', root, '');
   const bubble = el('div', 'bubble', root, '');
 
@@ -141,7 +149,24 @@ export function createHud({ outfit = 0, touch = false } = {}) {
       setTimeout(() => { fade.classList.remove('on'); }, 4000);
       setTimeout(() => done?.(), 5300);
     },
-    setPrompt(text) { prompt.textContent = text; prompt.classList.toggle('on', !!text); },
+    /**
+     * What E would do: `{ action }` ("Grab chai": the touch button, or the pill with an E key
+     * cap), `{ text }` (a line E only explains, "Closed · rain"), or null.  Called every frame;
+     * the DOM changes only when the offer does.
+     */
+    setPrompt(p) {
+      const key = p ? (p.action ? `a:${p.action}` : `t:${p.text}`) : '';
+      if (key === api._prompt) return;
+      api._prompt = key;
+      const button = !!(p?.action && act);
+      if (act) { if (button) act.textContent = p.action; act.classList.toggle('on', button); }
+      if (!p || button) { prompt.classList.remove('on'); return; }
+      if (p.action) { prompt.innerHTML = '<kbd>E</kbd> <span></span>'; prompt.lastChild.textContent = p.action; }
+      else prompt.textContent = p.text;
+      prompt.classList.add('on');
+    },
+    /** A tap on the touch action button (main.js: E). */
+    onAction: null,
     flash(text, ms = 1800) {
       toast.textContent = text;
       toast.classList.add('on');

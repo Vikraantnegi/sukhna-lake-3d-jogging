@@ -22,7 +22,7 @@ async function timed(page, api, c, rep, kind, label, secs, before, after) {
   const offer = await api.nearestInteractable();
   c.ok(offer?.kind === kind, `${kind}: E doesn't offer it here (nearest: ${JSON.stringify(offer)})`);
   const hud = await api.getHud();
-  c.ok(hud.prompt.visible && hud.prompt.text.includes(label), `${kind}: prompt reads "${hud.prompt.text}" (expected "E · ${label}")`);
+  c.ok(hud.prompt.visible && hud.prompt.text.includes(label), `${kind}: prompt reads "${hud.prompt.text}" (expected "E ${label}")`);
   await before?.();
   await page.keyboard.press('KeyE');
   await watch(api, c, kind, 0.5);
@@ -68,10 +68,10 @@ test('interactions', async ({ page }) => {
   }
 
   // chai: stamina back to 100 when it completes, untouched when cancelled
-  await timed(page, api, c, rep, 'chai', 'a cutting chai', 4.3, () => api.setStamina(40), (p, cancelled) => {
+  await timed(page, api, c, rep, 'chai', 'Grab chai', 4.3, () => api.setStamina(40), (p, cancelled) => {
     c.ok(cancelled ? p.stamina < 60 : p.stamina >= 99, `chai: stamina ${p.stamina} after ${cancelled ? 'cancelling' : 'finishing'}`);
   });
-  await timed(page, api, c, rep, 'yoga', 'join the yoga', 5.3);
+  await timed(page, api, c, rep, 'yoga', 'Join yoga', 5.3);
   // (the laughter club is now a circle you stay in until you leave: groups.spec.js)
 
   // high five: meet a runner head on

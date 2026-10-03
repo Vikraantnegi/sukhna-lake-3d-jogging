@@ -204,6 +204,25 @@
     white-space: nowrap; opacity: 0; transition: opacity .2s ease, transform .2s ease;
   }
   .prompt { bottom: 17%; }
+  /* the E prompt near an activity: a size up, with an E key cap in the start button's colours */
+  .prompt { font-size: 15px; background: rgba(14,16,22,.74); border: 1px solid rgba(255,255,255,.18); }
+  .prompt:has(kbd) { display: inline-flex; align-items: center; gap: 9px; padding: 6px 17px 6px 6px; }
+  .prompt kbd {
+    display: inline-grid; place-items: center; width: 27px; height: 27px; border-radius: 6px;
+    background: #e8542f; color: #fff; border: 1.5px solid #2f3346; box-shadow: 2px 2px 0 #2f3346;
+    font: 700 14px/1 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  }
+  /* touch: the action button (core/hud.js), bottom right, above the E V T K / P M H buttons */
+  .act {
+    position: absolute; right: 14px; bottom: calc(168px + env(safe-area-inset-bottom));
+    min-width: 132px; height: 58px; padding: 0 24px; border-radius: 999px;
+    border: 2px solid #2f3346; background: #e8542f; color: #fff;
+    font: 700 17px/1 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; letter-spacing: .02em;
+    box-shadow: 3px 4px 0 #2f3346; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent;
+    opacity: 0; visibility: hidden; transform: translateY(8px) scale(.96); transition: opacity .18s ease, transform .18s ease, visibility .18s;
+  }
+  .act.on { opacity: 1; visibility: visible; transform: none; }
+  .act.on:active { transform: translate(2px, 3px); box-shadow: 1px 1px 0 #2f3346; }
   .toast { top: 11%; }
   .prompt.on, .toast.on { opacity: 1; transform: translate(-50%, 0); }
   .bubble {
