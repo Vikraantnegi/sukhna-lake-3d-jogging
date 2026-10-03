@@ -82,13 +82,14 @@ export function createInteractions({ crowd, jogger, hud, camera, world, boat = n
   };
 
   /**
-   * The thing E would do now: of everything in range, the nearest (on a tie, the order below,
-   * which was the old fixed priority).  Ranges: the ticket counter 1.8 m, a moored swan 2.8 m
-   * (from the jetty's deck), a free bench 1.8 m, a water flight anywhere on its footprint
-   * (distance 0: being on it means you came to sit), the chai kiosk 4.5 m, the yoga group 7 m
-   * from its centre (3 m counted off for its spread), a circle 4 m from its edge, and people
-   * within 3.2 m (a high five for a runner coming the other way, else a hello) -- but not
-   * people in a circle or the yoga, whose own group is the offer.
+   * The thing E would do now.  Places beat people: of the places in range, the nearest (on a
+   * tie, the order below, which was the old fixed priority); people only when no place is in
+   * range.  Places: the ticket counter 1.8 m, a moored swan 2.8 m (from the jetty's deck), a free
+   * bench 1.8 m, a water flight anywhere on its footprint (distance 0: being on it means you came
+   * to sit), the chai kiosk 4.5 m, the yoga group 7 m from its centre (3 m counted off for its
+   * spread), a circle 4 m from its edge.  People: the nearest within 3.2 m (a high five for a
+   * runner coming the other way, else a hello), but not people in a circle or the yoga, whose
+   * own group is the offer.
    */
   function find() {
     // in the boat: dock near a free berth; anywhere else E only says where to get off
@@ -143,17 +144,16 @@ export function createInteractions({ crowd, jogger, hud, camera, world, boat = n
     // a standing circle within ~4 m of its edge
     const circle = crowd.circleNear?.(e, n, 4);
     if (circle) add(Math.max(0, Math.hypot(circle.ce - e, circle.cn - n) - circle.r), { kind: 'join', label: circle.kind === 'laugh' ? 'join the laughter club' : 'join the group', circle });
+    // places beat people: with any place in range, the nearest place (a stable sort, so on a tie
+    // the order above wins); a hello or a high five only when no place is in range
+    if (offers.length) return offers.sort((a, b) => a.d - b.d)[0];
     // the nearest person who isn't part of a group: a high five if they're a runner coming the
     // other way, else a hello
     const person = crowd.near(e, n, 3.2).find((p) => !['yoga', 'laugh', 'chat'].includes(p.act));
-    if (person) {
-      const d = Math.hypot(person.e - e, person.n - n);
-      if (person.mode === 'walk' && person.speed > 2 && jogger.speed > 1.2 && Math.cos(person.yaw - jogger.heading) < -0.3) add(d, { kind: 'five', label: 'high five', p: person });
-      else add(d, { kind: 'greet', label: 'say hello', p: person });
-    }
-    if (!offers.length) return null;
-    // (a stable sort: on a tie the order above wins)
-    return offers.sort((a, b) => a.d - b.d)[0];
+    if (!person) return null;
+    const d = Math.hypot(person.e - e, person.n - n);
+    if (person.mode === 'walk' && person.speed > 2 && jogger.speed > 1.2 && Math.cos(person.yaw - jogger.heading) < -0.3) return { kind: 'five', label: 'high five', p: person, ...action({ kind: 'five' }), d };
+    return { kind: 'greet', label: 'say hello', p: person, ...action({ kind: 'greet' }), d };
   }
 
   function say(who, text, secs = 2.2, delay = 0) {
