@@ -388,6 +388,15 @@
       "text": "the real winter sunrise, 07:19"
     },
     {
+      "from": 3.6,
+      "to": 6.05,
+      "text": "SUNRISE · SPED UP",
+      "align": "left",
+      "x": 0.06,
+      "y": 0.08,
+      "size": 0.55
+    },
+    {
       "from": 8.2,
       "to": 11.4,
       "text": "200 people on the dam"

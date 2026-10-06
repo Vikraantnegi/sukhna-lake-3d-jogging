@@ -1,0 +1,157 @@
+{
+  "name": "golden-hour-16x9",
+  "about": "16:9, 16 s, for an X post: the jogger already running along the dam at golden hour (07:45, the low sun just after the 07:19 sunrise), from behind toward the sun; a side view with the lake while the \"Things to do at Sukhna\" list shows for a beat; then from ahead as they run toward the camera. Real time, no time-lapse.",
+  "seed": 12,
+  "duration": 16,
+  "start": {
+    "time": "golden",
+    "weather": "clear"
+  },
+  "events": [
+    {
+      "at": 0,
+      "do": "place",
+      "s": 2262,
+      "d": -1.2,
+      "face": "east",
+      "speed": 3
+    },
+    {
+      "at": 0,
+      "do": "auto"
+    },
+    {
+      "at": 5.0,
+      "do": "todo",
+      "show": true
+    },
+    {
+      "at": 10.5,
+      "do": "todo",
+      "show": false
+    }
+  ],
+  "shots": [
+    {
+      "at": 0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              0.8,
+              2.0,
+              -4.0
+            ]
+          },
+          "look": {
+            "player": [
+              -0.4,
+              1.5,
+              22
+            ]
+          }
+        },
+        {
+          "t": 5.5,
+          "pos": {
+            "player": [
+              1.0,
+              2.2,
+              -4.6
+            ]
+          },
+          "look": {
+            "player": [
+              -0.5,
+              1.6,
+              22
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 5.5,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              3.0,
+              1.7,
+              2.4
+            ]
+          },
+          "look": {
+            "player": [
+              -0.4,
+              1.2,
+              0.6
+            ]
+          }
+        },
+        {
+          "t": 5.5,
+          "pos": {
+            "player": [
+              3.3,
+              1.9,
+              1.6
+            ]
+          },
+          "look": {
+            "player": [
+              -0.4,
+              1.2,
+              0.4
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "at": 11.0,
+      "mode": "keys",
+      "keys": [
+        {
+          "t": 0,
+          "pos": {
+            "player": [
+              0.6,
+              2.2,
+              4.6
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              1.1,
+              0
+            ]
+          }
+        },
+        {
+          "t": 5.0,
+          "pos": {
+            "player": [
+              0.8,
+              2.4,
+              4.2
+            ]
+          },
+          "look": {
+            "player": [
+              0,
+              1.1,
+              0
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "captions": []
+}
