@@ -296,6 +296,8 @@ export async function runDirector(ctx) {
     outfit: (e) => { hud.onOutfit?.(e.value); card.pick = e.value; },
     card: (e) => { Object.assign(card, e); if (e.press) card.pressAt = t; if (e.hide) card.hideAt = t; },
     stats: (e) => { statsOn = e.on !== false; },
+    // the "Things to do at Sukhna" list, as the game draws it (core/checklist.js), in or out
+    todo: (e) => { if (e.show !== false) { todo.from = t; todo.to = null; } else todo.to = t; },
     rigView: (e) => { if (e.pitch !== undefined) rig.pitch = THREE.MathUtils.degToRad(e.pitch); if (e.boom !== undefined) rig.boom = rig.boomTarget = e.boom; if (e.yaw === 'player') rig.yaw = jogger.heading; },
   };
   const lapses = [];
@@ -359,6 +361,7 @@ export async function runDirector(ctx) {
   const captions = list.captions || [];
   const card = { show: false, pick: 0, pressAt: -1 };
   let statsOn = !!list.stats && !params.has('nostats'), renderMs = 1, fpsText = '60';
+  const todo = { from: null, to: null };
   // a clip to show first (before-after: the Phase 1 build): its H.264 frames, decoded with
   // WebCodecs a few frames ahead and drawn frame n at step n (a playing <video> element handed
   // over only ~30 distinct frames a second, so half the clip's frames came out doubled)
@@ -423,9 +426,12 @@ export async function runDirector(ctx) {
   }
   // where a caption sits: its own "y" (a fraction of the height), else the list's "captionY",
   // else the default above (a list can put its captions in the sky, say, clear of the subject)
-  function caption(text, alpha, yFrac) {
-    const c = CAPTION, x = CAP.x;
-    let px = CAP.px;
+  // (opts, from the caption: `x` a left edge as a fraction of the width with `align: "left"`, for a
+  // small corner label such as "SUNRISE · SPED UP"; `size` scales the type)
+  function caption(text, alpha, yFrac, opts = {}) {
+    const c = CAPTION, left = opts.align === 'left', x = opts.x !== undefined ? W * opts.x : CAP.x;
+    let px = Math.round(CAP.px * (opts.size ?? 1));
+    const sc = opts.scrim ?? scrim; // (a corner label keeps its own, beside a caption)
     g.save();
     const setFont = () => { g.font = `${c.weight} ${px}px ${c.family}`; g.letterSpacing = `${c.track * px}px`; };
     setFont();
@@ -435,12 +441,13 @@ export async function runDirector(ctx) {
     const widest = Math.max(...lines.map((l) => g.measureText(l).width));
     if (widest > CAP.maxW) { px = Math.floor((px * CAP.maxW) / widest); setFont(); }
     const lineH = px * 1.22, top = y - ((lines.length - 1) * lineH) / 2;
-    const rx = Math.max(...lines.map((l) => g.measureText(l).width)) / 2 + px * 2.4, ry = px * 1.6 + ((lines.length - 1) * lineH) / 2;
+    const halfW = Math.max(...lines.map((l) => g.measureText(l).width)) / 2, cx = left ? x + halfW : x; // (the block's centre)
+    const rx = halfW + px * 2.4, ry = px * 1.6 + ((lines.length - 1) * lineH) / 2;
     // a bright background (fog, pale water, sky) fades in a soft dark gradient behind the text:
     // an ellipse that falls off to nothing, no edge and no plate
-    const fresh = scrim.n === 0;
-    if (scrim.n++ % 4 === 0) {
-      probe.drawImage(comp, x - rx, y - ry, rx * 2, ry * 2, 0, 0, 48, 12);
+    const fresh = sc.n === 0;
+    if (sc.n++ % 4 === 0) {
+      probe.drawImage(comp, cx - rx, y - ry, rx * 2, ry * 2, 0, 0, 48, 12);
       const d = probe.getImageData(0, 0, 48, 12).data;
       // the brighter pixels decide (the 75th percentile): half the line over a pale lake is
       // hard to read even when the other half is over dark stone
@@ -449,22 +456,22 @@ export async function runDirector(ctx) {
       ls.sort((p, q) => p - q);
       const lum = ls[Math.floor(ls.length * 0.75)];
       status.scrimLum = Math.round(lum * 100) / 100;
-      scrim.target = Math.min(1, Math.max(0, (lum - 0.42) / 0.22));
+      sc.target = Math.min(1, Math.max(0, (lum - 0.42) / 0.22));
     }
-    scrim.level = fresh ? scrim.target : scrim.level + (scrim.target - scrim.level) * 0.06; // (the caption's own fade covers its start)
-    status.scrim = Math.round(scrim.level * 100) / 100;
-    if (scrim.level > 0.01) {
+    sc.level = fresh ? sc.target : sc.level + (sc.target - sc.level) * 0.06; // (the caption's own fade covers its start)
+    status.scrim = Math.round(sc.level * 100) / 100;
+    if (sc.level > 0.01) {
       g.save();
-      g.translate(x, y); g.scale(rx / ry, 1);
+      g.translate(cx, y); g.scale(rx / ry, 1);
       const grad = g.createRadialGradient(0, 0, 0, 0, 0, ry);
-      const a = 0.24 * scrim.level * alpha, stop = (k, f) => grad.addColorStop(k, `rgba(12,10,16,${a * f})`);
+      const a = 0.24 * sc.level * alpha, stop = (k, f) => grad.addColorStop(k, `rgba(12,10,16,${a * f})`);
       stop(0, 1); stop(0.3, 0.9); stop(0.55, 0.55); stop(0.8, 0.18); stop(1, 0); // (a long, smooth falloff: no edge)
       g.fillStyle = grad; g.fillRect(-ry, -ry, ry * 2, ry * 2);
       g.restore();
     }
     // two shadows: a wide soft one for mood, a tight one so the edges hold
     g.globalAlpha = alpha;
-    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.textAlign = left ? 'left' : 'center'; g.textBaseline = 'middle';
     g.fillStyle = c.color;
     g.shadowColor = 'rgba(30,18,8,0.5)'; g.shadowBlur = px * 0.6; g.shadowOffsetY = px * 0.04;
     lines.forEach((l, i) => g.fillText(l, x, top + i * lineH));
@@ -511,6 +518,38 @@ export async function runDirector(ctx) {
     g.beginPath(); g.roundRect(12 * s, H - 40 * s - h, w, h, 6 * s); g.fill();
     g.fillStyle = '#d9dce4'; g.textBaseline = 'top';
     lines.forEach((l, i) => g.fillText(l, 22 * s, H - 40 * s - h + (6 + i * 17.4) * s));
+    g.restore();
+  }
+  /** The things-to-do list, as the game draws it under the jog card (read from its DOM: items, ticks, count). */
+  function todoList(alpha) {
+    const box = document.querySelector('.todo');
+    if (!box) return;
+    // (1.5x the game's size: a video is watched small, on a phone in a feed)
+    const s = (H / 900) * 1.5, x = 14 * s, y = 12 * s, pad = 11 * s;
+    const items = [...box.querySelectorAll('li')].map((li) => ({ text: li.textContent.trim(), done: li.classList.contains('done') }));
+    const title = (box.querySelector('.todo-head i')?.textContent || 'Things to do at Sukhna').toUpperCase();
+    const count = box.querySelector('.todo-head b')?.textContent || `0/${items.length}`;
+    g.save();
+    g.globalAlpha = alpha;
+    g.font = `${Math.round(13 * s)}px ${FONT}`;
+    const w = Math.max(240 * s, ...items.map((i) => g.measureText(i.text).width + 46 * s));
+    const rowH = 21 * s, h = pad * 2 + 18 * s + items.length * rowH;
+    g.fillStyle = 'rgba(14,16,22,0.55)'; g.strokeStyle = 'rgba(255,255,255,0.14)'; g.lineWidth = Math.max(1, s);
+    g.beginPath(); g.roundRect(x, y, w, h, 8 * s); g.fill(); g.stroke();
+    g.textBaseline = 'middle';
+    g.font = `600 ${Math.round(10.5 * s)}px ${FONT}`; g.fillStyle = '#9aa0ad';
+    g.fillText(title.split('').join(String.fromCharCode(8202)), x + pad, y + pad + 7 * s);
+    g.font = `600 ${Math.round(12.5 * s)}px ui-monospace, "Cascadia Mono", Consolas, monospace`; g.fillStyle = '#f2c230'; g.textAlign = 'right';
+    g.fillText(count, x + w - pad, y + pad + 7 * s);
+    g.textAlign = 'left';
+    items.forEach((it, k) => {
+      const cy = y + pad + 18 * s + rowH * k + rowH / 2, r = 6.5 * s, cx = x + pad + r;
+      g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2);
+      if (it.done) { g.fillStyle = '#f2c230'; g.fill(); g.strokeStyle = '#2a2d38'; g.lineWidth = 1.8 * s; g.beginPath(); g.moveTo(cx - 3 * s, cy); g.lineTo(cx - 0.8 * s, cy + 2.4 * s); g.lineTo(cx + 3.2 * s, cy - 2.6 * s); g.stroke(); }
+      else { g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1.6 * s; g.stroke(); }
+      g.font = `${Math.round(13 * s)}px ${FONT}`; g.fillStyle = it.done ? '#9aa0ad' : '#e8eaf0';
+      g.fillText(it.text, cx + r + 9 * s, cy + 0.5 * s);
+    });
     g.restore();
   }
   /** The start card, as the game draws it (read from its DOM), over the frame. */
@@ -586,6 +625,10 @@ export async function runDirector(ctx) {
     else g.drawImage(canvas, 0, 0, W, H);
     if (!t0) bubble();
     if (statsOn) stats();
+    if (todo.from !== null && t >= todo.from) {
+      const k = Math.min(1, (t - todo.from) / 0.35, todo.to === null ? 1 : (todo.to + 0.35 - t) / 0.35);
+      if (k > 0) todoList(k);
+    }
     if (card.show) {
       const k = card.hideAt !== undefined ? 1 - (t - card.hideAt) / 0.45 : 1; // the card's own 0.45 s fade
       if (k > 0) { g.save(); g.globalAlpha = k; startCard(); g.restore(); } else card.show = false;
@@ -594,7 +637,8 @@ export async function runDirector(ctx) {
     for (const c of captions) {
       if (t < c.from || t > c.to) continue;
       const k = Math.min(1, (t - c.from) / 0.35, (c.to - t) / 0.35);
-      caption(c.text, Math.max(0, k), c.y ?? list.captionY);
+      if (c.align === 'left') c.scrim ??= { level: 0, target: 0, n: 0 };
+      caption(c.text, Math.max(0, k), c.y ?? list.captionY, c);
     }
     if (list.endCard && t >= list.endCard.at) endCard(list.endCard.text, Math.min(1, (t - list.endCard.at) / (list.endCard.fade ?? 0.8)));
   }
